@@ -1,9 +1,36 @@
 mod printer;
 
 use serde::{Deserialize, Serialize};
-use printer::{PrinterService, USBPrinterService, PrintJob, Device, RawPrintRequest};
+use printer::{PrinterService, PrintJob, Device, RawPrintRequest};
 use base64::{Engine as _, engine::general_purpose};
+
+// Native Rust printer imports (no go-printer feature)
+#[cfg(all(not(feature = "go-printer"), not(target_os = "windows")))]
+use printer::USBPrinterService;
+#[cfg(all(not(feature = "go-printer"), not(target_os = "windows")))]
 use rusb::UsbContext;
+#[cfg(all(not(feature = "go-printer"), target_os = "windows"))]
+use printer::WindowsPrinterService;
+
+// Go sidecar printer import
+#[cfg(feature = "go-printer")]
+use printer::GoPrinterService;
+
+/// Create the platform-appropriate printer service.
+fn create_printer_service() -> Box<dyn PrinterService + Send + Sync> {
+    #[cfg(feature = "go-printer")]
+    {
+        Box::new(GoPrinterService::new())
+    }
+    #[cfg(all(not(feature = "go-printer"), not(target_os = "windows")))]
+    {
+        Box::new(USBPrinterService::new())
+    }
+    #[cfg(all(not(feature = "go-printer"), target_os = "windows"))]
+    {
+        Box::new(WindowsPrinterService::new())
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PrinterStatus {
@@ -21,11 +48,12 @@ async fn get_printer_status() -> Result<PrinterStatus, String> {
 
 #[tauri::command]
 async fn get_printers() -> Result<Vec<Device>, String> {
-    let service = USBPrinterService::new();
+    let service = create_printer_service();
     let devices = service.detect_printers()?;
     Ok(devices)
 }
 
+#[cfg(all(not(feature = "go-printer"), not(target_os = "windows")))]
 #[tauri::command]
 async fn debug_usb_devices() -> Result<String, String> {
     let context = rusb::Context::new()
@@ -47,7 +75,6 @@ async fn debug_usb_devices() -> Result<String, String> {
             device_desc.product_id(),
             device_desc.class_code()));
 
-        // Check interfaces
         if let Ok(config_desc) = device.config_descriptor(0) {
             for interface in config_desc.interfaces() {
                 for interface_desc in interface.descriptors() {
@@ -61,35 +88,45 @@ async fn debug_usb_devices() -> Result<String, String> {
     Ok(output)
 }
 
+#[cfg(any(feature = "go-printer", target_os = "windows"))]
+#[tauri::command]
+async fn debug_usb_devices() -> Result<String, String> {
+    let service = create_printer_service();
+    let devices = service.detect_printers()?;
+
+    let mut output = String::new();
+    output.push_str("Available Printers:\n");
+    output.push_str("===================\n");
+    for dev in &devices {
+        output.push_str(&format!("Name: {}, Type: {}\n", dev.name, dev.device_type));
+    }
+    Ok(output)
+}
+
 #[tauri::command]
 async fn print_job(print_data: serde_json::Value) -> Result<String, String> {
-    // Try to parse as PrintJob first
     if let Ok(job) = serde_json::from_value::<PrintJob>(print_data.clone()) {
         println!("Received PrintJob for {}, type: {}", job.printer.name.as_ref().unwrap_or(&"unknown".to_string()), job.job_type);
         
-        let service = USBPrinterService::new();
+        let service = create_printer_service();
         let printer_name = job.printer.name.clone().unwrap_or_else(|| "default".to_string());
         
-        // Render the print job to ESC/POS bytes
         let data = printer::render_print_job(&job)
             .map_err(|e| format!("Failed to render print job: {}", e))?;
         
-        // Print the data
         service.print(&printer_name, &data)
             .map_err(|e| format!("Printing failed: {}", e))?;
         
         Ok("Printed successfully".to_string())
     }
-    // Fallback to RawPrintRequest for backward compatibility
     else if let Ok(req) = serde_json::from_value::<RawPrintRequest>(print_data) {
         println!("Received raw print job for {}, length: {}", req.printer_name, req.data.len());
         
-        // Decode base64 data
         let data = general_purpose::STANDARD
             .decode(&req.data)
             .map_err(|e| format!("Failed to decode base64 data: {}", e))?;
         
-        let service = USBPrinterService::new();
+        let service = create_printer_service();
         service.print(&req.printer_name, &data)
             .map_err(|e| format!("Printing failed: {}", e))?;
         

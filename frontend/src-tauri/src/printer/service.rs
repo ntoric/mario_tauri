@@ -1,12 +1,8 @@
 use crate::printer::models::Device as PrinterDevice;
+use crate::printer::PrinterService;
 use rusb::UsbContext;
 use std::process::Command;
 use std::str;
-
-pub trait PrinterService {
-    fn print(&self, printer_name: &str, data: &[u8]) -> Result<(), String>;
-    fn detect_printers(&self) -> Result<Vec<PrinterDevice>, String>;
-}
 
 pub struct USBPrinterService;
 
