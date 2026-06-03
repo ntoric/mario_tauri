@@ -2,12 +2,12 @@
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_URL ||
-  (window.location.protocol === 'file:'
-    ? 'http://localhost:8088/api'
-    : '/api');
+  'https://mario-v2-backend.ntoric.com/api';
 
 // Log API URL for debugging
 console.log('API URL configured as:', API_URL);
+console.log('Window location:', window.location.href);
+console.log('Build mode:', import.meta.env.MODE);
 
 class ApiService {
   private token: string | null = null;
@@ -44,10 +44,14 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    console.log(`Fetching: ${url}`);
     const response = await fetch(url, {
       ...options,
       headers,
     });
+
+    console.log(`Response URL: ${response.url}`);
+    console.log(`Response status: ${response.status}`);
 
     if (!response.ok) {
       if (response.status === 401 && !skipAuthRedirect) {
@@ -66,7 +70,14 @@ class ApiService {
       throw new Error(error.error || 'Request failed');
     }
 
-    return response.json();
+    const text = await response.text();
+    console.log(`Response content-type: ${response.headers.get('content-type')}`);
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('Failed to parse JSON response:', text.substring(0, 200));
+      throw new Error('Invalid JSON response from server');
+    }
   }
 
   // Auth
