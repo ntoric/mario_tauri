@@ -319,10 +319,10 @@ func runSeeds(db *sql.DB, cfg *config.Config) error {
 			INSERT INTO users (id, username, password, name, email, role, is_active)
 			VALUES ($1, 'owner', $2, 'Business Owner', 'owner@cafe.com', 'business_owner', true)
 		`, ownerID, string(ownerPassword))
-		log.Println("WARNING: Sample business owner seeded with default password. Change it immediately via the admin panel.")
 		if err != nil {
 			return fmt.Errorf("failed seeding sample business owner: %w", err)
 		}
+		log.Println("WARNING: Sample business owner seeded with default password. Change it immediately via the admin panel.")
 
 		// Map owner to store '1'
 		_, err = db.Exec(`

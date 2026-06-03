@@ -11,26 +11,21 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var tableStatusUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true // allow non-browser clients (e.g. Tauri)
-		}
-		allowedOrigins := []string{
-			"http://localhost:1420",
-			"http://localhost:5173",
-			"http://localhost:3000",
-			"http://127.0.0.1:1420",
-			"tauri://localhost",
-		}
-		for _, allowed := range allowedOrigins {
-			if origin == allowed {
-				return true
+func (h *Handler) newTableStatusUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // allow non-browser clients (e.g. Tauri)
 			}
-		}
-		return false
-	},
+			for _, allowed := range h.Cfg.AllowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			return false
+		},
+	}
 }
 
 func (h *Handler) broadcastTableStatusUpdate(storeID, reason string) {
@@ -69,7 +64,8 @@ func (h *Handler) TableStatusWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := tableStatusUpgrader.Upgrade(w, r, nil)
+	upgrader := h.newTableStatusUpgrader()
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
