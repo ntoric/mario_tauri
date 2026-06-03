@@ -202,7 +202,10 @@ func (h *Handler) CompleteOrder(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		PaymentMethod string `json:"paymentMethod"`
 	}
-	_ = h.readJSON(r, &req)
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
 
 	err := h.Repo.Order.Complete(r.Context(), id, req.PaymentMethod)
 	if err != nil {
@@ -452,8 +455,6 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("Claims : ", claims)
-
 	var req struct {
 		OrderID       string  `json:"orderId"`
 		TableNumber   int     `json:"tableNumber"`
@@ -468,12 +469,9 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.readJSON(r, &req); err != nil {
-		fmt.Println("Error : ", err)
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
-
-	fmt.Println("REQ : ", req)
 
 	targetStoreID := req.StoreID
 	if targetStoreID == "" {
@@ -488,16 +486,13 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	// Verify if remote billing is enabled for the store
 	store, err := h.Repo.Store.GetByID(r.Context(), targetStoreID)
 	if err != nil {
-		fmt.Println("Error 2. : ", err)
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if store == nil {
-		fmt.Println("Error 3 : ", err)
 		h.writeError(w, http.StatusNotFound, "Store not found")
 		return
 	}
-	fmt.Println("store.RemoteBillingEnabled : ", store.RemoteBillingEnabled)
 	if !store.RemoteBillingEnabled {
 		h.writeError(w, http.StatusBadRequest, "Remote billing is not enabled for this store")
 		return
@@ -519,8 +514,6 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		"generatedBy":   claims.ID,
 	}
 
-	fmt.Println("billDataMap : ", billDataMap)
-
 	billDataBytes, err := json.Marshal(billDataMap)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to marshal bill data: "+err.Error())
@@ -530,7 +523,6 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	// Insert into bill_queue table via repository
 	err = h.Repo.Bill.QueueBill(r.Context(), queueID, targetStoreID, req.OrderID, billDataBytes)
 	if err != nil {
-		fmt.Println("Error 4 : ", err)
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

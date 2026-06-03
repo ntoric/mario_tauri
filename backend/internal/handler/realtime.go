@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -26,6 +27,7 @@ func (h *Handler) broadcastTableStatusUpdate(storeID, reason string) {
 		"reason":  reason,
 	})
 	if err != nil {
+		log.Printf("[Realtime] Failed to marshal table status update: %v", err)
 		return
 	}
 
@@ -53,6 +55,7 @@ func (h *Handler) TableStatusWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := tableStatusUpgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Printf("[Realtime] WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -77,11 +80,18 @@ func (h *Handler) TableStatusWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	initialMsg, _ := json.Marshal(map[string]string{
+	initialMsg, err := json.Marshal(map[string]string{
 		"type":    "connected",
 		"storeId": targetStoreID,
 	})
-	_ = conn.WriteMessage(websocket.TextMessage, initialMsg)
+	if err != nil {
+		log.Printf("[Realtime] Failed to marshal initial WS message: %v", err)
+		return
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, initialMsg); err != nil {
+		log.Printf("[Realtime] Failed to send initial WS message: %v", err)
+		return
+	}
 
 	ticker := time.NewTicker(25 * time.Second)
 	defer ticker.Stop()
