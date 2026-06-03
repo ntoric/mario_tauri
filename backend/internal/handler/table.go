@@ -18,14 +18,8 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, "")
+	if !ok {
 		return
 	}
 
@@ -56,13 +50,8 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
