@@ -5,6 +5,7 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
+import { buildInvoiceData } from '../utils/printer';
 import type { Order } from '../types';
 
 const History: React.FC = () => {
@@ -28,75 +29,22 @@ const History: React.FC = () => {
     try {
       const associatedBill = bills.find(b => b.orderId === order.id);
       const invoiceNo = associatedBill?.invoiceNo || `INV-${Date.now()}`;
-      
-      const printItems = order.items.map(oi => {
-        const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
-        return {
-          name: oi.item.name,
-          hsn: oi.item.description || '',
-          qty: oi.quantity,
-          unit: 'PCS',
-          rate: oi.item.price,
-          tax_percent: taxPercent,
-          amount: itemTotal,
-        };
-      });
-
-      const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const cgst = taxable * 0.025; // Assuming 5% total tax split as 2.5% CGST + 2.5% SGST
-      const sgst = taxable * 0.025;
-      const subtotal = associatedBill?.subtotal || taxable;
-      const taxTotal = associatedBill?.taxTotal || (cgst + sgst);
+      const subtotal = associatedBill?.subtotal || order.totalAmount;
+      const taxTotal = associatedBill?.taxTotal || order.taxAmount;
       const total = associatedBill?.total || (subtotal + taxTotal);
       const paymentMethod = associatedBill?.paymentMethod || order.paymentMethod || 'cash';
 
-      await printerService.printInvoice({
-        type: 'invoice',
-        printer: {
-          type: 'usb',
-          name: currentStore?.printerName || 'Thermal Printer',
-          vendor_id: currentStore?.printerVendorId || '0x0fe6',
-          product_id: currentStore?.printerProductId || '0x811e',
-          paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-        },
-        invoice: {
-          store: {
-            name: currentStore?.name || 'Cafe',
-            branch: currentStore?.branch || '',
-            location: currentStore?.location || '',
-            gst_number: currentStore?.gstin || '',
-            fssai_lic_no: currentStore?.fssaiNo || '',
-            phone: currentStore?.phone || '',
-            address: currentStore?.location || '',
-          },
-          customer: {
-            name: associatedBill?.customerName || order.customerName || 'Walk-in Customer',
-            mobile: associatedBill?.customerMobile || order.customerMobile || '',
-          },
-          invoice_no: invoiceNo,
-          bill_no: invoiceNo,
-          date: new Date(order.createdAt).toLocaleString('en-IN'),
-          items: printItems,
-          summary: {
-            sub_total: subtotal,
-            discount: associatedBill?.discount || 0,
-            taxable: subtotal,
-            cgst: cgst,
-            sgst: sgst,
-            grand_total: total,
-          },
-          payment: {
-            cash: paymentMethod === 'cash' ? total : 0,
-            card: paymentMethod === 'card' ? total : 0,
-            upi: paymentMethod === 'upi' ? total : 0,
-            balance: 0,
-          },
-          payment_mode: paymentMethod,
-          dr_ref: '',
-          footer: ['Thank You Visit Again'],
-        },
-      });
+      await printerService.printInvoice(buildInvoiceData({
+        store: currentStore,
+        orderItems: order.items,
+        invoiceNo,
+        total,
+        discount: associatedBill?.discount || 0,
+        paymentMethod,
+        customerName: associatedBill?.customerName || order.customerName || 'Walk-in Customer',
+        customerMobile: associatedBill?.customerMobile || order.customerMobile || '',
+        date: new Date(order.createdAt).toLocaleString('en-IN'),
+      }));
     } catch (error) {
       console.error('Failed to print bill:', error);
       alert('Failed to print bill. Please check your connection and printer settings.');

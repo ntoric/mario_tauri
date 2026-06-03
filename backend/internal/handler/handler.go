@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"cafe-backend/internal/config"
+	"cafe-backend/internal/middleware"
+	"cafe-backend/internal/models"
 	"cafe-backend/internal/realtime"
 	"cafe-backend/internal/repository"
 )
@@ -37,4 +40,44 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, errMsg string) {
 func (h *Handler) readJSON(r *http.Request, data interface{}) error {
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(data)
+}
+
+// resolveStoreID extracts the target store ID from the query parameter or JWT claims.
+// For GET requests it reads "storeId" from the query string; for non-GET requests the
+// caller should pass the storeID from the request body. If the resolved ID is empty,
+// an error response is written and false is returned.
+func (h *Handler) resolveStoreID(w http.ResponseWriter, r *http.Request, claims *middleware.UserClaims, bodyStoreID string) (string, bool) {
+	storeID := bodyStoreID
+	if storeID == "" {
+		storeID = r.URL.Query().Get("storeId")
+	}
+	if storeID == "" {
+		storeID = claims.StoreID
+	}
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return "", false
+	}
+	return storeID, true
+}
+
+// getUserStores returns the stores visible to a user based on their role.
+func (h *Handler) getUserStores(ctx context.Context, user *models.User) ([]models.Store, error) {
+	switch user.Role {
+	case "superadmin":
+		return h.Repo.Store.GetAll(ctx, "superadmin", "", "")
+	case "business_owner":
+		return h.Repo.User.GetUserStores(ctx, user.ID)
+	default:
+		if user.StoreID != "" {
+			s, err := h.Repo.Store.GetByID(ctx, user.StoreID)
+			if err != nil {
+				return nil, err
+			}
+			if s != nil {
+				return []models.Store{*s}, nil
+			}
+		}
+		return nil, nil
+	}
 }

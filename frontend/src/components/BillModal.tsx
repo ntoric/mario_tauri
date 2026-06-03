@@ -5,6 +5,8 @@ import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
+import { buildPrintItems, buildInvoiceData } from '../utils/printer';
+import { calculateSubtotal, calculateTax } from '../utils/orderItems';
 
 const BillModal: React.FC = () => {
   const { stores, orders, createBill, completeOrder } = useDataStore();
@@ -29,17 +31,9 @@ const BillModal: React.FC = () => {
 
   if (!isOpen || !order || !table) return null;
 
-  const calculateTotals = () => {
-    const subtotal = order.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
-    const tax = order.items.reduce((sum: number, oi: any) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (oi.item.price * oi.quantity * taxPercent / 100);
-    }, 0);
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
-  };
-
-  const { subtotal, tax, total } = calculateTotals();
+  const subtotal = calculateSubtotal(order.items);
+  const tax = calculateTax(order.items);
+  const total = subtotal + tax;
 
   const handlePrint = async () => {
     setPrintError('');
@@ -96,72 +90,14 @@ const BillModal: React.FC = () => {
         customerName: 'Walk-in Customer',
       });
 
-      // Print invoice via printer service
-      const printItems = order.items.map((oi: any) => {
-        const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
-        return {
-          name: oi.item.name,
-          hsn: oi.item.description || '',
-          qty: oi.quantity,
-          unit: 'PCS',
-          rate: oi.item.price,
-          tax_percent: taxPercent,
-          amount: itemTotal,
-        };
-      });
-
-      const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const cgst = taxable * 0.025;
-      const sgst = taxable * 0.025;
-
       try {
-        await printerService.printInvoice({
-          type: 'invoice',
-          printer: {
-            type: 'usb',
-            name: currentStore?.printerName || 'Thermal Printer',
-            vendor_id: currentStore?.printerVendorId || '0x0fe6',
-            product_id: currentStore?.printerProductId || '0x811e',
-            paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-          },
-          invoice: {
-            store: {
-              name: currentStore?.name || 'Cafe',
-              branch: currentStore?.branch || '',
-              location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
-              phone: currentStore?.phone || '',
-              address: currentStore?.location || '',
-            },
-            customer: {
-              name: 'Walk-in Customer',
-              mobile: '',
-            },
-            invoice_no: invoiceNo,
-            bill_no: invoiceNo,
-            date: new Date().toLocaleString('en-IN'),
-            items: printItems,
-            summary: {
-              sub_total: taxable,
-              discount: 0,
-              taxable: taxable,
-              cgst: cgst,
-              sgst: sgst,
-              grand_total: total,
-            },
-            payment: {
-              cash: paymentMethod === 'cash' ? total : 0,
-              card: paymentMethod === 'card' ? total : 0,
-              upi: paymentMethod === 'upi' ? total : 0,
-              balance: 0,
-            },
-            payment_mode: paymentMethod,
-            dr_ref: '',
-            footer: ['Thank You Visit Again'],
-          },
-        });
+        await printerService.printInvoice(buildInvoiceData({
+          store: currentStore,
+          orderItems: order.items,
+          invoiceNo,
+          total,
+          paymentMethod,
+        }));
       } catch (printError: any) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);

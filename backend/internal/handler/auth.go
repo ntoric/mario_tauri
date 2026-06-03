@@ -34,23 +34,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user's stores
-	var stores []models.Store
-	if user.Role == "superadmin" {
-		// Superadmin sees all active stores
-		stores, err = h.Repo.Store.GetAll(r.Context(), "superadmin", "", "")
-	} else if user.Role == "business_owner" {
-		// Business owner sees assigned stores
-		stores, err = h.Repo.User.GetUserStores(r.Context(), user.ID)
-	} else {
-		// Business admin and staff see their assigned store only
-		if user.StoreID != "" {
-			s, errStore := h.Repo.Store.GetByID(r.Context(), user.StoreID)
-			if errStore == nil && s != nil {
-				stores = []models.Store{*s}
-			}
-		}
-	}
-
+	stores, err := h.getUserStores(r.Context(), user)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to load user stores: "+err.Error())
 		return
@@ -98,20 +82,9 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user's stores
-	var stores []models.Store
-	if user.Role == "superadmin" {
-		stores, err = h.Repo.Store.GetAll(r.Context(), "superadmin", "", "")
-	} else if user.Role == "business_owner" {
-		stores, err = h.Repo.User.GetUserStores(r.Context(), user.ID)
-	} else if user.StoreID != "" {
-		s, errStore := h.Repo.Store.GetByID(r.Context(), user.StoreID)
-		if errStore == nil && s != nil {
-			stores = []models.Store{*s}
-		}
-	}
-
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load user stores: "+err.Error())
+	stores, storesErr := h.getUserStores(r.Context(), user)
+	if storesErr != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to load user stores: "+storesErr.Error())
 		return
 	}
 

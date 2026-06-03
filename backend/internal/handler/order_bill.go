@@ -25,16 +25,10 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
 	status := r.URL.Query().Get("status")
 
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, "")
+	if !ok {
 		return
 	}
 
@@ -65,13 +59,8 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -263,12 +252,8 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -348,14 +333,8 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, "")
+	if !ok {
 		return
 	}
 
@@ -386,13 +365,8 @@ func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -416,10 +390,9 @@ func (h *Handler) GetNextInvoiceNo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, "")
+	if !ok {
+		return
 	}
 
 	invoiceNo, err := h.Repo.Bill.GetNextInvoiceNo(r.Context(), targetStoreID)
@@ -475,13 +448,8 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("REQ : ", req)
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -552,14 +520,8 @@ func (h *Handler) GetBillQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.resolveStoreID(w, r, claims, "")
+	if !ok {
 		return
 	}
 

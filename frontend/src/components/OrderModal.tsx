@@ -5,6 +5,8 @@ import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
+import { buildInvoiceData, buildKotData } from '../utils/printer';
+import * as orderItemUtils from '../utils/orderItems';
 import type { OrderItem, Item } from '../types';
 
 const OrderModal: React.FC = () => {
@@ -88,54 +90,25 @@ const OrderModal: React.FC = () => {
 
   if (!isOpen || !table) return null;
 
-  const filteredItems = items.filter(item => {
-    const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
-    const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredItems = orderItemUtils.filterItems(items, selectedCategory, searchQuery);
 
   const addItemToOrder = (item: Item) => {
     if (viewOnly) return;
-    
-    const existingItem = orderItems.find(oi => oi.itemId === item.id);
-    if (existingItem) {
-      setOrderItems(orderItems.map(oi =>
-        oi.itemId === item.id
-          ? { ...oi, quantity: oi.quantity + 1 }
-          : oi
-      ));
-    } else {
-      setOrderItems([...orderItems, { itemId: item.id, item, quantity: 1 }]);
-    }
+    setOrderItems(orderItemUtils.addItem(orderItems, item));
   };
 
-  const updateQuantity = (itemId: string, delta: number) => {
+  const handleUpdateQuantity = (itemId: string, delta: number) => {
     if (viewOnly) return;
-    
-    setOrderItems(orderItems.map(oi => {
-      if (oi.itemId === itemId) {
-        const newQuantity = oi.quantity + delta;
-        return newQuantity > 0 ? { ...oi, quantity: newQuantity } : oi;
-      }
-      return oi;
-    }).filter(oi => oi.quantity > 0));
+    setOrderItems(orderItemUtils.updateQuantity(orderItems, itemId, delta));
   };
 
-  const removeItem = (itemId: string) => {
+  const handleRemoveItem = (itemId: string) => {
     if (viewOnly) return;
-    setOrderItems(orderItems.filter(oi => oi.itemId !== itemId));
+    setOrderItems(orderItemUtils.removeItem(orderItems, itemId));
   };
 
-  const calculateTotal = () => {
-    return orderItems.reduce((sum, oi) => sum + (oi.item.price * oi.quantity), 0);
-  };
-
-  const calculateTax = () => {
-    return orderItems.reduce((sum, oi) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (oi.item.price * oi.quantity * taxPercent / 100);
-    }, 0);
-  };
+  const calculateTotal = () => orderItemUtils.calculateSubtotal(orderItems);
+  const calculateTax = () => orderItemUtils.calculateTax(orderItems);
 
   const handleSaveOrder = async (skipKot = false) => {
     if (orderItems.length === 0) return;
@@ -178,34 +151,13 @@ const OrderModal: React.FC = () => {
         // Print KOT if enabled for the store
         if (!skipKot && currentStore?.kotPrintEnabled && newOrder?.id) {
           try {
-            await printerService.printKOT({
-              type: 'kot',
-              printer: {
-                type: 'usb',
-                name: currentStore.printerName || 'Thermal Printer',
-                vendor_id: currentStore.printerVendorId || '0x0fe6',
-                product_id: currentStore.printerProductId || '0x811e',
-                paper_width: (currentStore.invoiceSize as '2inch' | '3inch') || '3inch',
-              },
-              kot: {
-                order_id: parseInt(newOrder.id.slice(-6), 36) || 0,
-                table_number: String(table.number),
-                waiter_name: '',
-                date: new Date().toLocaleString('en-IN'),
-                items: orderItems.map(oi => ({
-                  name: oi.item.name,
-                  qty: oi.quantity,
-                  unit: 'PCS',
-                  rate: oi.item.price,
-                  tax_percent: oi.item.taxPercent || 0,
-                  amount: oi.item.price * oi.quantity,
-                })),
-                notes: '',
-                order_type: 'DINE_IN',
-                customer_name: 'Guest',
-                customer_mobile: '',
-              },
-            });
+            await printerService.printKOT(buildKotData({
+              store: currentStore,
+              orderItems,
+              orderId: newOrder.id,
+              tableNumber: String(table.number),
+              orderType: 'DINE_IN',
+            }));
           } catch (error) {
             console.error('Failed to print KOT:', error);
             // Don't block the order creation if KOT printing fails
@@ -287,72 +239,14 @@ const OrderModal: React.FC = () => {
         customerName: 'Walk-in Customer',
       });
 
-      // Print invoice via printer service
-      const printItems = orderItems.map(oi => {
-        const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
-        return {
-          name: oi.item.name,
-          hsn: oi.item.description || '',
-          qty: oi.quantity,
-          unit: 'PCS',
-          rate: oi.item.price,
-          tax_percent: taxPercent,
-          amount: itemTotal,
-        };
-      });
-
-      const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const cgst = taxable * 0.025; // Assuming 5% total tax split as 2.5% CGST + 2.5% SGST
-      const sgst = taxable * 0.025;
-
       try {
-        await printerService.printInvoice({
-          type: 'invoice',
-          printer: {
-            type: 'usb',
-            name: currentStore?.printerName || 'Thermal Printer',
-            vendor_id: currentStore?.printerVendorId || '0x0fe6',
-            product_id: currentStore?.printerProductId || '0x811e',
-            paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-          },
-          invoice: {
-            store: {
-              name: currentStore?.name || 'Cafe',
-              branch: currentStore?.branch || '',
-              location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
-              phone: currentStore?.phone || '',
-              address: currentStore?.location || '',
-            },
-            customer: {
-              name: 'Walk-in Customer',
-              mobile: '',
-            },
-            invoice_no: invoiceNo,
-            bill_no: invoiceNo,
-            date: new Date().toLocaleString('en-IN'),
-            items: printItems,
-            summary: {
-              sub_total: taxable,
-              discount: 0,
-              taxable: taxable,
-              cgst: cgst,
-              sgst: sgst,
-              grand_total: total,
-            },
-            payment: {
-              cash: paymentMethod === 'cash' ? total : 0,
-              card: paymentMethod === 'card' ? total : 0,
-              upi: paymentMethod === 'upi' ? total : 0,
-              balance: 0,
-            },
-            payment_mode: paymentMethod,
-            dr_ref: '',
-            footer: ['Thank You Visit Again'],
-          },
-        });
+        await printerService.printInvoice(buildInvoiceData({
+          store: currentStore,
+          orderItems,
+          invoiceNo,
+          total,
+          paymentMethod,
+        }));
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);
@@ -559,20 +453,20 @@ const OrderModal: React.FC = () => {
                             <>
                               <button
                                 className="quantity-btn"
-                                onClick={() => updateQuantity(oi.itemId, -1)}
+                                onClick={() => handleUpdateQuantity(oi.itemId, -1)}
                               >
                                 <Minus size={10} />
                               </button>
                               <span className="order-item-quantity">{oi.quantity}</span>
                               <button
                                 className="quantity-btn"
-                                onClick={() => updateQuantity(oi.itemId, 1)}
+                                onClick={() => handleUpdateQuantity(oi.itemId, 1)}
                               >
                                 <Plus size={10} />
                               </button>
                               <button
                                 className="remove-item-btn"
-                                onClick={() => removeItem(oi.itemId)}
+                                onClick={() => handleRemoveItem(oi.itemId)}
                               >
                                 <Trash2 size={12} />
                               </button>
