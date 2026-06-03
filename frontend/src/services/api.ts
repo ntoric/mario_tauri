@@ -6,6 +6,9 @@ const API_URL = import.meta.env.VITE_BACKEND_URL ||
     ? 'http://localhost:8088/api'
     : '/api');
 
+// Log API URL for debugging
+console.log('API URL configured as:', API_URL);
+
 class ApiService {
   private token: string | null = null;
 
@@ -51,7 +54,15 @@ class ApiService {
         this.clearToken();
         window.location.replace('/#/login');
       }
-      const error = await response.json();
+      const contentType = response.headers.get('content-type');
+      let error;
+      if (contentType && contentType.includes('application/json')) {
+        error = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        error = { error: `Server returned non-JSON response (${response.status}): ${text.substring(0, 100)}` };
+      }
       throw new Error(error.error || 'Request failed');
     }
 

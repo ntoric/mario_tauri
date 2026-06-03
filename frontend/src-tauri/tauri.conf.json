@@ -7,7 +7,10 @@
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "env": {
+      "VITE_API_URL": "https://mario-v2-backend.ntoric.com/api"
+    }
   },
   "app": {
     "windows": [
@@ -31,8 +34,7 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico",
-      "../public/logo.png"
+      "icons/logo.png"
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
