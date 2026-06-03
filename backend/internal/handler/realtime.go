@@ -12,7 +12,25 @@ import (
 )
 
 var tableStatusUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // allow non-browser clients (e.g. Tauri)
+		}
+		allowedOrigins := []string{
+			"http://localhost:1420",
+			"http://localhost:5173",
+			"http://localhost:3000",
+			"http://127.0.0.1:1420",
+			"tauri://localhost",
+		}
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				return true
+			}
+		}
+		return false
+	},
 }
 
 func (h *Handler) broadcastTableStatusUpdate(storeID, reason string) {

@@ -1,6 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -83,10 +87,26 @@ func LoadConfig() (*Config, error) {
 		redisDB = 0
 	}
 
-	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := getEnv("JWT_SECRET", "")
+	if jwtSecret == "" || jwtSecret == "your-secret-key-change-in-production" {
+		if getEnv("NODE_ENV", "development") == "production" {
+			return nil, fmt.Errorf("SECURITY: JWT_SECRET must be set to a strong, unique value in production. Refusing to start with a default/empty secret")
+		}
+		jwtSecret = generateRandomSecret(32)
+		log.Println("WARNING: JWT_SECRET is not set. Generated a random ephemeral secret. Set JWT_SECRET in .env for persistent sessions.")
+	}
 
 	superadminUsername := getEnv("SUPERADMIN_USERNAME", "superadmin")
-	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "superadmin123")
+	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "")
+	if superadminPassword == "" || superadminPassword == "superadmin123" {
+		if getEnv("NODE_ENV", "development") == "production" {
+			return nil, fmt.Errorf("SECURITY: SUPERADMIN_PASSWORD must be changed from the default in production. Set a strong password in .env")
+		}
+		if superadminPassword == "" {
+			superadminPassword = "superadmin123"
+		}
+		log.Println("WARNING: Using default superadmin password. Set SUPERADMIN_PASSWORD in .env for production use.")
+	}
 	superadminName := getEnv("SUPERADMIN_NAME", "Super Administrator")
 
 	return &Config{
@@ -111,4 +131,12 @@ func getEnv(key, defaultVal string) string {
 		return value
 	}
 	return defaultVal
+}
+
+func generateRandomSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		panic("failed to generate random secret: " + err.Error())
+	}
+	return hex.EncodeToString(bytes)
 }

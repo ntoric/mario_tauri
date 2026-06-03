@@ -15,6 +15,35 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// filterColumns returns a new map containing only keys present in the allowed set.
+func filterColumns(updates map[string]interface{}, allowed map[string]bool) map[string]interface{} {
+	filtered := make(map[string]interface{}, len(updates))
+	for k, v := range updates {
+		if allowed[k] {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
+var storeAllowedColumns = map[string]bool{
+	"name": true, "branch": true, "location": true, "gstin": true,
+	"fssai_no": true, "phone": true, "printer_name": true,
+	"printer_vendor_id": true, "printer_product_id": true,
+	"invoice_size": true, "kot_print_enabled": true,
+	"remote_billing_enabled": true, "is_active": true,
+}
+
+var userAllowedColumns = map[string]bool{
+	"name": true, "email": true, "is_active": true,
+	"store_id": true, "role": true,
+}
+
+var orderAllowedColumns = map[string]bool{
+	"total_amount": true, "tax_amount": true, "discount_amount": true,
+	"table_id": true, "table_number": true,
+}
+
 type CacheItem struct {
 	Value      interface{}
 	Expiration time.Time
@@ -196,7 +225,8 @@ func (r *StoreRepository) Create(ctx context.Context, s models.Store) error {
 }
 
 func (r *StoreRepository) Update(ctx context.Context, id string, updates map[string]interface{}) error {
-	if len(updates) == 0 {
+	safe := filterColumns(updates, storeAllowedColumns)
+	if len(safe) == 0 {
 		return nil
 	}
 
@@ -204,7 +234,7 @@ func (r *StoreRepository) Update(ctx context.Context, id string, updates map[str
 	args := []interface{}{}
 	idx := 1
 
-	for k, v := range updates {
+	for k, v := range safe {
 		query += fmt.Sprintf("%s = $%d, ", k, idx)
 		args = append(args, v)
 		idx++
@@ -432,12 +462,13 @@ func (r *UserRepository) Update(ctx context.Context, id string, updates map[stri
 	}
 	defer tx.Rollback()
 
-	if len(updates) > 0 {
+	safe := filterColumns(updates, userAllowedColumns)
+	if len(safe) > 0 {
 		query := "UPDATE users SET "
 		args := []interface{}{}
 		idx := 1
 
-		for k, v := range updates {
+		for k, v := range safe {
 			query += fmt.Sprintf("%s = $%d, ", k, idx)
 			args = append(args, v)
 			idx++
@@ -941,12 +972,13 @@ func (r *OrderRepository) Update(ctx context.Context, id string, updates map[str
 		}
 	}
 
-	if len(updates) > 0 {
+	safe := filterColumns(updates, orderAllowedColumns)
+	if len(safe) > 0 {
 		query := "UPDATE orders SET "
 		args := []interface{}{}
 		idx := 1
 
-		for k, v := range updates {
+		for k, v := range safe {
 			query += fmt.Sprintf("%s = $%d, ", k, idx)
 			args = append(args, v)
 			idx++
