@@ -34,7 +34,10 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, errMsg string) {
 	h.writeJSON(w, status, map[string]string{"error": errMsg})
 }
 
+const maxRequestBodySize = 1 << 20 // 1 MB
+
 func (h *Handler) readJSON(r *http.Request, data interface{}) error {
 	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(nil, r.Body, maxRequestBodySize)
 	return json.NewDecoder(r.Body).Decode(data)
 }

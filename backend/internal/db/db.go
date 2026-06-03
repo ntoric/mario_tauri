@@ -310,7 +310,7 @@ func runSeeds(db *sql.DB, cfg *config.Config) error {
 	}
 
 	if !ownerExists {
-		ownerPassword, err := security.HashPassword("password")
+		ownerPassword, err := security.HashPassword("OwnerChange#Me1!")
 		if err != nil {
 			return err
 		}
@@ -322,6 +322,7 @@ func runSeeds(db *sql.DB, cfg *config.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed seeding sample business owner: %w", err)
 		}
+		log.Println("WARNING: Sample business owner seeded with default password. Change it immediately via the admin panel.")
 
 		// Map owner to store '1'
 		_, err = db.Exec(`

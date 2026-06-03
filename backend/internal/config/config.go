@@ -1,9 +1,14 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -22,6 +27,15 @@ type Config struct {
 	SuperadminUsername string
 	SuperadminPassword string
 	SuperadminName     string
+	AllowedOrigins     []string
+}
+
+var defaultAllowedOrigins = []string{
+	"http://localhost:1420",
+	"http://localhost:5173",
+	"http://localhost:3000",
+	"http://127.0.0.1:1420",
+	"tauri://localhost",
 }
 
 func LoadConfig() (*Config, error) {
@@ -83,11 +97,35 @@ func LoadConfig() (*Config, error) {
 		redisDB = 0
 	}
 
-	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
+	jwtSecret := getEnv("JWT_SECRET", "")
+	if jwtSecret == "" || jwtSecret == "your-secret-key-change-in-production" || jwtSecret == "CHANGE_ME_TO_A_STRONG_RANDOM_SECRET" {
+		if getEnv("NODE_ENV", "development") == "production" {
+			return nil, fmt.Errorf("SECURITY: JWT_SECRET must be set to a strong, unique value in production. Refusing to start with a default/empty secret")
+		}
+		jwtSecret = generateRandomSecret(32)
+		log.Println("WARNING: JWT_SECRET is not set. Generated a random ephemeral secret. Set JWT_SECRET in .env for persistent sessions.")
+	}
 
 	superadminUsername := getEnv("SUPERADMIN_USERNAME", "superadmin")
-	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "superadmin123")
+	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "")
+	if superadminPassword == "" || superadminPassword == "superadmin123" || superadminPassword == "CHANGE_ME_TO_A_STRONG_PASSWORD" {
+		if getEnv("NODE_ENV", "development") == "production" {
+			return nil, fmt.Errorf("SECURITY: SUPERADMIN_PASSWORD must be changed from the default in production. Set a strong password in .env")
+		}
+		if superadminPassword == "" {
+			superadminPassword = "superadmin123"
+		}
+		log.Println("WARNING: Using default superadmin password. Set SUPERADMIN_PASSWORD in .env for production use.")
+	}
 	superadminName := getEnv("SUPERADMIN_NAME", "Super Administrator")
+
+	allowedOrigins := append([]string{}, defaultAllowedOrigins...)
+	if port != "" {
+		allowedOrigins = append(allowedOrigins, "http://localhost:"+port)
+	}
+	if envOrigins := getEnv("CORS_ALLOWED_ORIGINS", ""); envOrigins != "" {
+		allowedOrigins = strings.Split(envOrigins, ",")
+	}
 
 	return &Config{
 		DBHost:             dbHost,
@@ -103,6 +141,7 @@ func LoadConfig() (*Config, error) {
 		SuperadminUsername: superadminUsername,
 		SuperadminPassword: superadminPassword,
 		SuperadminName:     superadminName,
+		AllowedOrigins:     allowedOrigins,
 	}, nil
 }
 
@@ -111,4 +150,12 @@ func getEnv(key, defaultVal string) string {
 		return value
 	}
 	return defaultVal
+}
+
+func generateRandomSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		panic("failed to generate random secret: " + err.Error())
+	}
+	return hex.EncodeToString(bytes)
 }
