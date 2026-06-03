@@ -7,10 +7,7 @@
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist",
-    "env": {
-      "VITE_API_URL": "https://mario-v2-backend.ntoric.com/api"
-    }
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
