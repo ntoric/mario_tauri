@@ -1,0 +1,62 @@
+node_modules
+dist/*
+dist/
+node_modules/*
+build/
+release/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Environment files
+.env
+.env.production
+.env.local
+.env.development.local
+.env.production.local
+
+# Database data
+postgres_data/
+
+# Vite cache
+.vite/
+
+# Zip archives
+*.zip
+
+# Docker volumes
+docker-compose.override.yml
+
+# Release builds and installers
+release/
+*.dmg
+*.exe
+*.app
+
+# Rust/Tauri build artifacts
+frontend/src-tauri/target/
+
+# Electron build artifacts (removed - kept for git history)
+electron/dist/
+electron/out/

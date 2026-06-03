@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cafe-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    # ports:
+    #   - "6379:6379"
+    networks:
+      - cafe-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: cafe-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-cafe}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cafe-network
+
+  adminer:
+    image: adminer:latest
+    container_name: cafe-adminer
+    restart: unless-stopped
+    ports:
+      - "8089:8080"
+    env_file:
+      - .env
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DEFAULT_DB_DRIVER: pgsql
+      ADMINER_DEFAULT_DB: ${DB_NAME}
+      ADMINER_DEFAULT_USER: ${DB_USER}
+    depends_on:
+      - db
+    networks:
+      - cafe-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cafe-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 8088
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: ${REDIS_DB:-0}
+      JWT_SECRET: ${JWT_SECRET}
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME}
+      NODE_ENV: ${NODE_ENV}
+    ports:
+      - "8088:8088"
+    depends_on:
+      redis:
+        condition: service_started
+      db:
+        condition: service_started
+    networks:
+      - cafe-network
+
+networks:
+  cafe-network:
+    driver: bridge
+
+volumes:
+  redis_data:
