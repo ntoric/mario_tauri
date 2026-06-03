@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2 } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -120,9 +120,17 @@ const LayoutContent: React.FC = () => {
                 <span className="nav-icon"><Users size={18} /></span>
                 {sidebarExpanded && <span>Users</span>}
               </NavLink>
-              <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports">
+              <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
                 <span className="nav-icon"><BarChart2 size={18} /></span>
                 {sidebarExpanded && <span>Reports</span>}
+              </NavLink>
+              <NavLink to="/reports/top-items" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Items">
+                <span className="nav-icon"><ShoppingBag size={18} /></span>
+                {sidebarExpanded && <span>Top Items</span>}
+              </NavLink>
+              <NavLink to="/reports/top-categories" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Categories">
+                <span className="nav-icon"><Tag size={18} /></span>
+                {sidebarExpanded && <span>Top Categories</span>}
               </NavLink>
               {isSuperAdmin && (
                 <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">

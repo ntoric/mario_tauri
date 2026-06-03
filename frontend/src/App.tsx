@@ -14,6 +14,8 @@ import UpdateManagement from './components/UpdateManagement';
 import SupportSettings from './components/SupportSettings';
 import SupportPage from './components/SupportPage';
 import Reports from './components/Reports';
+import TopSellingItemsReport from './components/TopSellingItemsReport';
+import TopSellingCategoriesReport from './components/TopSellingCategoriesReport';
 import { api } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -109,6 +111,8 @@ const AppRoutes: React.FC = () => {
         <Route path="system-reset" element={<SystemReset />} />
         <Route path="update-management" element={<UpdateManagement />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="reports/top-items" element={<TopSellingItemsReport />} />
+        <Route path="reports/top-categories" element={<TopSellingCategoriesReport />} />
       </Route>
     </Routes>
   );

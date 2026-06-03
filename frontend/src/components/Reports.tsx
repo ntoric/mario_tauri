@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart2, TrendingUp, ShoppingBag, CreditCard, Package, Users, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { BarChart2, TrendingUp, ShoppingBag, CreditCard, Package, Users, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
@@ -10,6 +11,7 @@ const Reports: React.FC = () => {
   const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const { setHeaderContent } = usePageHeader();
+  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRange>('today');
 
   useEffect(() => {
@@ -334,8 +336,11 @@ const Reports: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
         {/* Top Selling Categories */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Top Selling Categories</h3>
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/reports/top-categories')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              Detailed Report <ExternalLink size={13} />
+            </button>
           </div>
           <div className="card-body">
             {categorySales.length === 0 ? (
@@ -375,8 +380,11 @@ const Reports: React.FC = () => {
 
         {/* Top Selling Items */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Top Selling Items</h3>
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/reports/top-items')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              Detailed Report <ExternalLink size={13} />
+            </button>
           </div>
           <div className="card-body">
             {itemSales.length === 0 ? (
