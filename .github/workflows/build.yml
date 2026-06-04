@@ -70,6 +70,7 @@ jobs:
         run: cd frontend && npm ci
 
       - name: Build Go printer binary
+        shell: bash
         run: |
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
@@ -88,6 +89,7 @@ jobs:
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
 
       - name: Copy Go printer binary to bundle
+        shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
             cp frontend/src-tauri/target/${{ matrix.target }}/release/mario-printer.exe frontend/src-tauri/target/${{ matrix.target }}/release/bundle/
