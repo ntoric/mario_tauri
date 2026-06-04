@@ -72,18 +72,25 @@ jobs:
       - name: Build Go printer binary
         shell: bash
         run: |
+          mkdir -p frontend/src-tauri/binaries
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            GOOS=windows GOARCH=amd64 go build -o ../binaries/mario-printer.exe .
+            GOOS=windows GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }}.exe .
           elif [ "${{ matrix.platform }}" = "macos-latest" ] || [ "${{ matrix.platform }}" = "macos-13" ]; then
             if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-              GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer .
+              GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
             else
-              GOOS=darwin GOARCH=amd64 go build -o ../binaries/mario-printer .
+              GOOS=darwin GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
             fi
           else
-            GOOS=linux GOARCH=amd64 go build -o ../binaries/mario-printer .
+            GOOS=linux GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
           fi
+
+      - name: Verify Go binary exists
+        shell: bash
+        run: |
+          echo "Checking for binary: frontend/src-tauri/binaries/mario-printer-${{ matrix.target }}${{ matrix.platform == 'windows-latest' && '.exe' || '' }}"
+          ls -la frontend/src-tauri/binaries/
 
       - name: Build app
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
