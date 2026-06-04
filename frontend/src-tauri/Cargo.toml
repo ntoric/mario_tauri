@@ -25,6 +25,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
+tauri-plugin-dialog = "2"
+dirs = "5"
 
 # USB printer access (macOS/Linux only — not used on Windows or with go-printer)
 [target.'cfg(not(target_os = "windows"))'.dependencies]

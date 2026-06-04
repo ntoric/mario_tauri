@@ -128,7 +128,8 @@ body {
 
 .form-group input,
 .form-group select,
-.form-group textarea {
+.form-group textarea,
+.form-input {
   width: 100%;
   padding: 0.75rem 1rem;
   border: 1px solid var(--gray-300);
@@ -140,7 +141,8 @@ body {
 
 .form-group input:focus,
 .form-group select:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-input:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
@@ -272,6 +274,28 @@ body {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
   }
 }
 
@@ -511,6 +535,9 @@ body {
   box-shadow: var(--shadow);
   gap: 1rem;
   min-height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .navbar-left {

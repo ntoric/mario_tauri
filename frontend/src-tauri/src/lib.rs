@@ -104,6 +104,18 @@ async fn debug_usb_devices() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn save_csv_file(content: String, default_filename: String) -> Result<String, String> {
+    // Fallback method - try to write to Downloads folder
+    let mut path = dirs::download_dir()
+        .unwrap_or_else(|| std::env::current_dir().unwrap());
+    path.push(&default_filename);
+    
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(format!("File saved to: {}", path.display()))
+}
+
+#[tauri::command]
 async fn print_job(print_data: serde_json::Value) -> Result<String, String> {
     if let Ok(job) = serde_json::from_value::<PrintJob>(print_data.clone()) {
         println!("Received PrintJob for {}, type: {}", job.printer.name.as_ref().unwrap_or(&"unknown".to_string()), job.job_type);
@@ -140,11 +152,13 @@ async fn print_job(print_data: serde_json::Value) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_printer_status,
             get_printers,
             print_job,
-            debug_usb_devices
+            debug_usb_devices,
+            save_csv_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

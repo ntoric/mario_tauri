@@ -3,6 +3,7 @@ import { BarChart2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
+import { saveCSVWithDialog } from '../utils/csvExport';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type SortField = 'item' | 'date' | 'count' | 'revenue';
@@ -145,19 +146,103 @@ const TopSellingItemsReport: React.FC = () => {
     return sortDir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />;
   };
 
-  const handleExportCSV = () => {
-    const header = 'Item,Category,Date,Count,Revenue\n';
-    const csvRows = sorted.map(r =>
-      `"${r.item}","${r.category}","${r.date}",${r.count},${r.revenue.toFixed(2)}`
-    );
-    const csv = header + csvRows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `top-selling-items-${dateRange}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportCSV = async () => {
+    if (sorted.length === 0) {
+      alert('No data to export');
+      return;
+    }
+    
+    // Show loading state
+    const exportButton = document.querySelector('[title="Export CSV"]') as HTMLButtonElement;
+    const originalContent = exportButton?.innerHTML;
+    if (exportButton) {
+      exportButton.disabled = true;
+      exportButton.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Exporting...';
+    }
+    
+    try {
+      const header = 'Item,Category,Date,Count,Revenue\n';
+      const csvRows = sorted.map(r =>
+        `"${r.item}","${r.category}","${r.date}",${r.count},${r.revenue.toFixed(2)}`
+      );
+      const csv = header + csvRows.join('\n');
+      
+      // Export the file
+      const success = await saveCSVWithDialog(csv, `top-selling-items-${dateRange}.csv`);
+      
+      if (success) {
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: #48bb78;
+          color: white;
+          padding: 1rem 1.5rem;
+          border-radius: 8px;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          z-index: 1000;
+          font-weight: 500;
+          animation: slideIn 0.3s ease-out;
+        `;
+        notification.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.2rem;">✓</span>
+            <span>Export completed successfully!</span>
+          </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Remove notification after 3 seconds
+        setTimeout(() => {
+          notification.style.animation = 'slideOut 0.3s ease-in';
+          setTimeout(() => {
+            document.body.removeChild(notification);
+          }, 300);
+        }, 3000);
+      } else {
+        throw new Error('Export failed');
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      // Show error notification
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #f56565;
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 1000;
+        font-weight: 500;
+        animation: slideIn 0.3s ease-out;
+      `;
+      notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 1.2rem;">✗</span>
+          <span>Export failed. Please try again.</span>
+        </div>
+      `;
+      document.body.appendChild(notification);
+      
+      // Remove notification after 3 seconds
+      setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+    } finally {
+      // Restore button state
+      if (exportButton && originalContent) {
+        exportButton.disabled = false;
+        exportButton.innerHTML = originalContent;
+      }
+    }
   };
 
   const rangeLabel: Record<DateRange, string> = {
