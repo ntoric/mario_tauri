@@ -75,7 +75,7 @@ jobs:
           mkdir -p frontend/src-tauri/binaries
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            GOOS=windows GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }}.exe .
+            GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ../binaries/mario-printer-${{ matrix.target }}.exe .
           elif [ "${{ matrix.platform }}" = "macos-latest" ] || [ "${{ matrix.platform }}" = "macos-13" ]; then
             if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
               GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
