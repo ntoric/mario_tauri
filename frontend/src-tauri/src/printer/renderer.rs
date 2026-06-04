@@ -1,7 +1,5 @@
 use crate::printer::models::*;
 use crate::printer::utils::*;
-use qrcode::QrCode;
-use qrcode::render::svg;
 
 pub fn render_print_job(job: &PrintJob) -> Result<Vec<u8>, String> {
     match job.job_type.as_str() {
@@ -274,17 +272,36 @@ fn render_kot(kot: &KOT, width: &str) -> Vec<u8> {
     data
 }
 
-fn generate_qr_code(value: &str, _size: i32) -> Vec<u8> {
-    // For simplicity, we'll generate a basic QR code
-    // In a real implementation, you might want to use a library that generates
-    // printer-compatible QR codes directly
-    let qr_code = QrCode::new(value).unwrap();
-    let svg_string = qr_code
-        .render::<svg::Color>()
-        .min_dimensions(200, 200)
-        .build();
-    
-    // Convert SVG to bytes (this is a placeholder - real implementation would need
-    // to convert to printer-compatible format)
-    svg_string.into_bytes()
+/// Generate ESC/POS native QR code commands for thermal printers.
+fn generate_qr_code(value: &str, size: i32) -> Vec<u8> {
+    let module_size = if size <= 0 { 6u8 } else { size as u8 };
+
+    let mut out = Vec::new();
+
+    // Center align
+    out.extend_from_slice(&[0x1B, 0x61, 0x01]);
+
+    // Select QR Code model 2
+    out.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]);
+
+    // Set QR Code module size
+    out.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, module_size]);
+
+    // Set error correction level (L = 0x30)
+    out.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x30]);
+
+    // Store QR Code data
+    let qr_data = value.as_bytes();
+    let data_len = qr_data.len() + 3;
+    let p_l = (data_len % 256) as u8;
+    let p_h = (data_len / 256) as u8;
+    out.extend_from_slice(&[0x1D, 0x28, 0x6B, p_l, p_h, 0x31, 0x50, 0x30]);
+    out.extend_from_slice(qr_data);
+
+    // Print stored QR Code
+    out.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]);
+
+    out.extend_from_slice(b"\n\n");
+
+    out
 }

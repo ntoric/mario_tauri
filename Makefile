@@ -55,3 +55,22 @@ restart: down up
 
 restart-backend:
 	docker-compose restart backend
+
+# ── Tauri Desktop App ──────────────────────────────────────────────────
+# Build using the native Rust printer (default)
+tauri-dev:
+	cd frontend && npm run tauri dev
+
+tauri-build:
+	cd frontend && npm run tauri build
+
+# Build using the Go printer sidecar
+tauri-go-printer: go-printer-build
+	cd frontend/src-tauri && cargo build --features go-printer
+
+# Build the Go printer sidecar binary (place next to Tauri binary)
+go-printer-build:
+	cd frontend/src-tauri/mario-printer && go build -o ../target/debug/mario-printer .
+
+go-printer-build-windows:
+	cd frontend/src-tauri/mario-printer && GOOS=windows GOARCH=amd64 go build -o ../target/release/mario-printer.exe .
