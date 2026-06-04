@@ -74,28 +74,20 @@ jobs:
         run: |
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            GOOS=windows GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer.exe .
+            GOOS=windows GOARCH=amd64 go build -o ../binaries/mario-printer.exe .
           elif [ "${{ matrix.platform }}" = "macos-latest" ] || [ "${{ matrix.platform }}" = "macos-13" ]; then
             if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-              GOOS=darwin GOARCH=arm64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+              GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer .
             else
-              GOOS=darwin GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+              GOOS=darwin GOARCH=amd64 go build -o ../binaries/mario-printer .
             fi
           else
-            GOOS=linux GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+            GOOS=linux GOARCH=amd64 go build -o ../binaries/mario-printer .
           fi
 
       - name: Build app
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
 
-      - name: Copy Go printer binary to bundle
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            cp frontend/src-tauri/target/${{ matrix.target }}/release/mario-printer.exe frontend/src-tauri/target/${{ matrix.target }}/release/bundle/
-          else
-            cp frontend/src-tauri/target/${{ matrix.target }}/release/mario-printer frontend/src-tauri/target/${{ matrix.target }}/release/bundle/
-          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

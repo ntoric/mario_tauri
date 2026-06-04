@@ -37,23 +37,30 @@ impl GoPrinterService {
     /// Resolve the path to the Go sidecar binary.
     fn sidecar_path() -> String {
         // Look for the sidecar binary in several locations:
-        // 1. Next to the current executable (bundled with Tauri)
-        // 2. In the src-tauri/mario-printer directory (dev mode)
+        // 1. Next to the current executable (production bundle via externalBin)
+        // 2. In the src-tauri/binaries directory (dev mode)
+        // 3. On PATH (fallback)
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
 
+        let binary_name = if cfg!(target_os = "windows") {
+            "mario-printer.exe"
+        } else {
+            "mario-printer"
+        };
+
         let candidates = vec![
-            // Bundled sidecar (production)
+            // Production: next to executable (bundled via externalBin)
             exe_dir
                 .as_ref()
-                .map(|d| d.join("mario-printer").to_string_lossy().to_string()),
+                .map(|d| d.join(binary_name).to_string_lossy().to_string()),
+            // Development: binaries directory
             exe_dir
                 .as_ref()
-                .map(|d| d.join("mario-printer.exe").to_string_lossy().to_string()),
-            // Development: compiled Go binary next to Tauri target
-            Some("mario-printer".to_string()),
-            Some("mario-printer.exe".to_string()),
+                .map(|d| d.join("../binaries").join(binary_name).to_string_lossy().to_string()),
+            // Fallback: on PATH
+            Some(binary_name.to_string()),
         ];
 
         for candidate in candidates.into_iter().flatten() {
@@ -62,8 +69,8 @@ impl GoPrinterService {
             }
         }
 
-        // Default: assume it's on PATH
-        "mario-printer".to_string()
+        // Default: return the name anyway (will fail with clear error)
+        binary_name.to_string()
     }
 
     fn ensure_running(&self) -> Result<(), String> {
