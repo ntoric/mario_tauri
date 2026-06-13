@@ -97,59 +97,49 @@ const LayoutContent: React.FC = () => {
             </NavLink>
           </div>
 
-          {(canManageStore || isStaff) && (
-            <div className="nav-section">
-              {sidebarExpanded && <div className="nav-section-title">Settings</div>}
-              <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
-                <span className="nav-icon"><Settings size={18} /></span>
-                {sidebarExpanded && <span>Business Settings</span>}
-              </NavLink>
-            </div>
-          )}
+          <div className="nav-section">
+            {sidebarExpanded && <div className="nav-section-title">Settings</div>}
+            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
+              <span className="nav-icon"><Settings size={18} /></span>
+              {sidebarExpanded && <span>Business Settings</span>}
+            </NavLink>
+            <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
+              <span className="nav-icon"><Users size={18} /></span>
+              {sidebarExpanded && <span>Users</span>}
+            </NavLink>
+            <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
+              <span className="nav-icon"><BarChart2 size={18} /></span>
+              {sidebarExpanded && <span>Reports</span>}
+            </NavLink>
+            <NavLink to="/reports/top-items" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Items">
+              <span className="nav-icon"><ShoppingBag size={18} /></span>
+              {sidebarExpanded && <span>Top Items</span>}
+            </NavLink>
+            <NavLink to="/reports/top-categories" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Categories">
+              <span className="nav-icon"><Tag size={18} /></span>
+              {sidebarExpanded && <span>Top Categories</span>}
+            </NavLink>
+          </div>
 
-          {canManageStore && (
+          {isSuperAdmin && (
             <div className="nav-section">
               {sidebarExpanded && <div className="nav-section-title">Administration</div>}
-              {isSuperAdmin && (
-                <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
-                  <span className="nav-icon"><Building2 size={18} /></span>
-                  {sidebarExpanded && <span>Manage Stores</span>}
-                </NavLink>
-              )}
-              <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
-                <span className="nav-icon"><Users size={18} /></span>
-                {sidebarExpanded && <span>Users</span>}
+              <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
+                <span className="nav-icon"><Building2 size={18} /></span>
+                {sidebarExpanded && <span>Manage Stores</span>}
               </NavLink>
-              <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
-                <span className="nav-icon"><BarChart2 size={18} /></span>
-                {sidebarExpanded && <span>Reports</span>}
+              <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">
+                <span className="nav-icon"><Download size={18} /></span>
+                {sidebarExpanded && <span>Update Management</span>}
               </NavLink>
-              <NavLink to="/reports/top-items" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Items">
-                <span className="nav-icon"><ShoppingBag size={18} /></span>
-                {sidebarExpanded && <span>Top Items</span>}
+              <NavLink to="/support-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Settings">
+                <span className="nav-icon"><MessageCircle size={18} /></span>
+                {sidebarExpanded && <span>Support Settings</span>}
               </NavLink>
-              <NavLink to="/reports/top-categories" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Top Selling Categories">
-                <span className="nav-icon"><Tag size={18} /></span>
-                {sidebarExpanded && <span>Top Categories</span>}
+              <NavLink to="/system-reset" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="System Reset">
+                <span className="nav-icon"><AlertTriangle size={18} /></span>
+                {sidebarExpanded && <span>System Reset</span>}
               </NavLink>
-              {isSuperAdmin && (
-                <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">
-                  <span className="nav-icon"><Download size={18} /></span>
-                  {sidebarExpanded && <span>Update Management</span>}
-                </NavLink>
-              )}
-              {isSuperAdmin && (
-                <NavLink to="/support-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Settings">
-                  <span className="nav-icon"><MessageCircle size={18} /></span>
-                  {sidebarExpanded && <span>Support Settings</span>}
-                </NavLink>
-              )}
-              {isSuperAdmin && (
-                <NavLink to="/system-reset" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="System Reset">
-                  <span className="nav-icon"><AlertTriangle size={18} /></span>
-                  {sidebarExpanded && <span>System Reset</span>}
-                </NavLink>
-              )}
             </div>
           )}
         </nav>
