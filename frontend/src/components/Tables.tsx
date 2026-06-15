@@ -43,7 +43,7 @@ const Tables: React.FC = () => {
       try {
         await Promise.all([
           fetchTables(),
-          fetchOrders(true),
+          fetchOrders(),
         ]);
       } finally {
         isSyncing = false;
@@ -108,7 +108,7 @@ const Tables: React.FC = () => {
         const queueItems = useDataStore.getState().billQueue;
         if (!queueItems.length) return;
 
-        await fetchOrders(true);
+        await fetchOrders();
         const allOrders = useDataStore.getState().orders;
 
         for (const queueItem of queueItems) {

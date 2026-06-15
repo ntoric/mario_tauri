@@ -15,7 +15,7 @@ const Reports: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRange>('today');
 
   useEffect(() => {
-    fetchOrders(true);
+    fetchOrders();
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 

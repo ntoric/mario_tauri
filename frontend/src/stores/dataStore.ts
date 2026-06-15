@@ -50,7 +50,7 @@ interface DataState {
   deleteTable: (id: string) => Promise<void>;
   
   // Orders
-  fetchOrders: (bypassCache?: boolean) => Promise<void>;
+  fetchOrders: () => Promise<void>;
   createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
   saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
   savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
@@ -328,23 +328,11 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Orders
-  fetchOrders: async (bypassCache = false) => {
+  fetchOrders: async () => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
-      const cacheKey = cacheKeys.orders(currentStoreId);
-      
-      if (!bypassCache) {
-        // Try cache first
-        const cached = cache.get<Order[]>(cacheKey);
-        if (cached) {
-          set({ orders: cached });
-          return;
-        }
-      }
-      
       const orders = await api.getOrders(currentStoreId);
-      cache.set(cacheKey, orders, 2 * 60 * 1000); // 2 minutes TTL for orders (frequently changing)
       set({ orders });
     } catch (error) {
       console.error('Failed to fetch orders:', error);
@@ -352,17 +340,31 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   createOrder: async (order) => {
-    const currentStoreId = useAuthStore.getState().currentStoreId;
-    const currentUser = useAuthStore.getState().user;
+    let currentStoreId = useAuthStore.getState().currentStoreId;
+    let currentUser = useAuthStore.getState().user;
+    
+    console.log('[DataStore] Auth check:', { currentStoreId, currentUser, hasStoreId: !!currentStoreId, hasUser: !!currentUser });
+    
+    // If user is null, try to refresh from server
+    if (!currentUser) {
+      console.log('[DataStore] User is null, attempting to refresh...');
+      const authStore = useAuthStore.getState();
+      currentUser = await authStore.refreshUser();
+      currentStoreId = authStore.currentStoreId;
+      console.log('[DataStore] After refresh:', { currentUser, currentStoreId });
+    }
+    
     if (!currentStoreId || !currentUser) {
+      console.error('[DataStore] Auth failed:', { currentStoreId, currentUser });
       throw new Error('User or store not authenticated');
     }
+    console.log('[DataStore] Creating order', { order, currentStoreId, userId: currentUser.id });
     const newOrder = await api.createOrder({
       ...order,
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    cache.delete(cacheKeys.orders(currentStoreId));
+    console.log('[DataStore] Order created successfully', newOrder);
     await get().fetchOrders();
     return newOrder;
   },
@@ -378,7 +380,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
     await get().fetchBills();
     return savedOrder;
@@ -395,8 +396,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
-    cache.delete(cacheKeys.orders(currentStoreId));
-    cache.delete(cacheKeys.bills(currentStoreId));
     await get().fetchOrders();
     await get().fetchBills();
   },
@@ -406,8 +405,9 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
+    console.log('[DataStore] Updating order', { id, order });
     await api.updateOrder(id, order);
-    cache.delete(cacheKeys.orders(currentStoreId));
+    console.log('[DataStore] Order updated successfully');
     await get().fetchOrders();
   },
 
@@ -417,7 +417,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.completeOrder(id, paymentMethod);
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
   },
 
@@ -427,7 +426,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.cancelOrder(id);
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
   },
 
@@ -492,7 +490,6 @@ export const useDataStore = create<DataState>((set, get) => ({
     });
     // Mark order as completed and release the table
     await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
   },
 

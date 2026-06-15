@@ -28,7 +28,7 @@ const TopSellingCategoriesReport: React.FC = () => {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
-    fetchOrders(true);
+    fetchOrders();
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 

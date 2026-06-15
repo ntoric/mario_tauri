@@ -111,6 +111,11 @@ const OrderPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPrinting, isSubmitting, paymentMethod, currentStore, orderItems.length]);
 
+  // Log button state for debugging
+  useEffect(() => {
+    console.log('[BUTTON STATE] orderItems:', orderItems.length, 'isSubmitting:', isSubmitting, 'isPrinting:', isPrinting);
+  }, [orderItems.length, isSubmitting, isPrinting]);
+
   if (!table) {
     return (
       <div className="order-page-empty">
@@ -283,10 +288,16 @@ const OrderPage: React.FC = () => {
   };
 
   const handleKOT = async (withPrint = false) => {
-    if (orderItems.length === 0) return;
+    console.log('[KOT] handleKOT called', { withPrint, orderItemsLength: orderItems.length, orderItems });
+    if (orderItems.length === 0) {
+      console.log('[KOT] Early return: orderItems is empty');
+      return;
+    }
 
     const totalAmount = calculateTotal();
     const taxAmount = calculateTax();
+
+    console.log('[KOT] Starting KOT save', { withPrint, orderItemsLength: orderItems.length, totalAmount, taxAmount, tableId: table.id, existingOrderId: existingOrder?.id });
 
     // Pre-check: KOT print requested but no printer configured
     if (withPrint && !currentStore?.printerName) {
@@ -307,12 +318,15 @@ const OrderPage: React.FC = () => {
     try {
       let orderId = existingOrder?.id;
       if (existingOrder) {
+        console.log('[KOT] Updating existing order', existingOrder.id);
         await updateOrder(existingOrder.id, {
           items: orderItems,
           totalAmount,
           taxAmount,
         });
+        console.log('[KOT] Order updated successfully');
       } else {
+        console.log('[KOT] Creating new order', { tableId: table.id, tableNumber: table.number, items: orderItems, totalAmount, taxAmount, paymentMethod });
         const newOrder = await createOrder({
           tableId: table.id,
           tableNumber: table.number,
@@ -322,8 +336,14 @@ const OrderPage: React.FC = () => {
           discountAmount: 0,
           paymentMethod,
         });
+        console.log('[KOT] New order created', newOrder);
         orderId = newOrder.id;
       }
+
+      console.log('[KOT] Refreshing orders...');
+      // Ensure orders are refreshed before navigation
+      await fetchOrders();
+      console.log('[KOT] Orders refreshed');
 
       if (withPrint && orderId) {
         try {
@@ -334,14 +354,18 @@ const OrderPage: React.FC = () => {
         }
       }
 
+      console.log('[KOT] Navigating back to tables');
       navigate('/');
       setOrderItems([]);
     } catch (error: any) {
-      console.error('Failed to save order:', error);
+      console.error('[KOT] Failed to save order:', error);
+      console.error('[KOT] Error details:', { message: error?.message, stack: error?.stack, response: error?.response });
       if (error?.message === 'User or store not authenticated' || error?.message === 'Store not selected') {
+        console.error('[KOT] Auth error detected, showing error dialog instead of redirect');
         setErrorDialog({ show: true, message: 'Session expired. Please log in again.' });
-        window.location.hash = '/login';
-        window.location.reload();
+        // Comment out redirect to see the error
+        // window.location.hash = '/login';
+        // window.location.reload();
       } else {
         setErrorDialog({ show: true, message: (error as Error).message || 'Failed to save order. Please check your connection and try again.' });
       }
@@ -712,8 +736,13 @@ const OrderPage: React.FC = () => {
                 {actionType === 'save-print' ? 'Processing...' : 'Save & Print'}
               </button>
               <button
+                type="button"
                 className="btn btn-success"
-                onClick={() => handleKOT(false)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  console.log('[KOT BUTTON] KOT button clicked');
+                  handleKOT(false);
+                }}
                 disabled={orderItems.length === 0 || isSubmitting}
                 title="Save Order & Keep on Table"
               >
@@ -721,8 +750,13 @@ const OrderPage: React.FC = () => {
                 {actionType === 'kot' ? 'Saving...' : 'KOT'}
               </button>
               <button
+                type="button"
                 className="btn btn-success"
-                onClick={() => handleKOT(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  console.log('[KOT BUTTON] KOT & Print button clicked');
+                  handleKOT(true);
+                }}
                 disabled={orderItems.length === 0 || isSubmitting}
                 title="Save Order, Print KOT & Keep on Table"
               >

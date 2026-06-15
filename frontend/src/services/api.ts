@@ -45,6 +45,8 @@ class ApiService {
     }
 
     console.log(`Fetching: ${url}`);
+    console.log(`Token present: ${!!token}`);
+    console.log(`Token length: ${token?.length || 0}`);
     const response = await fetch(url, {
       ...options,
       headers,
@@ -54,7 +56,9 @@ class ApiService {
     console.log(`Response status: ${response.status}`);
 
     if (!response.ok) {
+      console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
       if (response.status === 401 && !skipAuthRedirect) {
+        console.error('[API ERROR] 401 Unauthorized - clearing token and redirecting to login');
         this.clearToken();
         window.location.replace('/#/login');
       }
@@ -275,10 +279,13 @@ class ApiService {
   }
 
   async createOrder(order: any) {
-    return this.fetch('/orders', {
+    console.log('[API] Creating order', order);
+    const result = await this.fetch('/orders', {
       method: 'POST',
       body: JSON.stringify(order),
     });
+    console.log('[API] Order created response', result);
+    return result;
   }
 
   async createParcelOrder(order: any) {
@@ -303,10 +310,13 @@ class ApiService {
   }
 
   async updateOrder(id: string, order: any) {
-    return this.fetch(`/orders/${id}`, {
+    console.log('[API] Updating order', { id, order });
+    const result = await this.fetch(`/orders/${id}`, {
       method: 'PUT',
       body: JSON.stringify(order),
     });
+    console.log('[API] Order updated response', result);
+    return result;
   }
 
   async completeOrder(id: string, paymentMethod?: string) {
