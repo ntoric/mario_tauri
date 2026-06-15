@@ -540,35 +540,6 @@ const ParcelOrderModal: React.FC = () => {
                   />
                 </div>
 
-                <div className="payment-method-section" style={{ marginTop: '1rem' }}>
-                  <label className="payment-label">Payment Method</label>
-                  <div className="payment-options">
-                    <button
-                      className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('cash')}
-                      data-method="cash"
-                      disabled={isSubmitting}
-                    >
-                      Cash
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('card')}
-                      data-method="card"
-                      disabled={isSubmitting}
-                    >
-                      Card
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('upi')}
-                      data-method="upi"
-                      disabled={isSubmitting}
-                    >
-                      UPI
-                    </button>
-                  </div>
-                </div>
               </div>
               <div className="modal-footer">
                 <button

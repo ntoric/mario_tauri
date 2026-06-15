@@ -288,6 +288,20 @@ class ApiService {
     });
   }
 
+  async saveEBill(order: any) {
+    return this.fetch('/orders/save-ebill', {
+      method: 'POST',
+      body: JSON.stringify(order),
+    });
+  }
+
+  async savePrint(orderId: string, bill: any) {
+    return this.fetch(`/orders/${orderId}/save-print`, {
+      method: 'POST',
+      body: JSON.stringify(bill),
+    });
+  }
+
   async updateOrder(id: string, order: any) {
     return this.fetch(`/orders/${id}`, {
       method: 'PUT',

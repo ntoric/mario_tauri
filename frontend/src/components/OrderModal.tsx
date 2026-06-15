@@ -672,33 +672,6 @@ const OrderModal: React.FC = () => {
                   <span className="bill-total-value">{formatCurrency(total)}</span>
                 </div>
                 
-                <div className="payment-method-section">
-                  <label className="payment-label">Payment Method</label>
-                  <div className="payment-options">
-                    <button
-                      className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('cash')}
-                      data-method="cash"
-                    >
-                      Cash
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('card')}
-                      data-method="card"
-                    >
-                      Card
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('upi')}
-                      data-method="upi"
-                    >
-                      UPI
-                    </button>
-                  </div>
-                </div>
-
                 <p className="bill-hint">Press Enter or click Print to complete</p>
               </div>
               <div className="modal-footer">

@@ -52,6 +52,8 @@ interface DataState {
   // Orders
   fetchOrders: (bypassCache?: boolean) => Promise<void>;
   createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
+  saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
+  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
   cancelOrder: (id: string) => Promise<void>;
@@ -363,6 +365,40 @@ export const useDataStore = create<DataState>((set, get) => ({
     cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
     return newOrder;
+  },
+
+  saveEBill: async (order) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    const savedOrder = await api.saveEBill({
+      ...order,
+      storeId: currentStoreId,
+      createdBy: currentUser.id,
+    });
+    cache.delete(cacheKeys.orders(currentStoreId));
+    await get().fetchOrders();
+    await get().fetchBills();
+    return savedOrder;
+  },
+
+  savePrint: async (orderId, bill) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.savePrint(orderId, {
+      ...bill,
+      storeId: currentStoreId,
+      generatedBy: currentUser.id,
+    });
+    cache.delete(cacheKeys.orders(currentStoreId));
+    cache.delete(cacheKeys.bills(currentStoreId));
+    await get().fetchOrders();
+    await get().fetchBills();
   },
 
   updateOrder: async (id, order) => {

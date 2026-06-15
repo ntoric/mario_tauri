@@ -142,6 +142,8 @@ func main() {
 		// Orders
 		r.Get("/api/orders", h.GetOrders)
 		r.Post("/api/orders", h.CreateOrder)
+		r.Post("/api/orders/save-ebill", h.SaveEBill)
+		r.Post("/api/orders/{id}/save-print", h.SavePrint)
 		r.Post("/api/orders/parcel", h.CreateParcelOrder)
 		r.Put("/api/orders/{id}", h.UpdateOrder)
 		r.Patch("/api/orders/{id}/complete", h.CompleteOrder)

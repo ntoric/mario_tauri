@@ -666,8 +666,13 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 }
 
 func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
+	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d seats=%d pos=(%d,%d)\n",
+		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
 	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, seats, position_x, position_y) VALUES ($1, $2, $3, $4, $5, $6)",
 		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
+	if err != nil {
+		fmt.Println("TableRepository.Create: exec error -", err)
+	}
 	return err
 }
 

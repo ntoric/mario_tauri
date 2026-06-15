@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package } from 'lucide-react';
-import { useDataStore, useUIStore, useAuthStore } from '../stores';
+import { useNavigate } from 'react-router-dom';
+import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
-import OrderModal from './OrderModal';
-import ParcelOrderModal from './ParcelOrderModal';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
   const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue } = useDataStore();
-  const { openOrderModal, openParcelOrderModal } = useUIStore();
+  const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const { setHeaderContent } = usePageHeader();
@@ -255,28 +254,25 @@ const Tables: React.FC = () => {
               <List size={18} />
             </button>
           </div>
-          <button className="btn btn-primary" onClick={openParcelOrderModal}>
+          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
             <Package size={18} />
             Parcel Order
           </button>
-          {isAdmin && (
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
               <Plus size={18} />
               Add Table
             </button>
-          )}
         </>
       ),
     });
-  }, [viewMode, isAdmin, setHeaderContent, openParcelOrderModal]);
+  }, [viewMode, isAdmin, setHeaderContent, navigate, user]);
 
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
 
     setCheckingTableId(table.id);
     setCheckingTableId(null);
-    const activeOrder = getActiveOrderByTable(table.id);
-    openOrderModal({ table, existingOrder: activeOrder });
+    navigate(`/order/${table.id}`);
   };
 
   const handleBillClick = (e: React.MouseEvent, table: Table) => {
@@ -799,33 +795,6 @@ const Tables: React.FC = () => {
                 <span className="bill-total-value">{formatCurrency(billDialogTotal)}</span>
               </div>
               
-              <div className="payment-method-section">
-                <label className="payment-label">Payment Method</label>
-                <div className="payment-options">
-                  <button
-                    className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('cash')}
-                    data-method="cash"
-                  >
-                    Cash
-                  </button>
-                  <button
-                    className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('card')}
-                    data-method="card"
-                  >
-                    Card
-                  </button>
-                  <button
-                    className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('upi')}
-                    data-method="upi"
-                  >
-                    UPI
-                  </button>
-                </div>
-              </div>
-
               <p className="bill-hint">Press Enter or click Print to complete</p>
             </div>
             <div className="modal-footer">
@@ -954,8 +923,6 @@ const Tables: React.FC = () => {
         </div>
       )}
 
-      <OrderModal />
-      <ParcelOrderModal />
       <BillModal />
     </>
   );

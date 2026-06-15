@@ -240,6 +240,183 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, order)
 }
 
+// SaveEBill handles POST /api/orders/save-ebill
+// Creates an order, marks it as completed, and creates a bill atomically.
+// Used for recording orders without occupying a table (e.g., missed orders).
+func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req models.Order
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	targetStoreID := req.StoreID
+	if targetStoreID == "" {
+		targetStoreID = claims.StoreID
+	}
+	if targetStoreID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	orderID := uuid.New().String()
+	invoiceNo := fmt.Sprintf("INV-%d", time.Now().Unix())
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "upi"
+	}
+
+	order := models.Order{
+		ID:             orderID,
+		StoreID:        targetStoreID,
+		TableID:        req.TableID,
+		TableNumber:    req.TableNumber,
+		Status:         "active",
+		OrderType:      "dine_in",
+		CustomerName:   req.CustomerName,
+		CustomerMobile: req.CustomerMobile,
+		TotalAmount:    req.TotalAmount,
+		TaxAmount:      req.TaxAmount,
+		DiscountAmount: req.DiscountAmount,
+		PaymentMethod:  paymentMethod,
+		PaymentStatus:  "paid",
+		CreatedBy:      claims.ID,
+		Items:          req.Items,
+	}
+
+	// Create order
+	if err := h.Repo.Order.Create(r.Context(), order); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Complete order immediately
+	if err := h.Repo.Order.Complete(r.Context(), orderID, paymentMethod); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Create bill
+	bill := models.Bill{
+		ID:             uuid.New().String(),
+		StoreID:        targetStoreID,
+		OrderID:        orderID,
+		TableNumber:    req.TableNumber,
+		InvoiceNo:      invoiceNo,
+		Subtotal:       req.TotalAmount,
+		TaxTotal:       req.TaxAmount,
+		Discount:       req.DiscountAmount,
+		Total:          req.TotalAmount + req.TaxAmount - req.DiscountAmount,
+		PaymentMethod:  paymentMethod,
+		CustomerName:   req.CustomerName,
+		CustomerMobile: req.CustomerMobile,
+		GeneratedBy:    claims.ID,
+	}
+	if err := h.Repo.Bill.Create(r.Context(), bill); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Fetch fully created order
+	createdOrder, errFetch := h.Repo.Order.GetByID(r.Context(), orderID)
+	if errFetch != nil || createdOrder == nil {
+		h.writeJSON(w, http.StatusCreated, order)
+		return
+	}
+
+	h.broadcastTableStatusUpdate(targetStoreID, "order_completed")
+	h.writeJSON(w, http.StatusCreated, createdOrder)
+}
+
+// SavePrint handles POST /api/orders/:id/save-print
+// Creates a bill for an existing order and marks it as completed.
+func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	var req models.Bill
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	targetStoreID := req.StoreID
+	if targetStoreID == "" {
+		targetStoreID = claims.StoreID
+	}
+	if targetStoreID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	// Verify order exists and belongs to the store
+	order, err := h.Repo.Order.GetByID(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if order == nil {
+		h.writeError(w, http.StatusNotFound, "Order not found")
+		return
+	}
+
+	invoiceNo := req.InvoiceNo
+	if invoiceNo == "" {
+		invoiceNo = fmt.Sprintf("INV-%d", time.Now().Unix())
+	}
+
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "upi"
+	}
+
+	bill := models.Bill{
+		ID:             uuid.New().String(),
+		StoreID:        targetStoreID,
+		OrderID:        id,
+		TableNumber:    req.TableNumber,
+		InvoiceNo:      invoiceNo,
+		Subtotal:       req.Subtotal,
+		TaxTotal:       req.TaxTotal,
+		Discount:       req.Discount,
+		Total:          req.Total,
+		PaymentMethod:  paymentMethod,
+		CustomerName:   req.CustomerName,
+		CustomerMobile: req.CustomerMobile,
+		GeneratedBy:    claims.ID,
+	}
+
+	if err := h.Repo.Bill.Create(r.Context(), bill); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := h.Repo.Order.Complete(r.Context(), id, paymentMethod); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	completedOrder, errFetch := h.Repo.Order.GetByID(r.Context(), id)
+	if errFetch != nil || completedOrder == nil {
+		h.writeError(w, http.StatusNotFound, "Order not found after update")
+		return
+	}
+
+	h.broadcastTableStatusUpdate(targetStoreID, "order_completed")
+	h.writeJSON(w, http.StatusOK, completedOrder)
+}
+
 // CreateParcelOrder handles POST /api/orders/parcel
 func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())

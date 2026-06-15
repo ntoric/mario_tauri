@@ -16,6 +16,8 @@ import SupportPage from './components/SupportPage';
 import Reports from './components/Reports';
 import TopSellingItemsReport from './components/TopSellingItemsReport';
 import TopSellingCategoriesReport from './components/TopSellingCategoriesReport';
+import OrderPage from './components/OrderPage';
+import ParcelOrderPage from './components/ParcelOrderPage';
 import { api } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -102,6 +104,8 @@ const AppRoutes: React.FC = () => {
         }
       >
         <Route index element={<Tables />} />
+        <Route path="order/:tableId" element={<OrderPage />} />
+        <Route path="parcel-order" element={<ParcelOrderPage />} />
         <Route path="items" element={<Items />} />
         <Route path="history" element={<History />} />
         <Route path="users" element={<Users />} />
