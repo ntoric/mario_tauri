@@ -203,6 +203,8 @@ const Tables: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTable, setNewTable] = useState({ number: '', seats: 4 });
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
   
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
@@ -262,10 +264,20 @@ const Tables: React.FC = () => {
               <Plus size={18} />
               Add Table
             </button>
+          {isAdmin && (
+            <button
+              className={`btn ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
+              onClick={() => setDeleteMode(!deleteMode)}
+              title="Toggle delete mode"
+            >
+              <Trash2 size={18} />
+              {deleteMode ? 'Done' : 'Delete Tables'}
+            </button>
+          )}
         </>
       ),
     });
-  }, [viewMode, isAdmin, setHeaderContent, navigate, user]);
+  }, [viewMode, isAdmin, setHeaderContent, navigate, user, deleteMode]);
 
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
@@ -513,14 +525,19 @@ const Tables: React.FC = () => {
     }
   };
 
-  const handleDeleteTable = async (id: string) => {
-    if (confirm('Are you sure you want to delete this table?')) {
-      setLoadingTableId(id);
-      try {
-        await deleteTable(id);
-      } finally {
-        setLoadingTableId(null);
-      }
+  const handleDeleteTable = (table: Table) => {
+    setDeleteConfirmTable(table);
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!deleteConfirmTable) return;
+    const id = deleteConfirmTable.id;
+    setDeleteConfirmTable(null);
+    setLoadingTableId(id);
+    try {
+      await deleteTable(id);
+    } finally {
+      setLoadingTableId(null);
     }
   };
 
@@ -573,12 +590,12 @@ const Tables: React.FC = () => {
                           <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
                         </div>
                       )}
-                      {isAdmin && (
+                      {isAdmin && deleteMode && (
                         <button
                           className="table-delete-btn"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteTable(table.id);
+                            handleDeleteTable(table);
                           }}
                           disabled={loadingTableId === table.id}
                         >
@@ -686,10 +703,10 @@ const Tables: React.FC = () => {
                                 </button>
                               </>
                             )}
-                            {isAdmin && (
+                            {isAdmin && deleteMode && (
                               <button 
                                 className="action-btn delete" 
-                                onClick={() => handleDeleteTable(table.id)}
+                                onClick={() => handleDeleteTable(table)}
                                 disabled={loadingTableId === table.id}
                                 style={{
                                   opacity: loadingTableId === table.id ? 0.5 : 1,
@@ -835,6 +852,16 @@ const Tables: React.FC = () => {
         variant="danger"
         onConfirm={() => setErrorDialog({ show: false, message: '' })}
         onCancel={() => setErrorDialog({ show: false, message: '' })}
+      />
+      <ConfirmDialog
+        isOpen={!!deleteConfirmTable}
+        title="Delete Table"
+        message={`Are you sure you want to delete Table ${deleteConfirmTable?.number}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmDeleteTable}
+        onCancel={() => setDeleteConfirmTable(null)}
       />
 
       {/* Change Table Dialog */}

@@ -695,7 +695,7 @@ func (r *TableRepository) Update(ctx context.Context, t models.Table) error {
 }
 
 func (r *TableRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE tables SET is_active = false WHERE id = $1", id)
+	_, err := r.db.ExecContext(ctx, "DELETE FROM tables WHERE id = $1", id)
 	return err
 }
 
