@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search } from 'lucide-react';
 import { useDataStore, useUIStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -14,6 +14,8 @@ const Items: React.FC = () => {
   const { openItemModal, openCategoryModal, itemModal, categoryModal, closeItemModal, closeCategoryModal } = useUIStore();
   const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items');
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
 
   // Fetch data on mount
   useEffect(() => {
@@ -195,10 +197,22 @@ const Items: React.FC = () => {
         <div className="card">
           <div className="card-header">
             <span className="card-title">All Items ({items.length})</span>
-            <button className="btn btn-primary" onClick={() => openItemForm()}>
-              <Plus size={18} />
-              Add Item
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div className="search-input-wrapper">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={itemSearchQuery}
+                  onChange={e => setItemSearchQuery(e.target.value)}
+                  className="search-input"
+                />
+              </div>
+              <button className="btn btn-primary" onClick={() => openItemForm()}>
+                <Plus size={18} />
+                Add Item
+              </button>
+            </div>
           </div>
           <div className="card-body" style={{ padding: 0 }}>
             <table className="items-table">
@@ -212,7 +226,12 @@ const Items: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {items.map(item => (
+                {items
+                  .filter(item => 
+                    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
+                    getCategoryName(item.categoryId).toLowerCase().includes(itemSearchQuery.toLowerCase())
+                  )
+                  .map(item => (
                   <tr key={item.id}>
                     <td><strong>{item.name}</strong></td>
                     <td><span className="badge badge-primary">{getCategoryName(item.categoryId)}</span></td>
@@ -261,10 +280,22 @@ const Items: React.FC = () => {
         <div className="card">
           <div className="card-header">
             <span className="card-title">All Categories ({categories.length})</span>
-            <button className="btn btn-primary" onClick={() => openCategoryForm()}>
-              <Plus size={18} />
-              Add Category
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div className="search-input-wrapper">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={categorySearchQuery}
+                  onChange={e => setCategorySearchQuery(e.target.value)}
+                  className="search-input"
+                />
+              </div>
+              <button className="btn btn-primary" onClick={() => openCategoryForm()}>
+                <Plus size={18} />
+                Add Category
+              </button>
+            </div>
           </div>
           <div className="card-body" style={{ padding: 0 }}>
             <table className="items-table">
@@ -277,7 +308,12 @@ const Items: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {categories.map(category => (
+                {categories
+                  .filter(category => 
+                    category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
+                    (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+                  )
+                  .map(category => (
                   <tr key={category.id}>
                     <td><strong>{category.name}</strong></td>
                     <td style={{ color: 'var(--gray-600)' }}>{category.description || '-'}</td>
