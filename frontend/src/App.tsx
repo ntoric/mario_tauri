@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useDataStore } from './stores';
+import UpdateNotification from './components/UpdateNotification';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Tables from './components/Tables';
@@ -14,10 +15,14 @@ import UpdateManagement from './components/UpdateManagement';
 import SupportSettings from './components/SupportSettings';
 import SupportPage from './components/SupportPage';
 import Reports from './components/Reports';
+import ReportsIndex from './components/ReportsIndex';
 import TopSellingItemsReport from './components/TopSellingItemsReport';
 import TopSellingCategoriesReport from './components/TopSellingCategoriesReport';
 import OrderPage from './components/OrderPage';
 import ParcelOrderPage from './components/ParcelOrderPage';
+import Expenses from './components/Expenses';
+import ExpenseReports from './components/ExpenseReports';
+import RevenueReport from './components/RevenueReport';
 import { api } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -114,9 +119,13 @@ const AppRoutes: React.FC = () => {
         <Route path="support-settings" element={<SupportSettings />} />
         <Route path="system-reset" element={<SystemReset />} />
         <Route path="update-management" element={<UpdateManagement />} />
-        <Route path="reports" element={<Reports />} />
+        <Route path="reports" element={<ReportsIndex />} />
+        <Route path="reports/sales-analytics" element={<Reports />} />
         <Route path="reports/top-items" element={<TopSellingItemsReport />} />
         <Route path="reports/top-categories" element={<TopSellingCategoriesReport />} />
+        <Route path="reports/revenue" element={<RevenueReport />} />
+        <Route path="expenses" element={<Expenses />} />
+        <Route path="expense-reports" element={<ExpenseReports />} />
       </Route>
     </Routes>
   );
@@ -125,6 +134,7 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => {
   return (
     <div className="app">
+      <UpdateNotification />
       <AppRoutes />
     </div>
   );

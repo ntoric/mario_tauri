@@ -49,5 +49,17 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkyREQxN0QzOUU3QUVDNTcKUldSWDdIcWUweGZka25kVDV4R21Wbnk3QU5ZSW1XUk9yOXJQRElUc1NjSFlmWE0rTVo4K1BIOG0K",
+      "endpoints": [
+        "https://github.com/ntoric/mario_tauri/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

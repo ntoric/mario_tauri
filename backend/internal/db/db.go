@@ -203,6 +203,35 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(platform)
 		)`,
+
+		// Expense categories table
+		`CREATE TABLE IF NOT EXISTS expense_categories (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Expenses table
+		`CREATE TABLE IF NOT EXISTS expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			category_id VARCHAR(255) REFERENCES expense_categories(id) ON DELETE SET NULL,
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			expense_date TIMESTAMP NOT NULL,
+			payment_method VARCHAR(50),
+			receipt_number VARCHAR(100),
+			vendor VARCHAR(255),
+			attachments JSONB DEFAULT '[]'::jsonb,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
 	}
 
 	for _, q := range queries {

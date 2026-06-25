@@ -167,6 +167,26 @@ func main() {
 
 		// Support Config (POST requires superadmin)
 		r.Post("/api/support-config", h.UpdateSupportConfig)
+
+		// Expense Categories
+		r.Get("/api/expense-categories", h.GetExpenseCategories)
+		r.Post("/api/expense-categories", h.CreateExpenseCategory)
+		r.Put("/api/expense-categories/{id}", h.UpdateExpenseCategory)
+		r.Delete("/api/expense-categories/{id}", h.DeleteExpenseCategory)
+
+		// Expenses
+		r.Get("/api/expenses", h.GetExpenses)
+		r.Get("/api/expenses/{id}", h.GetExpense)
+		r.Post("/api/expenses", h.CreateExpense)
+		r.Put("/api/expenses/{id}", h.UpdateExpense)
+		r.Delete("/api/expenses/{id}", h.DeleteExpense)
+
+		// Expense Reports
+		r.Get("/api/expenses/report/by-category", h.GetExpenseReportByCategory)
+		r.Get("/api/expenses/report/by-date", h.GetExpenseSummaryByDate)
+
+		// Revenue Report
+		r.Get("/api/reports/revenue", h.GetRevenueReport)
 	})
 
 	// 6. Start HTTP Server with Graceful Shutdown

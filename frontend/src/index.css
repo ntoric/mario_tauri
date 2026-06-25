@@ -217,6 +217,17 @@ body {
   color: var(--primary);
 }
 
+.btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--gray-600);
+}
+
+.btn-ghost:hover {
+  background: var(--gray-100);
+  color: var(--gray-800);
+}
+
 .btn-full {
   width: 100%;
 }
@@ -2844,5 +2855,454 @@ body {
     flex: 1;
     min-width: 100px;
     justify-content: center;
+  }
+}
+
+/* Expense Management Page */
+.expenses-page {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.expense-reports-page {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.expenses-page .tabs,
+.expense-reports-page .tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--gray-200);
+}
+
+.expenses-page .tab,
+.expense-reports-page .tab {
+  padding: 0.75rem 1.25rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: -2px;
+}
+
+.expenses-page .tab:hover,
+.expense-reports-page .tab:hover {
+  color: var(--primary);
+}
+
+.expenses-page .tab.active,
+.expense-reports-page .tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.expenses-page .content-header,
+.expense-reports-page .content-header,
+.revenue-report-page .content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.expenses-page .search-bar,
+.expense-reports-page .search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  padding: 0.5rem 1rem;
+  flex: 1;
+  max-width: 400px;
+}
+
+.expenses-page .search-bar input,
+.expense-reports-page .search-bar input {
+  border: none;
+  background: none;
+  flex: 1;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.expenses-page .search-bar input::placeholder,
+.expense-reports-page .search-bar input::placeholder {
+  color: var(--gray-500);
+}
+
+.expenses-page .date-filters,
+.expense-reports-page .date-filters,
+.revenue-report-page .date-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.expenses-page .date-input,
+.expense-reports-page .date-input,
+.revenue-report-page .date-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+}
+
+.expenses-page .date-input input,
+.expense-reports-page .date-input input,
+.revenue-report-page .date-input input {
+  border: none;
+  background: none;
+  font-size: 0.9rem;
+  outline: none;
+  min-width: 130px;
+}
+
+.expenses-page .data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.expenses-page .data-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: all 0.2s;
+}
+
+.expenses-page .data-card:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--gray-300);
+}
+
+.expenses-page .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.expenses-page .card-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.expenses-page .card-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.expenses-page .action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gray-200);
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--gray-600);
+}
+
+.expenses-page .action-btn:hover {
+  background: var(--gray-100);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.expenses-page .action-btn.delete:hover {
+  background: rgba(245, 101, 101, 0.1);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.expenses-page .card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.expenses-page .card-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.expenses-page .card-field.full-width {
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.expenses-page .field-label {
+  font-weight: 600;
+  color: var(--gray-600);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.expenses-page .field-value {
+  color: var(--gray-800);
+  word-break: break-word;
+}
+
+.expenses-page .field-value.amount {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+.expenses-page .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 4rem 2rem;
+  color: var(--gray-500);
+  grid-column: 1 / -1;
+}
+
+.expenses-page .empty-state svg {
+  color: var(--gray-300);
+}
+
+.expenses-page .empty-state p {
+  font-size: 1.1rem;
+}
+
+/* Expense Reports Styles */
+.expense-reports-page .summary-cards,
+.revenue-report-page .summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.expense-reports-page .summary-card,
+.revenue-report-page .summary-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.expense-reports-page .card-icon,
+.revenue-report-page .card-icon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.expense-reports-page .card-content,
+.revenue-report-page .card-content {
+  flex: 1;
+}
+
+.expense-reports-page .card-label,
+.revenue-report-page .card-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.25rem;
+}
+
+.expense-reports-page .card-value,
+.revenue-report-page .card-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.expense-reports-page .reports-table-container {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.expense-reports-page .reports-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.expense-reports-page .reports-table thead {
+  background: var(--gray-100);
+}
+
+.expense-reports-page .reports-table th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gray-700);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.expense-reports-page .reports-table td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 0.95rem;
+  color: var(--gray-800);
+}
+
+.expense-reports-page .reports-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.expense-reports-page .reports-table tbody tr:hover {
+  background: var(--gray-50);
+}
+
+.expense-reports-page .reports-table td.amount {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.expense-reports-page .reports-table .empty-cell {
+  text-align: center;
+  color: var(--gray-500);
+  padding: 3rem 1rem;
+}
+
+.expense-reports-page .percentage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 150px;
+}
+
+.expense-reports-page .percentage-fill {
+  height: 8px;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.expense-reports-page .percentage-bar span {
+  font-weight: 600;
+  color: var(--gray-700);
+  min-width: 45px;
+  text-align: right;
+}
+
+.expense-reports-page .loading-state,
+.revenue-report-page .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 4rem 2rem;
+  color: var(--gray-500);
+}
+
+/* Revenue Report - header actions & checkbox */
+.revenue-report-page .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.revenue-report-page .filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--gray-700);
+  user-select: none;
+}
+
+.revenue-report-page .filter-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .expenses-page .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .expenses-page .content-header,
+  .expense-reports-page .content-header,
+  .revenue-report-page .content-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .expenses-page .search-bar,
+  .expense-reports-page .search-bar {
+    max-width: none;
+  }
+
+  .expenses-page .date-filters,
+  .expense-reports-page .date-filters,
+  .revenue-report-page .date-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .expense-reports-page .summary-cards,
+  .revenue-report-page .summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-report-page .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .revenue-report-page .filter-checkbox {
+    justify-content: center;
+  }
+
+  .expense-reports-page .reports-table-container {
+    overflow-x: auto;
+  }
+
+  .expense-reports-page .reports-table {
+    min-width: 600px;
   }
 }

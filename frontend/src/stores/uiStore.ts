@@ -14,6 +14,8 @@ interface UIState {
   categoryModal: ModalState;
   userModal: ModalState;
   storeModal: ModalState;
+  expenseModal: ModalState;
+  expenseCategoryModal: ModalState;
   storeSwitcherModal: boolean;
 
   // Sidebar
@@ -41,6 +43,10 @@ interface UIState {
   closeUserModal: () => void;
   openStoreModal: (data?: any) => void;
   closeStoreModal: () => void;
+  openExpenseModal: (data?: any) => void;
+  closeExpenseModal: () => void;
+  openExpenseCategoryModal: (data?: any) => void;
+  closeExpenseCategoryModal: () => void;
   openStoreSwitcher: () => void;
   closeStoreSwitcher: () => void;
   toggleSidebar: () => void;
@@ -56,6 +62,8 @@ export const useUIStore = create<UIState>((set) => ({
   categoryModal: { isOpen: false },
   userModal: { isOpen: false },
   storeModal: { isOpen: false },
+  expenseModal: { isOpen: false },
+  expenseCategoryModal: { isOpen: false },
   storeSwitcherModal: false,
   sidebarOpen: true,
   notifications: [],
@@ -79,6 +87,12 @@ export const useUIStore = create<UIState>((set) => ({
   
   openStoreModal: (data) => set({ storeModal: { isOpen: true, data } }),
   closeStoreModal: () => set({ storeModal: { isOpen: false } }),
+  
+  openExpenseModal: (data) => set({ expenseModal: { isOpen: true, data } }),
+  closeExpenseModal: () => set({ expenseModal: { isOpen: false, data: null } }),
+  
+  openExpenseCategoryModal: (data) => set({ expenseCategoryModal: { isOpen: true, data } }),
+  closeExpenseCategoryModal: () => set({ expenseCategoryModal: { isOpen: false, data: null } }),
   
   openStoreSwitcher: () => set({ storeSwitcherModal: true }),
   closeStoreSwitcher: () => set({ storeSwitcherModal: false }),

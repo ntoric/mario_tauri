@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, Order, Bill, Store, BillQueueItem } from '../types';
+import type { Category, Item, Table, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
 
 interface DataState {
   // Data
@@ -14,6 +14,8 @@ interface DataState {
   bills: Bill[];
   billQueue: BillQueueItem[];
   users: any[];
+  expenseCategories: ExpenseCategory[];
+  expenses: Expense[];
   
   // Loading states
   isLoading: boolean;
@@ -73,6 +75,18 @@ interface DataState {
   deleteUser: (id: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   resetPassword: (userId: string, password: string) => Promise<void>;
+
+  // Expense Categories
+  fetchExpenseCategories: () => Promise<void>;
+  createExpenseCategory: (category: Omit<ExpenseCategory, 'id' | 'storeId' | 'isActive' | 'createdAt'>) => Promise<void>;
+  updateExpenseCategory: (id: string, category: Partial<ExpenseCategory>) => Promise<void>;
+  deleteExpenseCategory: (id: string) => Promise<void>;
+
+  // Expenses
+  fetchExpenses: (startDate?: string, endDate?: string) => Promise<void>;
+  createExpense: (expense: Omit<Expense, 'id' | 'storeId' | 'isActive' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<void>;
+  updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
@@ -84,6 +98,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   bills: [],
   billQueue: [],
   users: [],
+  expenseCategories: [],
+  expenses: [],
   isLoading: false,
   isInitialized: false,
 
@@ -561,5 +577,72 @@ export const useDataStore = create<DataState>((set, get) => ({
 
   resetPassword: async (userId, password) => {
     await api.resetPassword(userId, password);
+  },
+
+  // Expense Categories
+  fetchExpenseCategories: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const expenseCategories = await api.getExpenseCategories(currentStoreId);
+      set({ expenseCategories });
+    } catch (error) {
+      console.error('Failed to fetch expense categories:', error);
+    }
+  },
+
+  createExpenseCategory: async (category) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.createExpenseCategory({ ...category, storeId: currentStoreId });
+    await get().fetchExpenseCategories();
+  },
+
+  updateExpenseCategory: async (id, category) => {
+    await api.updateExpenseCategory(id, category);
+    await get().fetchExpenseCategories();
+  },
+
+  deleteExpenseCategory: async (id) => {
+    await api.deleteExpenseCategory(id);
+    await get().fetchExpenseCategories();
+  },
+
+  // Expenses
+  fetchExpenses: async (startDate, endDate) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const expenses = await api.getExpenses(currentStoreId, startDate, endDate);
+      set({ expenses });
+    } catch (error) {
+      console.error('Failed to fetch expenses:', error);
+    }
+  },
+
+  createExpense: async (expense) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.createExpense({
+      ...expense,
+      storeId: currentStoreId,
+      createdBy: currentUser.id,
+    });
+    await get().fetchExpenses();
+  },
+
+  updateExpense: async (id, expense) => {
+    await api.updateExpense(id, expense);
+    await get().fetchExpenses();
+  },
+
+  deleteExpense: async (id) => {
+    await api.deleteExpense(id);
+    await get().fetchExpenses();
   },
 }));

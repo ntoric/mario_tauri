@@ -123,3 +123,67 @@ export interface BillQueueItem {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ExpenseCategory {
+  id: string;
+  storeId: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface Expense {
+  id: string;
+  storeId: string;
+  categoryId: string;
+  categoryName?: string;
+  title: string;
+  description?: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod?: string;
+  receiptNumber?: string;
+  vendor?: string;
+  attachments?: string[];
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
+export interface ExpenseReport {
+  categoryId: string;
+  categoryName: string;
+  totalAmount: number;
+  expenseCount: number;
+}
+
+export interface ExpenseSummary {
+  date: string;
+  totalAmount: number;
+  expenseCount: number;
+}
+
+export interface RevenueReport {
+  periodStart: string;
+  periodEnd: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  totalOrders: number;
+  totalBills: number;
+  totalExpenseCount: number;
+  averageOrderValue: number;
+  dailyBreakdown?: DailyRevenueBreakdown[];
+}
+
+export interface DailyRevenueBreakdown {
+  date: string;
+  revenue: number;
+  expenses: number;
+  netProfit: number;
+  orderCount: number;
+  billCount: number;
+  expenseCount: number;
+}

@@ -277,3 +277,73 @@ type SupportConfigRequest struct {
 	Phone        string `json:"phone"`
 	WhatsAppLink string `json:"whatsappLink"`
 }
+
+// ExpenseCategory represents expense category table schema and json dto
+type ExpenseCategory struct {
+	ID          string    `json:"id"`
+	StoreID     string    `json:"storeId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+}
+
+// Expense represents expense table schema and json dto
+type Expense struct {
+	ID               string          `json:"id"`
+	StoreID          string          `json:"storeId"`
+	CategoryID       string          `json:"categoryId"`
+	CategoryName     string          `json:"categoryName,omitempty"`
+	Title            string          `json:"title"`
+	Description      string          `json:"description"`
+	Amount           float64         `json:"amount"`
+	ExpenseDate      time.Time       `json:"expenseDate"`
+	PaymentMethod    string          `json:"paymentMethod"`
+	ReceiptNumber    string          `json:"receiptNumber"`
+	Vendor           string          `json:"vendor"`
+	Attachments      []string        `json:"attachments,omitempty"`
+	IsActive         bool            `json:"isActive"`
+	CreatedAt        time.Time       `json:"createdAt,omitempty"`
+	UpdatedAt        time.Time       `json:"updatedAt,omitempty"`
+	CreatedBy        string          `json:"createdBy"`
+}
+
+// ExpenseReport represents aggregated expense data for reports
+type ExpenseReport struct {
+	CategoryID       string  `json:"categoryId"`
+	CategoryName     string  `json:"categoryName"`
+	TotalAmount      float64 `json:"totalAmount"`
+	ExpenseCount     int     `json:"expenseCount"`
+}
+
+// ExpenseSummary represents daily/monthly expense summary
+type ExpenseSummary struct {
+	Date             string  `json:"date"`
+	TotalAmount      float64 `json:"totalAmount"`
+	ExpenseCount     int     `json:"expenseCount"`
+}
+
+// RevenueReport represents combined revenue, sales, and expense data
+type RevenueReport struct {
+	PeriodStart      string  `json:"periodStart"`
+	PeriodEnd        string  `json:"periodEnd"`
+	TotalRevenue     float64 `json:"totalRevenue"`
+	TotalExpenses    float64 `json:"totalExpenses"`
+	NetProfit        float64 `json:"netProfit"`
+	TotalOrders      int     `json:"totalOrders"`
+	TotalBills       int     `json:"totalBills"`
+	TotalExpenseCount int    `json:"totalExpenseCount"`
+	AverageOrderValue float64 `json:"averageOrderValue"`
+	DailyBreakdown   []DailyRevenueBreakdown `json:"dailyBreakdown,omitempty"`
+}
+
+// DailyRevenueBreakdown represents daily breakdown of revenue and expenses
+type DailyRevenueBreakdown struct {
+	Date         string  `json:"date"`
+	Revenue      float64 `json:"revenue"`
+	Expenses     float64 `json:"expenses"`
+	NetProfit    float64 `json:"netProfit"`
+	OrderCount   int     `json:"orderCount"`
+	BillCount    int     `json:"billCount"`
+	ExpenseCount int     `json:"expenseCount"`
+}

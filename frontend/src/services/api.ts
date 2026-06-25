@@ -413,6 +413,87 @@ class ApiService {
     });
   }
 
+  // Expense Categories
+  async getExpenseCategories(storeId: string) {
+    return this.fetch(`/expense-categories?storeId=${storeId}`);
+  }
+
+  async createExpenseCategory(category: any) {
+    return this.fetch('/expense-categories', {
+      method: 'POST',
+      body: JSON.stringify(category),
+    });
+  }
+
+  async updateExpenseCategory(id: string, category: any) {
+    return this.fetch(`/expense-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(category),
+    });
+  }
+
+  async deleteExpenseCategory(id: string) {
+    return this.fetch(`/expense-categories/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Expenses
+  async getExpenses(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getExpense(id: string) {
+    return this.fetch(`/expenses/${id}`);
+  }
+
+  async createExpense(expense: any) {
+    return this.fetch('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async updateExpense(id: string, expense: any) {
+    return this.fetch(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async deleteExpense(id: string) {
+    return this.fetch(`/expenses/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Expense Reports
+  async getExpenseReportByCategory(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses/report/by-category?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getExpenseSummaryByDate(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses/report/by-date?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  // Revenue Report
+  async getRevenueReport(storeId: string, startDate?: string, endDate?: string, includeDaily?: boolean) {
+    let url = `/reports/revenue?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    if (includeDaily) url += `&includeDaily=true`;
+    return this.fetch(url);
+  }
+
 }
 
 export const api = new ApiService();

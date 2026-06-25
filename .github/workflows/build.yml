@@ -94,7 +94,9 @@ jobs:
 
       - name: Build app
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
-
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -117,15 +119,66 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
+      - name: Generate latest.json manifest
+        shell: bash
+        run: |
+          # Extract version from git tag (e.g. v1.2.1 -> 1.2.1)
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Release version: $VERSION"
+
+          # Find the Windows setup exe and its signature
+          WIN_EXE=$(find mario-juicy-windows -name '*-setup.exe' | head -1)
+          WIN_SIG=$(find mario-juicy-windows -name '*-setup.exe.sig' | head -1)
+
+          if [ -z "$WIN_EXE" ]; then
+            echo "No Windows setup exe found!"
+            exit 1
+          fi
+
+          # Extract just the filename for the URL
+          WIN_EXE_NAME=$(basename "$WIN_EXE")
+          WIN_SIG_CONTENT=""
+          if [ -f "$WIN_SIG" ]; then
+            WIN_SIG_CONTENT=$(cat "$WIN_SIG")
+          fi
+
+          # Build the download URL from the GitHub release
+          REPO="ntoric/mario_tauri"
+          WIN_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/${WIN_EXE_NAME}"
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "Release ${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${WIN_SIG_CONTENT}",
+                "url": "${WIN_URL}"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat latest.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             mario-juicy-mac-arm64/**/*.dmg
+            mario-juicy-mac-arm64/**/*.app.tar.gz
+            mario-juicy-mac-arm64/**/*.app.tar.gz.sig
             mario-juicy-mac-amd64/**/*.dmg
+            mario-juicy-mac-amd64/**/*.app.tar.gz
+            mario-juicy-mac-amd64/**/*.app.tar.gz.sig
             mario-juicy-windows/**/*.exe
+            mario-juicy-windows/**/*.exe.sig
             mario-juicy-linux/**/*.AppImage
+            mario-juicy-linux/**/*.AppImage.sig
             mario-juicy-linux/**/*.deb
+            latest.json
           draft: false
           prerelease: false
           generate_release_notes: true
