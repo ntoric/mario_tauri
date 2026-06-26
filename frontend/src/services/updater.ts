@@ -67,21 +67,37 @@ class UpdaterService {
       throw new Error('Update is already downloading.');
     }
 
+    let total = 0;
+    let downloaded = 0;
+
     try {
       this.isDownloading = true;
       
-      await this.update.downloadAndInstall((event) => {
-        if (event.event === 'Progress') {
-          const chunkLength = event.data.chunkLength;
-          // For progress tracking, we'll use the chunk length as a proxy
-          // The actual total/loaded may not be available in the callback
-          if (onProgress) {
-            onProgress({
-              total: 100, // Normalized percentage
-              downloaded: chunkLength,
-              percentage: Math.min(100, chunkLength),
-            });
-          }
+      await this.update.download((event) => {
+        switch (event.event) {
+          case 'Started':
+            total = event.data.contentLength ?? 0;
+            break;
+          case 'Progress':
+            downloaded += event.data.chunkLength ?? 0;
+            if (onProgress) {
+              const percentage = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
+              onProgress({
+                total,
+                downloaded,
+                percentage,
+              });
+            }
+            break;
+          case 'Finished':
+            if (onProgress) {
+              onProgress({
+                total,
+                downloaded: total,
+                percentage: 100,
+              });
+            }
+            break;
         }
       });
 
@@ -108,10 +124,9 @@ class UpdaterService {
     try {
       this.isInstalling = true;
       
-      // downloadAndInstall already installs, just need to relaunch
+      await this.update.install();
       await relaunch();
       
-      // This line won't be reached if relaunch is successful
       this.isInstalling = false;
     } catch (error) {
       this.isInstalling = false;

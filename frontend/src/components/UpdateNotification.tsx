@@ -77,8 +77,12 @@ const UpdateNotification: React.FC = () => {
           <button
             style={styles.btnPrimary}
             onClick={async () => {
-              await downloadUpdate();
-              await installAndRelaunch();
+              try {
+                await downloadUpdate();
+                await installAndRelaunch();
+              } catch {
+                // Error is already set in the hook state
+              }
             }}
             disabled={isChecking}
           >

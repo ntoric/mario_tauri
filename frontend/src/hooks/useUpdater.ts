@@ -47,8 +47,10 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
         setDownloadProgress(progress);
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download update');
+      const msg = err instanceof Error ? err.message : 'Failed to download update';
+      setError(msg);
       console.error('Update download failed:', err);
+      throw err;
     } finally {
       setIsDownloading(false);
     }
