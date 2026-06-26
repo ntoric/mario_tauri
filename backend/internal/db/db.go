@@ -246,6 +246,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS kot_print_enabled BOOLEAN DEFAULT true`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS remote_billing_enabled BOOLEAN DEFAULT false`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,

@@ -28,6 +28,7 @@ export interface Store {
   kotPrintEnabled?: boolean;
   remoteBillingEnabled?: boolean;
   logoUrl?: string;
+  themeColor?: string;
   isActive: boolean;
   createdAt?: string;
 }
