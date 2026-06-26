@@ -463,7 +463,7 @@ const SystemReset: React.FC = () => {
                 value={appUpdates[activePlatform]?.version || ''}
                 onChange={(e) => updateAppUpdateField('version', e.target.value)}
                 className="form-control"
-                placeholder="1.2.1"
+                placeholder="1.2.2"
               />
             </div>
 
