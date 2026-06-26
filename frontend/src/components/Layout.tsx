@@ -99,10 +99,6 @@ const LayoutContent: React.FC = () => {
 
           <div className="nav-section">
             {sidebarExpanded && <div className="nav-section-title">Settings</div>}
-            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
-              <span className="nav-icon"><Settings size={18} /></span>
-              {sidebarExpanded && <span>Business Settings</span>}
-            </NavLink>
             <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
               <span className="nav-icon"><Users size={18} /></span>
               {sidebarExpanded && <span>Users</span>}
@@ -110,6 +106,10 @@ const LayoutContent: React.FC = () => {
             <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
               <span className="nav-icon"><BarChart2 size={18} /></span>
               {sidebarExpanded && <span>Reports</span>}
+            </NavLink>
+            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
+              <span className="nav-icon"><Settings size={18} /></span>
+              {sidebarExpanded && <span>Business Settings</span>}
             </NavLink>
           </div>
 
