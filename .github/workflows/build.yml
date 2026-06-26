@@ -137,14 +137,19 @@ jobs:
 
           # Extract just the filename for the URL
           WIN_EXE_NAME=$(basename "$WIN_EXE")
-          WIN_SIG_CONTENT=""
-          if [ -f "$WIN_SIG" ]; then
-            WIN_SIG_CONTENT=$(cat "$WIN_SIG")
+          # GitHub replaces spaces with dots in release asset names
+          WIN_URL_NAME="${WIN_EXE_NAME// /.}"
+
+          if [ -z "$WIN_SIG" ] || [ ! -f "$WIN_SIG" ]; then
+            echo "ERROR: No .sig file found! The signing key secret may be missing or invalid."
+            echo "Ensure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets are set."
+            exit 1
           fi
+          WIN_SIG_CONTENT=$(cat "$WIN_SIG")
 
           # Build the download URL from the GitHub release
           REPO="ntoric/mario_tauri"
-          WIN_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/${WIN_EXE_NAME}"
+          WIN_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/${WIN_URL_NAME}"
 
           cat > latest.json << EOF
           {
