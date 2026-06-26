@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen } from 'lucide-react';
 import { useDataStore, useUIStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -183,13 +183,17 @@ const Items: React.FC = () => {
           className={`tab ${activeTab === 'items' ? 'active' : ''}`}
           onClick={() => setActiveTab('items')}
         >
+          <Coffee size={16} />
           Items
+          <span className="tab-badge">{items.length}</span>
         </button>
         <button
           className={`tab ${activeTab === 'categories' ? 'active' : ''}`}
           onClick={() => setActiveTab('categories')}
         >
+          <FolderOpen size={16} />
           Categories
+          <span className="tab-badge">{categories.length}</span>
         </button>
       </div>
 

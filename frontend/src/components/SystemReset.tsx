@@ -356,7 +356,14 @@ const SystemReset: React.FC = () => {
               Last Cleanup Run:{' '}
               <strong>
                 {cleanupLastRun
-                  ? new Date(cleanupLastRun).toLocaleString()
+                  ? new Date(cleanupLastRun).toLocaleString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })
                   : 'Never'}
               </strong>
             </span>

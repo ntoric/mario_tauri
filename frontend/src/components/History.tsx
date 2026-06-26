@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer } from 'lucide-react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
@@ -17,6 +17,10 @@ const History: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isPrinting, setIsPrinting] = useState<string | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
 
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
@@ -113,6 +117,44 @@ const History: React.FC = () => {
 
   const isParcel = (order: Order) => order.orderType === 'parcel' || order.tableNumber === 0;
 
+  const getDateRange = (period: string): { from: Date | null; to: Date | null } => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    switch (period) {
+      case 'today': {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return { from: today, to: tomorrow };
+      }
+      case 'yesterday': {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const todayEnd = new Date(today);
+        return { from: yesterday, to: todayEnd };
+      }
+      case 'week': {
+        const weekStart = new Date(today);
+        const day = weekStart.getDay();
+        weekStart.setDate(weekStart.getDate() - day);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 7);
+        return { from: weekStart, to: weekEnd };
+      }
+      case 'month': {
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        return { from: monthStart, to: monthEnd };
+      }
+      case 'custom': {
+        const from = customDateFrom ? new Date(customDateFrom + 'T00:00:00') : null;
+        const to = customDateTo ? new Date(customDateTo + 'T23:59:59') : null;
+        return { from, to };
+      }
+      default:
+        return { from: null, to: null };
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -123,7 +165,11 @@ const History: React.FC = () => {
 
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    const { from, to } = getDateRange(periodFilter);
+    const orderDate = new Date(order.createdAt);
+    const matchesDate = (!from || orderDate >= from) && (!to || orderDate <= to);
+
+    return matchesSearch && matchesStatus && matchesDate;
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Set page header
@@ -135,12 +181,20 @@ const History: React.FC = () => {
     });
   }, [setHeaderContent]);
 
-  const completedCount = orders.filter(o => o.status === 'completed').length;
-  const activeCount = orders.filter(o => o.status === 'active').length;
-  const totalRevenue = bills.reduce((sum, b) => sum + b.total, 0);
+  const completedCount = filteredOrders.filter(o => o.status === 'completed').length;
+  const activeCount = filteredOrders.filter(o => o.status === 'active').length;
+  const filteredBillIds = new Set(filteredOrders.map(o => o.id));
+  const totalRevenue = bills.filter(b => filteredBillIds.has(b.orderId)).reduce((sum, b) => sum + b.total, 0);
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return new Date(dateString).toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -153,7 +207,7 @@ const History: React.FC = () => {
   };
 
   return (
-    <div>
+    <div className="history-page">
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon success">
@@ -184,105 +238,148 @@ const History: React.FC = () => {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div className="history-filters" style={{ margin: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, maxWidth: '400px' }}>
-              <Search size={18} color="var(--gray-500)" />
-              <input
-                type="text"
-                placeholder="Search by table or item..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                style={{ flex: 1 }}
-              />
-            </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="all">All Status</option>
-              <option value="completed">Completed</option>
-              <option value="active">Active</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+      <div className="history-toolbar">
+        <div className="history-search">
+          <Search size={18} color="var(--gray-500)" />
+          <input
+            type="text"
+            placeholder="Search by table or item..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
         </div>
-        <div className="card-body">
-          {filteredOrders.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
-              <Calendar size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
-              <p style={{ fontSize: '1.125rem' }}>No orders found</p>
-              <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Try adjusting your search or filters</p>
-            </div>
-          ) : (
-            filteredOrders.map(order => (
-              <div key={order.id} className="order-card">
-                <div className="order-card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {isParcel(order) ? (
-                      <>
-                        <span className="order-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <Package size={16} />
-                          Parcel
+        <select className="history-filter-select" value={periodFilter} onChange={e => setPeriodFilter(e.target.value)}>
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {periodFilter === 'custom' && (
+          <div className="history-date-range">
+            <input
+              type="date"
+              className="history-date-input"
+              value={customDateFrom}
+              onChange={e => setCustomDateFrom(e.target.value)}
+              placeholder="From"
+            />
+            <span className="history-date-sep">to</span>
+            <input
+              type="date"
+              className="history-date-input"
+              value={customDateTo}
+              onChange={e => setCustomDateTo(e.target.value)}
+              placeholder="To"
+            />
+          </div>
+        )}
+        <select className="history-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="all">All Status</option>
+          <option value="completed">Completed</option>
+          <option value="active">Active</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+      {filteredOrders.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
+          <Calendar size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
+          <p style={{ fontSize: '1.125rem' }}>No orders found</p>
+          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Try adjusting your search or filters</p>
+        </div>
+      ) : (
+        <div className="order-list">
+          {filteredOrders.map(order => (
+            <div key={order.id} className={`order-panel ${order.status} ${expandedOrderId === order.id ? 'expanded' : ''}`}>
+              <div
+                className="order-panel-top"
+                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="order-panel-info">
+                  {isParcel(order) ? (
+                    <span className="order-panel-title">
+                      <Package size={16} />
+                      Parcel
+                      {order.customerName && (
+                        <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem', fontWeight: 400 }}>
+                          ({order.customerName})
                         </span>
-                        {order.customerName && (
-                          <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>
-                            ({order.customerName})
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="order-card-title">Table {order.tableNumber}</span>
-                    )}
-                    <span className={getStatusBadgeClass(order.status)} style={{ marginLeft: '0.5rem' }}>
-                      {order.status}
+                      )}
                     </span>
-                  </div>
-                  <div className="order-card-meta">
-                    <span>Order #{order.id.slice(-6).toUpperCase()}</span>
-                    <span>{formatDate(order.createdAt)}</span>
-                  </div>
+                  ) : (
+                    <span className="order-panel-title">Table {order.tableNumber}</span>
+                  )}
+                  <span className={getStatusBadgeClass(order.status)}>
+                    {order.status}
+                  </span>
+                  <span className="order-panel-item-count">
+                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
-
-                <div className="order-card-items">
-                  {order.items.map((oi, idx) => (
-                    <div key={idx} className="order-item-row">
-                      <span>{oi.quantity}x {oi.item.name}</span>
-                      <span style={{ fontWeight: 600 }}>{formatCurrency(oi.quantity * oi.item.price)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="order-card-total">
-                  <span>Total</span>
-                  <span style={{ color: 'var(--primary)' }}>{formatCurrency(order.totalAmount)}</span>
-                </div>
-
-                <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
-                  <button className="btn btn-primary btn-sm" onClick={() => setViewingOrder(order)}>
-                    <Eye size={16} />
-                    View Details
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setViewingBill(order)}
-                  >
-                    <Receipt size={14} />
-                    View Bill
-                  </button>
-                  <button 
-                    className="btn btn-secondary btn-sm" 
-                    onClick={() => handlePrintBill(order)}
-                    disabled={isPrinting === order.id}
-                    title="Print Bill"
-                  >
-                    <Printer size={14} />
-                    {isPrinting === order.id ? 'Printing...' : 'Print Bill'}
-                  </button>
+                <div className="order-panel-meta">
+                  <span>#{order.id.slice(-6).toUpperCase()}</span>
+                  <span>{formatDate(order.createdAt)}</span>
+                  <span className="order-panel-total-inline">
+                    {formatCurrency(order.totalAmount)}
+                  </span>
+                  <ChevronDown
+                    size={18}
+                    className="order-panel-chevron"
+                  />
                 </div>
               </div>
-            ))
-          )}
+
+              {expandedOrderId === order.id && (
+                <>
+                  <div className="order-panel-body">
+                    {order.items.map((oi, idx) => (
+                      <div key={idx} className="order-panel-item">
+                        <span>
+                          <span className="order-panel-item-qty">{oi.quantity}x</span>
+                          {oi.item.name}
+                        </span>
+                        <span className="order-panel-item-price">{formatCurrency(oi.quantity * oi.item.price)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="order-panel-footer">
+                    <div className="order-panel-total">
+                      <span className="order-panel-total-label">Total</span>
+                      <span className="order-panel-total-value">{formatCurrency(order.totalAmount)}</span>
+                    </div>
+                    <div className="order-panel-actions">
+                      <button className="btn btn-primary btn-sm" onClick={() => setViewingOrder(order)}>
+                        <Eye size={16} />
+                        View Details
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setViewingBill(order)}
+                      >
+                        <Receipt size={14} />
+                        View Bill
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handlePrintBill(order)}
+                        disabled={isPrinting === order.id}
+                        title="Print Bill"
+                      >
+                        <Printer size={14} />
+                        {isPrinting === order.id ? 'Printing...' : 'Print Bill'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       {/* View Order Modal */}
       {viewingOrder && (
