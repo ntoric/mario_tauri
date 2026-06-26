@@ -52,7 +52,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFDOERDOEJGMzQzNzFBNEQKUldSTkdqYzB2OGlOSEhKTjBpak4vWlBUMDk1Wk1MR1kyejkxeU1wOU1MaGRGSkl2ZmdpV2M0WXIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyNkFCOUUxRkREQ0VGRkUKUldUKzc5ejk0YmxxZ2cwcjZzRExrSU5xMm13WnJ6Ymx1Mnk0RGxTb2NFQk1xaEpkREtHMllxZXoK",
       "endpoints": [
         "https://github.com/ntoric/mario_tauri/releases/latest/download/latest.json"
       ],
