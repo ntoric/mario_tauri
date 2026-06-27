@@ -244,10 +244,11 @@ class ApiService {
     );
   }
 
-  Future<void> cancelOrder(String orderId) async {
+  Future<void> cancelOrder(String orderId, {String? reason}) async {
     await http.patch(
       Uri.parse('$_baseUrl/orders/$orderId/cancel'),
       headers: _headers,
+      body: jsonEncode({'reason': reason}),
     );
   }
 

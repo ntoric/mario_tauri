@@ -120,6 +120,7 @@ type Order struct {
 	CreatedBy      string      `json:"createdBy"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
+	CancelledAt    *time.Time  `json:"cancelledAt,omitempty"`
 	Items          []OrderItem `json:"items"`
 }
 
@@ -138,6 +139,7 @@ type Bill struct {
 	CustomerName   string      `json:"customerName"`
 	CustomerMobile string      `json:"customerMobile"`
 	IsPrinted      bool        `json:"isPrinted"`
+	Status         string      `json:"status"`
 	GeneratedAt    time.Time   `json:"generatedAt"`
 	GeneratedBy    string      `json:"generatedBy"`
 	Items          []OrderItem `json:"items"`

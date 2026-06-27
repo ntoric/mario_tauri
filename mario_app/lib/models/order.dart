@@ -15,6 +15,7 @@ class Order {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String createdBy;
+  final DateTime? cancelledAt;
 
   Order({
     required this.id,
@@ -31,6 +32,7 @@ class Order {
     required this.createdAt,
     required this.updatedAt,
     required this.createdBy,
+    this.cancelledAt,
   });
 
   static DateTime _parseDateTime(dynamic jsonVal) {
@@ -105,6 +107,9 @@ class Order {
         createdBy: json['createdBy']?.toString() ??
             json['created_by']?.toString() ??
             '',
+        cancelledAt: json['cancelledAt'] != null
+            ? _parseDateTime(json['cancelledAt'])
+            : null,
       );
     }
 
@@ -124,6 +129,7 @@ class Order {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'createdBy': createdBy,
+      if (cancelledAt != null) 'cancelledAt': cancelledAt!.toIso8601String(),
     };
   }
 

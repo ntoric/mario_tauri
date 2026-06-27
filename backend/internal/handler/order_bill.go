@@ -221,10 +221,28 @@ func (h *Handler) CompleteOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // CancelOrder handles PATCH /api/orders/:id/cancel
+// Supports cancelling both active and completed (bill printed) orders.
 func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	err := h.Repo.Order.Cancel(r.Context(), id)
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = h.readJSON(r, &req)
+
+	// Fetch order to check current status
+	order, err := h.Repo.Order.GetByID(r.Context(), id)
+	if err != nil || order == nil {
+		h.writeError(w, http.StatusNotFound, "Order not found")
+		return
+	}
+
+	if order.Status == "cancelled" {
+		h.writeError(w, http.StatusBadRequest, "Order is already cancelled")
+		return
+	}
+
+	err = h.Repo.Order.Cancel(r.Context(), id)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -716,10 +716,10 @@ type OrderRepository struct {
 }
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
-	sqlStr := `
+		sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -768,11 +768,12 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 	for rows.Next() {
 		var o models.Order
 		var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+		var cancelledAt sql.NullTime
 		var itemsBytes []byte
 		err := rows.Scan(
 			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
 			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt,
+			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 			&itemsBytes,
 		)
 		if err != nil {
@@ -785,6 +786,9 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 		o.OrderType = orderType.String
 		o.CustomerName = customerName.String
 		o.CustomerMobile = customerMobile.String
+		if cancelledAt.Valid {
+			o.CancelledAt = &cancelledAt.Time
+		}
 
 		if len(itemsBytes) > 0 {
 			var items []models.OrderItem
@@ -805,7 +809,7 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -834,11 +838,12 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 
 	var o models.Order
 	var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+	var cancelledAt sql.NullTime
 	var itemsBytes []byte
 	err := row.Scan(
 		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
 		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt,
+		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 		&itemsBytes,
 	)
 	if err != nil {
@@ -854,6 +859,9 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	o.OrderType = orderType.String
 	o.CustomerName = customerName.String
 	o.CustomerMobile = customerMobile.String
+	if cancelledAt.Valid {
+		o.CancelledAt = &cancelledAt.Time
+	}
 
 	if len(itemsBytes) > 0 {
 		var items []models.OrderItem
@@ -991,10 +999,27 @@ func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod string
 }
 
 func (r *OrderRepository) Cancel(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1
 	`, id)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE bills SET status = 'cancelled' WHERE order_id = $1 AND (status IS NULL OR status = 'active')
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // ==========================================
@@ -1009,7 +1034,7 @@ type BillRepository struct {
 func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.Bill, error) {
 	sqlStr := `
 		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
-		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
+		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.status, b.generated_at, b.generated_by,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -1044,11 +1069,11 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 	var bills []models.Bill
 	for rows.Next() {
 		var b models.Bill
-		var method, customer, customerMobile, generatedBy sql.NullString
+		var method, customer, customerMobile, generatedBy, billStatus sql.NullString
 		var itemsBytes []byte
 		err := rows.Scan(
 			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
-			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
+			&method, &customer, &customerMobile, &b.IsPrinted, &billStatus, &b.GeneratedAt, &generatedBy,
 			&itemsBytes,
 		)
 		if err != nil {
@@ -1058,6 +1083,10 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 		b.CustomerName = customer.String
 		b.CustomerMobile = customerMobile.String
 		b.GeneratedBy = generatedBy.String
+		b.Status = billStatus.String
+		if b.Status == "" {
+			b.Status = "active"
+		}
 
 		if len(itemsBytes) > 0 {
 			var items []models.OrderItem
@@ -1932,11 +1961,11 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 		idx++
 	}
 
-	// Get total revenue from bills
+	// Get total revenue from bills (exclude cancelled bills)
 	revenueSQL := `
 		SELECT COALESCE(SUM(b.total), 0), COUNT(b.id)
 		FROM bills b
-		WHERE b.store_id = $1
+		WHERE b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')
 	` + dateFilter
 
 	var totalRevenue float64
@@ -2035,7 +2064,7 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 		LEFT JOIN order_items oi ON b.order_id = oi.order_id
 		LEFT JOIN items i ON oi.item_id = i.id
 		LEFT JOIN categories c ON i.category_id = c.id
-		WHERE b.store_id = $1
+		WHERE b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')
 	`
 	var billArgs []interface{}
 	billArgs = append(billArgs, storeID)

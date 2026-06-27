@@ -326,9 +326,10 @@ class ApiService {
     });
   }
 
-  async cancelOrder(id: string) {
+  async cancelOrder(id: string, reason?: string) {
     return this.fetch(`/orders/${id}/cancel`, {
       method: 'PATCH',
+      body: JSON.stringify({ reason }),
     });
   }
 

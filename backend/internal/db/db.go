@@ -250,7 +250,9 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
 	}
 

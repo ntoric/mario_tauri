@@ -58,7 +58,7 @@ interface DataState {
   savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
-  cancelOrder: (id: string) => Promise<void>;
+  cancelOrder: (id: string, reason?: string) => Promise<void>;
   getActiveOrderByTable: (tableId: string) => Order | undefined;
   
   // Bills
@@ -436,12 +436,12 @@ export const useDataStore = create<DataState>((set, get) => ({
     await get().fetchOrders();
   },
 
-  cancelOrder: async (id) => {
+  cancelOrder: async (id, reason) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.cancelOrder(id);
+    await api.cancelOrder(id, reason);
     await get().fetchOrders();
   },
 

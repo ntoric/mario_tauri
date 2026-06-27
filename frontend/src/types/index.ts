@@ -92,6 +92,7 @@ export interface Order {
   paymentStatus?: string;
   createdAt: string;
   updatedAt: string;
+  cancelledAt?: string;
   createdBy: string;
 }
 
@@ -110,6 +111,7 @@ export interface Bill {
   customerName?: string;
   customerMobile?: string;
   isPrinted: boolean;
+  status?: string;
   generatedAt: string;
   generatedBy: string;
 }

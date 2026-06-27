@@ -5,6 +5,7 @@ import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
 import { ConfirmDialog } from './ConfirmDialog';
+import OrderTimer from './OrderTimer';
 import { printerService } from '../services/printer';
 import type { OrderItem, Item } from '../types';
 
@@ -595,7 +596,12 @@ const OrderPage: React.FC = () => {
       <div className="order-page-layout">
         {/* Left Sidebar - Order Items */}
         <div className="order-page-left">
-          <h3>Order Items ({orderItems.length})</h3>
+          <div className="order-page-left-header">
+            <h3>Order Items ({orderItems.length})</h3>
+            {existingOrder && (
+              <OrderTimer createdAt={existingOrder.createdAt} className="detail-timer" />
+            )}
+          </div>
 
           {orderItems.length === 0 ? (
             <div className="empty-order">

@@ -10,6 +10,7 @@ import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
+import OrderTimer from './OrderTimer';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
@@ -594,6 +595,9 @@ const Tables: React.FC = () => {
                       <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
                         {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
                       </div>
+                      {activeOrder && (
+                        <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
+                      )}
                     </div>
                   );
                 })}
@@ -639,9 +643,14 @@ const Tables: React.FC = () => {
                         </td>
                         <td>
                           {activeOrder ? (
-                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                              {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
-                            </span>
+                            <div>
+                              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
+                              </span>
+                              <div style={{ marginTop: '0.25rem' }}>
+                                <OrderTimer createdAt={activeOrder.createdAt} className="list-timer" />
+                              </div>
+                            </div>
                           ) : (
                             <span style={{ color: 'var(--gray-500)' }}>-</span>
                           )}

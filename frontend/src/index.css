@@ -958,6 +958,45 @@ body {
   color: var(--primary);
 }
 
+/* Order Timer - shows elapsed time since order was created */
+.order-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-timer-icon {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.order-timer-text {
+  letter-spacing: 0.02em;
+}
+
+.order-timer.table-card-timer {
+  margin-top: 0.2rem;
+  font-size: 0.65rem;
+  color: var(--gray-500);
+}
+
+.order-timer.list-timer {
+  font-size: 0.75rem;
+  color: var(--gray-600);
+}
+
+.order-timer.detail-timer {
+  font-size: 0.8rem;
+  color: var(--gray-600);
+  background: var(--gray-100);
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
+}
+
 /* Table Action Buttons - Stacked vertically on the right */
 .table-bill-btn.new-design {
   position: absolute;

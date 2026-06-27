@@ -245,11 +245,11 @@ class DataProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cancelOrder(String orderId) async {
+  Future<bool> cancelOrder(String orderId, {String? reason}) async {
     try {
       final order = _orders.firstWhere((o) => o.id == orderId);
 
-      await _backend.api.cancelOrder(orderId);
+      await _backend.api.cancelOrder(orderId, reason: reason);
 
       // Reload orders from backend to ensure perfect sync
       await loadOrders(order.storeId);

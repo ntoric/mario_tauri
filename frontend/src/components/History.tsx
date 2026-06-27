@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays } from 'lucide-react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays, Ban } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Order } from '../types';
 
 const History: React.FC = () => {
-  const { orders, bills, stores, fetchOrders, fetchBills } = useDataStore();
+  const { orders, bills, stores, fetchOrders, fetchBills, cancelOrder } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId) || stores[0];
   const { setHeaderContent } = usePageHeader();
@@ -21,6 +22,8 @@ const History: React.FC = () => {
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
+  const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
@@ -183,7 +186,22 @@ const History: React.FC = () => {
   const completedCount = filteredOrders.filter(o => o.status === 'completed').length;
   const activeCount = filteredOrders.filter(o => o.status === 'active').length;
   const filteredBillIds = new Set(filteredOrders.map(o => o.id));
-  const totalRevenue = bills.filter(b => filteredBillIds.has(b.orderId)).reduce((sum, b) => sum + b.total, 0);
+  const totalRevenue = bills.filter(b => filteredBillIds.has(b.orderId) && b.status !== 'cancelled').reduce((sum, b) => sum + b.total, 0);
+
+  const handleCancelOrder = async () => {
+    if (!cancelTarget) return;
+    setIsCancelling(true);
+    try {
+      await cancelOrder(cancelTarget.id);
+      await fetchBills();
+      setCancelTarget(null);
+    } catch (error) {
+      console.error('Failed to cancel order:', error);
+      alert('Failed to cancel order. Please try again.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
@@ -371,6 +389,16 @@ const History: React.FC = () => {
                         <Printer size={14} />
                         {isPrinting === order.id ? 'Printing...' : 'Print Bill'}
                       </button>
+                      {order.status === 'completed' && (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => setCancelTarget(order)}
+                          title="Cancel Order"
+                        >
+                          <Ban size={14} />
+                          Cancel Order
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>
@@ -546,6 +574,17 @@ const History: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!cancelTarget}
+        title="Cancel Completed Order"
+        message={`Are you sure you want to cancel this completed order${cancelTarget ? ` for Table ${cancelTarget.tableNumber}` : ''}? This will also void the associated bill.`}
+        confirmLabel={isCancelling ? 'Cancelling...' : 'Yes, Cancel Order'}
+        cancelLabel="No, Keep Order"
+        variant="danger"
+        onConfirm={handleCancelOrder}
+        onCancel={() => { if (!isCancelling) setCancelTarget(null); }}
+      />
     </div>
   );
 };
