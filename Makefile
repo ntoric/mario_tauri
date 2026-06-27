@@ -94,10 +94,14 @@ release: set-version
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=1.3.1"; exit 1; fi
 	@echo "Committing version bump ..."
 	@git add frontend/src-tauri/tauri.conf.json frontend/src-tauri/Cargo.toml frontend/package.json frontend/.env.development frontend/.env.example
-	@git commit -m "Bump version to $(VERSION)"
+	@if git diff --cached --quiet; then \
+		echo "No version changes to commit (already at $(VERSION))."; \
+	else \
+		git commit -m "Bump version to $(VERSION)"; \
+	fi
 	@echo "Pushing to main ..."
 	@git push origin main
 	@echo "Creating and pushing tag v$(VERSION) ..."
-	@git tag v$(VERSION)
-	@git push origin v$(VERSION)
+	@git tag -f v$(VERSION)
+	@git push origin v$(VERSION) -f
 	@echo "Release v$(VERSION) pushed. Monitor: https://github.com/ntoric/mario_tauri/actions"
