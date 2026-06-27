@@ -585,7 +585,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) return;
     try {
       const expenseCategories = await api.getExpenseCategories(currentStoreId);
-      set({ expenseCategories });
+      set({ expenseCategories: expenseCategories || [] });
     } catch (error) {
       console.error('Failed to fetch expense categories:', error);
     }
@@ -616,7 +616,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) return;
     try {
       const expenses = await api.getExpenses(currentStoreId, startDate, endDate);
-      set({ expenses });
+      set({ expenses: expenses || [] });
     } catch (error) {
       console.error('Failed to fetch expenses:', error);
     }

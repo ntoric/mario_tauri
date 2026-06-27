@@ -149,8 +149,8 @@ const Tables: React.FC = () => {
                   name: currentStore?.name || 'Cafe',
                   branch: currentStore?.branch || '',
                   location: currentStore?.location || '',
-                  gst_number: currentStore?.gstin || '',
-                  fssai_lic_no: currentStore?.fssaiNo || '',
+                  ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+                  ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
                   phone: currentStore?.phone || '',
                   address: currentStore?.location || '',
                 },
@@ -177,7 +177,6 @@ const Tables: React.FC = () => {
                   balance: 0,
                 },
                 payment_mode: billPayload.paymentMethod || 'cash',
-                dr_ref: '',
                 footer: ['Thank You Visit Again'],
               },
             });
@@ -291,9 +290,8 @@ const Tables: React.FC = () => {
     e.stopPropagation();
     const activeOrder = getActiveOrderByTable(table.id);
     if (activeOrder) {
-      setBillDialogTable(table);
       setPaymentMethod('upi');
-      setIsPrinting(false);
+      handlePrintAndComplete(table);
     }
   };
 
@@ -325,10 +323,11 @@ const Tables: React.FC = () => {
     }
   };
 
-  const handlePrintAndComplete = async () => {
-    if (!billDialogTable || isPrinting) return;
+  const handlePrintAndComplete = async (table?: Table) => {
+    const targetTable = table || billDialogTable;
+    if (!targetTable || isPrinting) return;
 
-    const activeOrder = getActiveOrderByTable(billDialogTable.id);
+    const activeOrder = getActiveOrderByTable(targetTable.id);
     if (!activeOrder) return;
 
     const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
@@ -344,30 +343,9 @@ const Tables: React.FC = () => {
       setPrinterConfirm({
         show: true,
         title: 'Printer Not Available',
-        message: 'No printer is configured in settings. Complete order without printing bill?',
-        onConfirm: async () => {
+        message: 'No printer is configured. Keep order on table?',
+        onConfirm: () => {
           setPrinterConfirm(p => ({ ...p, show: false }));
-          setIsPrinting(true);
-          try {
-            await createBill({
-              orderId: activeOrder.id,
-              tableNumber: billDialogTable.number,
-              invoiceNo,
-              subtotal,
-              taxTotal: tax,
-              discount: 0,
-              total,
-              paymentMethod,
-              customerName: 'Walk-in Customer',
-            });
-            await completeOrder(activeOrder.id, paymentMethod);
-            setBillDialogTable(null);
-          } catch (error) {
-            console.error('Failed to complete order:', error);
-            setErrorDialog({ show: true, message: (error as Error).message || 'Failed to complete order. Please try again.' });
-          } finally {
-            setIsPrinting(false);
-          }
         },
       });
       return;
@@ -376,19 +354,6 @@ const Tables: React.FC = () => {
     setIsPrinting(true);
 
     try {
-      // Create bill
-      await createBill({
-        orderId: activeOrder.id,
-        tableNumber: billDialogTable.number,
-        invoiceNo,
-        subtotal,
-        taxTotal: tax,
-        discount: 0,
-        total,
-        paymentMethod,
-        customerName: 'Walk-in Customer',
-      });
-
       // Print invoice via printer service
       const printItems = activeOrder.items.map((oi: any) => {
         const itemTotal = oi.item.price * oi.quantity;
@@ -423,8 +388,8 @@ const Tables: React.FC = () => {
               name: currentStore?.name || 'Cafe',
               branch: currentStore?.branch || '',
               location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
+              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
               phone: currentStore?.phone || '',
               address: currentStore?.location || '',
             },
@@ -451,7 +416,6 @@ const Tables: React.FC = () => {
               balance: 0,
             },
             payment_mode: paymentMethod,
-            dr_ref: '',
             footer: ['Thank You Visit Again'],
           },
         });
@@ -460,29 +424,30 @@ const Tables: React.FC = () => {
         setIsPrinting(false);
         setPrinterConfirm({
           show: true,
-          title: 'Print Failed',
-          message: 'Failed to print the bill. Complete order without printing?',
-          onConfirm: async () => {
+          title: 'Printer Not Working',
+          message: 'Failed to print the bill. Keep order on table?',
+          onConfirm: () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
-            setIsPrinting(true);
-            try {
-              await completeOrder(activeOrder.id, paymentMethod);
-              setBillDialogTable(null);
-            } catch (err) {
-              console.error('Failed to complete order:', err);
-              setErrorDialog({ show: true, message: (err as Error).message || 'Failed to complete order. Please try again.' });
-            } finally {
-              setIsPrinting(false);
-            }
           },
         });
         return;
       }
 
-      // Complete order
+      // Print succeeded - create bill and complete order
+      await createBill({
+        orderId: activeOrder.id,
+        tableNumber: targetTable.number,
+        invoiceNo,
+        subtotal,
+        taxTotal: tax,
+        discount: 0,
+        total,
+        paymentMethod,
+        customerName: 'Walk-in Customer',
+      });
+
       await completeOrder(activeOrder.id, paymentMethod);
 
-      // Close dialog
       setBillDialogTable(null);
     } catch (error) {
       console.error('Failed to print and complete:', error);
@@ -817,7 +782,7 @@ const Tables: React.FC = () => {
             <div className="modal-footer">
               <button
                 className="btn btn-primary btn-lg"
-                onClick={handlePrintAndComplete}
+                onClick={() => handlePrintAndComplete()}
               >
                 {isPrinting ? 'Completing...' : 'Complete Order'}
               </button>

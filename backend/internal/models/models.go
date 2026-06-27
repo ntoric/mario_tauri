@@ -326,25 +326,15 @@ type ExpenseSummary struct {
 
 // RevenueReport represents combined revenue, sales, and expense data
 type RevenueReport struct {
-	PeriodStart      string  `json:"periodStart"`
-	PeriodEnd        string  `json:"periodEnd"`
-	TotalRevenue     float64 `json:"totalRevenue"`
-	TotalExpenses    float64 `json:"totalExpenses"`
-	NetProfit        float64 `json:"netProfit"`
-	TotalOrders      int     `json:"totalOrders"`
-	TotalBills       int     `json:"totalBills"`
-	TotalExpenseCount int    `json:"totalExpenseCount"`
-	AverageOrderValue float64 `json:"averageOrderValue"`
-	DailyBreakdown   []DailyRevenueBreakdown `json:"dailyBreakdown,omitempty"`
-}
-
-// DailyRevenueBreakdown represents daily breakdown of revenue and expenses
-type DailyRevenueBreakdown struct {
-	Date         string  `json:"date"`
-	Revenue      float64 `json:"revenue"`
-	Expenses     float64 `json:"expenses"`
-	NetProfit    float64 `json:"netProfit"`
-	OrderCount   int     `json:"orderCount"`
-	BillCount    int     `json:"billCount"`
-	ExpenseCount int     `json:"expenseCount"`
+	PeriodStart       string    `json:"periodStart"`
+	PeriodEnd         string    `json:"periodEnd"`
+	TotalRevenue      float64   `json:"totalRevenue"`
+	TotalExpenses     float64   `json:"totalExpenses"`
+	NetProfit         float64   `json:"netProfit"`
+	TotalOrders       int       `json:"totalOrders"`
+	TotalBills        int       `json:"totalBills"`
+	TotalExpenseCount int       `json:"totalExpenseCount"`
+	AverageOrderValue float64   `json:"averageOrderValue"`
+	Bills             []Bill    `json:"bills"`
+	Expenses          []Expense `json:"expenses"`
 }

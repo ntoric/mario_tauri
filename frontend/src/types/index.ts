@@ -176,15 +176,6 @@ export interface RevenueReport {
   totalBills: number;
   totalExpenseCount: number;
   averageOrderValue: number;
-  dailyBreakdown?: DailyRevenueBreakdown[];
-}
-
-export interface DailyRevenueBreakdown {
-  date: string;
-  revenue: number;
-  expenses: number;
-  netProfit: number;
-  orderCount: number;
-  billCount: number;
-  expenseCount: number;
+  bills: Bill[];
+  expenses: Expense[];
 }

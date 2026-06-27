@@ -253,8 +253,8 @@ const OrderPage: React.FC = () => {
           name: currentStore?.name || 'Cafe',
           branch: currentStore?.branch || '',
           location: currentStore?.location || '',
-          gst_number: currentStore?.gstin || '',
-          fssai_lic_no: currentStore?.fssaiNo || '',
+          ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+          ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
           phone: currentStore?.phone || '',
           address: currentStore?.location || '',
         },
@@ -281,10 +281,52 @@ const OrderPage: React.FC = () => {
           balance: 0,
         },
         payment_mode: paymentMethod,
-        dr_ref: '',
         footer: ['Thank You Visit Again'],
       },
     });
+  };
+
+  const handleSave = async () => {
+    if (orderItems.length === 0) return;
+
+    const totalAmount = calculateTotal();
+    const taxAmount = calculateTax();
+
+    setActionType('save');
+    setIsSubmitting(true);
+    try {
+      if (existingOrder) {
+        await updateOrder(existingOrder.id, {
+          items: orderItems,
+          totalAmount,
+          taxAmount,
+        });
+      } else {
+        await createOrder({
+          tableId: table.id,
+          tableNumber: table.number,
+          items: orderItems,
+          totalAmount,
+          taxAmount,
+          discountAmount: 0,
+          paymentMethod,
+        });
+      }
+
+      await fetchOrders();
+      navigate('/');
+      setOrderItems([]);
+    } catch (error: any) {
+      console.error('Failed to save order:', error);
+      if (error?.message === 'User or store not authenticated' || error?.message === 'Store not selected') {
+        setErrorDialog({ show: true, message: 'Session expired. Please log in again.' });
+      } else {
+        setErrorDialog({ show: true, message: (error as Error).message || 'Failed to save order. Please check your connection and try again.' });
+      }
+    } finally {
+      setIsSubmitting(false);
+      setActionType('');
+    }
   };
 
   const handleKOT = async (withPrint = false) => {
@@ -443,10 +485,10 @@ const OrderPage: React.FC = () => {
       setPrinterConfirm({
         show: true,
         title: 'Printer Not Available',
-        message: 'No printer is configured in settings. Save and complete order without printing bill?',
+        message: 'No printer is configured. Save order only?',
         onConfirm: async () => {
           setPrinterConfirm(p => ({ ...p, show: false }));
-          await handleSaveEBill();
+          await handleSave();
         },
       });
       return;
@@ -478,7 +520,27 @@ const OrderPage: React.FC = () => {
 
       if (!orderId) throw new Error('Failed to create or update order');
 
-      // Create bill and complete via backend
+      // Try to print invoice before completing the order
+      try {
+        await printInvoiceBill(invoiceNo, total);
+      } catch (printError) {
+        console.error('Failed to print invoice:', printError);
+        // Printer not working - ask to save order only (order stays on table, not completed)
+        setPrinterConfirm({
+          show: true,
+          title: 'Printer Not Working',
+          message: 'Failed to print the bill. Save order only?',
+          onConfirm: async () => {
+            setPrinterConfirm(p => ({ ...p, show: false }));
+            await fetchOrders();
+            navigate('/');
+            setOrderItems([]);
+          },
+        });
+        return;
+      }
+
+      // Print succeeded - create bill and complete via backend
       await savePrint(orderId, {
         orderId,
         tableNumber: table.number,
@@ -490,25 +552,6 @@ const OrderPage: React.FC = () => {
         paymentMethod,
         customerName: 'Walk-in Customer',
       });
-
-      // Print invoice
-      try {
-        await printInvoiceBill(invoiceNo, total);
-      } catch (printError) {
-        console.error('Failed to print invoice:', printError);
-        setIsPrinting(false);
-        setPrinterConfirm({
-          show: true,
-          title: 'Print Failed',
-          message: 'Failed to print the bill. Order has been saved and completed. Continue?',
-          onConfirm: () => {
-            setPrinterConfirm(p => ({ ...p, show: false }));
-            navigate('/');
-            setOrderItems([]);
-          },
-        });
-        return;
-      }
 
       navigate('/');
       setOrderItems([]);
@@ -717,6 +760,15 @@ const OrderPage: React.FC = () => {
         <div className="order-page-bottom-bar-actions">
           {!viewOnly && (
             <>
+              <button
+                className="btn btn-secondary"
+                onClick={handleSave}
+                disabled={orderItems.length === 0 || isSubmitting}
+                title="Save order to table and go back"
+              >
+                <Save size={14} />
+                {actionType === 'save' ? 'Saving...' : 'Save'}
+              </button>
               <button
                 className="btn btn-warning"
                 onClick={handleSaveEBill}

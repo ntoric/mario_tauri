@@ -486,11 +486,10 @@ class ApiService {
   }
 
   // Revenue Report
-  async getRevenueReport(storeId: string, startDate?: string, endDate?: string, includeDaily?: boolean) {
+  async getRevenueReport(storeId: string, startDate?: string, endDate?: string) {
     let url = `/reports/revenue?storeId=${storeId}`;
     if (startDate) url += `&startDate=${startDate}`;
     if (endDate) url += `&endDate=${endDate}`;
-    if (includeDaily) url += `&includeDaily=true`;
     return this.fetch(url);
   }
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -44,6 +45,7 @@ func (h *Handler) CreateExpenseCategory(w http.ResponseWriter, r *http.Request) 
 	req.CreatedAt = time.Now()
 
 	if err := h.Repo.ExpenseCategory.Create(r.Context(), req); err != nil {
+		log.Printf("[ExpenseCategory Create] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to create expense category")
 		return
 	}
@@ -66,6 +68,7 @@ func (h *Handler) UpdateExpenseCategory(w http.ResponseWriter, r *http.Request) 
 
 	req.ID = id
 	if err := h.Repo.ExpenseCategory.Update(r.Context(), req); err != nil {
+		log.Printf("[ExpenseCategory Update] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to update expense category")
 		return
 	}
@@ -81,6 +84,7 @@ func (h *Handler) DeleteExpenseCategory(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.Repo.ExpenseCategory.Delete(r.Context(), id); err != nil {
+		log.Printf("[ExpenseCategory Delete] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to delete expense category")
 		return
 	}
@@ -102,6 +106,7 @@ func (h *Handler) GetExpenses(w http.ResponseWriter, r *http.Request) {
 
 	expenses, err := h.Repo.Expense.GetAll(r.Context(), storeID, startDate, endDate)
 	if err != nil {
+		log.Printf("[Expense GetAll] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch expenses")
 		return
 	}
@@ -118,6 +123,7 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 
 	expense, err := h.Repo.Expense.GetByID(r.Context(), id)
 	if err != nil {
+		log.Printf("[Expense GetByID] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch expense")
 		return
 	}
@@ -152,6 +158,7 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 	req.UpdatedAt = time.Now()
 
 	if err := h.Repo.Expense.Create(r.Context(), req); err != nil {
+		log.Printf("[Expense Create] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to create expense")
 		return
 	}
@@ -176,6 +183,7 @@ func (h *Handler) UpdateExpense(w http.ResponseWriter, r *http.Request) {
 	req.UpdatedAt = time.Now()
 
 	if err := h.Repo.Expense.Update(r.Context(), req); err != nil {
+		log.Printf("[Expense Update] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to update expense")
 		return
 	}
@@ -191,6 +199,7 @@ func (h *Handler) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Repo.Expense.Delete(r.Context(), id); err != nil {
+		log.Printf("[Expense Delete] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to delete expense")
 		return
 	}
@@ -212,6 +221,7 @@ func (h *Handler) GetExpenseReportByCategory(w http.ResponseWriter, r *http.Requ
 
 	reports, err := h.Repo.Expense.GetReportByCategory(r.Context(), storeID, startDate, endDate)
 	if err != nil {
+		log.Printf("[Expense Report ByCategory] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch expense report")
 		return
 	}
@@ -231,6 +241,7 @@ func (h *Handler) GetExpenseSummaryByDate(w http.ResponseWriter, r *http.Request
 
 	summaries, err := h.Repo.Expense.GetSummaryByDate(r.Context(), storeID, startDate, endDate)
 	if err != nil {
+		log.Printf("[Expense Summary ByDate] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch expense summary")
 		return
 	}
@@ -249,10 +260,10 @@ func (h *Handler) GetRevenueReport(w http.ResponseWriter, r *http.Request) {
 
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
-	includeDaily := r.URL.Query().Get("includeDaily") == "true"
 
-	report, err := h.Repo.RevenueReport.GetRevenueReport(r.Context(), storeID, startDate, endDate, includeDaily)
+	report, err := h.Repo.RevenueReport.GetRevenueReport(r.Context(), storeID, startDate, endDate)
 	if err != nil {
+		log.Printf("[Revenue Report] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch revenue report")
 		return
 	}

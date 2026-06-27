@@ -1744,13 +1744,16 @@ func (r *ExpenseRepository) GetByID(ctx context.Context, id string) (*models.Exp
 }
 
 func (r *ExpenseRepository) Create(ctx context.Context, e models.Expense) error {
+	if e.Attachments == nil {
+		e.Attachments = []string{}
+	}
 	attachmentsJSON, err := json.Marshal(e.Attachments)
 	if err != nil {
 		return err
 	}
 
 	sqlStr := `INSERT INTO expenses (id, store_id, category_id, title, description, amount, expense_date, payment_method, receipt_number, vendor, attachments, created_by)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)`
 	
 	var categoryID, paymentMethod, receiptNumber, vendor, createdBy interface{}
 	if e.CategoryID != "" {
@@ -1771,11 +1774,14 @@ func (r *ExpenseRepository) Create(ctx context.Context, e models.Expense) error 
 
 	_, err = r.db.ExecContext(ctx, sqlStr,
 		e.ID, e.StoreID, categoryID, e.Title, e.Description, e.Amount, e.ExpenseDate,
-		paymentMethod, receiptNumber, vendor, attachmentsJSON, createdBy)
+		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), createdBy)
 	return err
 }
 
 func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error {
+	if e.Attachments == nil {
+		e.Attachments = []string{}
+	}
 	attachmentsJSON, err := json.Marshal(e.Attachments)
 	if err != nil {
 		return err
@@ -1783,7 +1789,7 @@ func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error 
 
 	sqlStr := `UPDATE expenses SET category_id = $1, title = $2, description = $3, amount = $4, 
 	           expense_date = $5, payment_method = $6, receipt_number = $7, vendor = $8, 
-	           attachments = $9, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
+	           attachments = $9::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
 	
 	var categoryID, paymentMethod, receiptNumber, vendor interface{}
 	if e.CategoryID != "" {
@@ -1801,7 +1807,7 @@ func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error 
 
 	_, err = r.db.ExecContext(ctx, sqlStr,
 		categoryID, e.Title, e.Description, e.Amount, e.ExpenseDate,
-		paymentMethod, receiptNumber, vendor, attachmentsJSON, e.ID)
+		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), e.ID)
 	return err
 }
 
@@ -1907,7 +1913,7 @@ type RevenueReportRepository struct {
 	db *sql.DB
 }
 
-func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID, startDate, endDate string, includeDailyBreakdown bool) (*models.RevenueReport, error) {
+func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID, startDate, endDate string) (*models.RevenueReport, error) {
 	// Build date filter conditions
 	var dateFilter string
 	var args []interface{}
@@ -1915,13 +1921,13 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	idx := 2
 
 	if startDate != "" {
-		dateFilter += fmt.Sprintf(" AND b.generated_at >= $%d", idx)
+		dateFilter += fmt.Sprintf(" AND DATE(b.generated_at) >= $%d::date", idx)
 		args = append(args, startDate)
 		idx++
 	}
 
 	if endDate != "" {
-		dateFilter += fmt.Sprintf(" AND b.generated_at <= $%d", idx)
+		dateFilter += fmt.Sprintf(" AND DATE(b.generated_at) <= $%d::date", idx)
 		args = append(args, endDate)
 		idx++
 	}
@@ -1951,13 +1957,13 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	expenseIdx := 2
 
 	if startDate != "" {
-		expenseSQL += fmt.Sprintf(" AND e.expense_date >= $%d", expenseIdx)
+		expenseSQL += fmt.Sprintf(" AND DATE(e.expense_date) >= $%d::date", expenseIdx)
 		expenseArgs = append(expenseArgs, startDate)
 		expenseIdx++
 	}
 
 	if endDate != "" {
-		expenseSQL += fmt.Sprintf(" AND e.expense_date <= $%d", expenseIdx)
+		expenseSQL += fmt.Sprintf(" AND DATE(e.expense_date) <= $%d::date", expenseIdx)
 		expenseArgs = append(expenseArgs, endDate)
 		expenseIdx++
 	}
@@ -1980,13 +1986,13 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	orderIdx := 2
 
 	if startDate != "" {
-		orderSQL += fmt.Sprintf(" AND o.created_at >= $%d", orderIdx)
+		orderSQL += fmt.Sprintf(" AND DATE(o.created_at) >= $%d::date", orderIdx)
 		orderArgs = append(orderArgs, startDate)
 		orderIdx++
 	}
 
 	if endDate != "" {
-		orderSQL += fmt.Sprintf(" AND o.created_at <= $%d", orderIdx)
+		orderSQL += fmt.Sprintf(" AND DATE(o.created_at) <= $%d::date", orderIdx)
 		orderArgs = append(orderArgs, endDate)
 		orderIdx++
 	}
@@ -2004,82 +2010,166 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 		avgOrderValue = totalRevenue / float64(totalOrders)
 	}
 
-	report := &models.RevenueReport{
-		PeriodStart:      startDate,
-		PeriodEnd:        endDate,
-		TotalRevenue:     totalRevenue,
-		TotalExpenses:    totalExpenses,
-		NetProfit:        netProfit,
-		TotalOrders:      totalOrders,
-		TotalBills:       totalBills,
-		TotalExpenseCount: totalExpenseCount,
-		AverageOrderValue: avgOrderValue,
-	}
-
-	// Get daily breakdown if requested
-	if includeDailyBreakdown {
-		dailyBreakdown, err := r.getDailyBreakdown(ctx, storeID, startDate, endDate)
-		if err != nil {
-			return nil, err
-		}
-		report.DailyBreakdown = dailyBreakdown
-	}
-
-	return report, nil
-}
-
-func (r *RevenueReportRepository) getDailyBreakdown(ctx context.Context, storeID, startDate, endDate string) ([]models.DailyRevenueBreakdown, error) {
-	sqlStr := `
-		WITH dates AS (
-			SELECT generate_series(
-				COALESCE($2::date, (SELECT MIN(DATE(b.generated_at)) FROM bills b WHERE b.store_id = $1)),
-				COALESCE($3::date, (SELECT MAX(DATE(b.generated_at)) FROM bills b WHERE b.store_id = $1)),
-				'1 day'::interval
-			)::date as date
-		),
-		revenue_data AS (
-			SELECT DATE(b.generated_at) as date, COALESCE(SUM(b.total), 0) as revenue, COUNT(b.id) as bill_count
-			FROM bills b
-			WHERE b.store_id = $1
-		),
-		expense_data AS (
-			SELECT DATE(e.expense_date) as date, COALESCE(SUM(e.amount), 0) as expenses, COUNT(e.id) as expense_count
-			FROM expenses e
-			WHERE e.store_id = $1 AND e.is_active = true
-		),
-		order_data AS (
-			SELECT DATE(o.created_at) as date, COUNT(o.id) as order_count
-			FROM orders o
-			WHERE o.store_id = $1 AND o.status = 'completed'
-		)
-		SELECT 
-			d.date,
-			COALESCE(rd.revenue, 0) as revenue,
-			COALESCE(ed.expenses, 0) as expenses,
-			COALESCE(rd.revenue, 0) - COALESCE(ed.expenses, 0) as net_profit,
-			COALESCE(od.order_count, 0) as order_count,
-			COALESCE(rd.bill_count, 0) as bill_count,
-			COALESCE(ed.expense_count, 0) as expense_count
-		FROM dates d
-		LEFT JOIN revenue_data rd ON d.date = rd.date
-		LEFT JOIN expense_data ed ON d.date = ed.date
-		LEFT JOIN order_data od ON d.date = od.date
-		ORDER BY d.date
+	// Fetch individual bills (revenue entries) with items
+	billsSQL := `
+		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
+		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
+		       COALESCE(
+		         json_agg(
+		           json_build_object(
+		             'itemId', oi.item_id,
+		             'quantity', oi.quantity,
+		             'unitPrice', oi.unit_price,
+		             'item', json_build_object(
+		               'id', i.id,
+		               'name', i.name,
+		               'price', i.price,
+		               'categoryId', i.category_id,
+		               'categoryName', COALESCE(c.name, 'Uncategorised')
+		             )
+		           )
+		         ) FILTER (WHERE oi.id IS NOT NULL),
+		         '[]'
+		       ) as items
+		FROM bills b
+		LEFT JOIN order_items oi ON b.order_id = oi.order_id
+		LEFT JOIN items i ON oi.item_id = i.id
+		LEFT JOIN categories c ON i.category_id = c.id
+		WHERE b.store_id = $1
 	`
+	var billArgs []interface{}
+	billArgs = append(billArgs, storeID)
+	billIdx := 2
 
-	rows, err := r.db.QueryContext(ctx, sqlStr, storeID, startDate, endDate)
+	if startDate != "" {
+		billsSQL += fmt.Sprintf(" AND DATE(b.generated_at) >= $%d::date", billIdx)
+		billArgs = append(billArgs, startDate)
+		billIdx++
+	}
+
+	if endDate != "" {
+		billsSQL += fmt.Sprintf(" AND DATE(b.generated_at) <= $%d::date", billIdx)
+		billArgs = append(billArgs, endDate)
+		billIdx++
+	}
+
+	billsSQL += " GROUP BY b.id ORDER BY b.generated_at DESC"
+
+	billRows, err := r.db.QueryContext(ctx, billsSQL, billArgs...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer billRows.Close()
 
-	var breakdown []models.DailyRevenueBreakdown
-	for rows.Next() {
-		var d models.DailyRevenueBreakdown
-		if err := rows.Scan(&d.Date, &d.Revenue, &d.Expenses, &d.NetProfit, &d.OrderCount, &d.BillCount, &d.ExpenseCount); err != nil {
+	var bills []models.Bill
+	for billRows.Next() {
+		var b models.Bill
+		var method, customer, customerMobile, generatedBy sql.NullString
+		var itemsBytes []byte
+		err := billRows.Scan(
+			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
+			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
+			&itemsBytes,
+		)
+		if err != nil {
 			return nil, err
 		}
-		breakdown = append(breakdown, d)
+		b.PaymentMethod = method.String
+		b.CustomerName = customer.String
+		b.CustomerMobile = customerMobile.String
+		b.GeneratedBy = generatedBy.String
+
+		if len(itemsBytes) > 0 {
+			var items []models.OrderItem
+			if err := json.Unmarshal(itemsBytes, &items); err == nil {
+				b.Items = items
+			}
+		}
+		if b.Items == nil {
+			b.Items = []models.OrderItem{}
+		}
+		bills = append(bills, b)
 	}
-	return breakdown, nil
+
+	// Fetch individual expenses
+	expensesListSQL := `
+		SELECT e.id, e.store_id, e.category_id, ec.name as category_name, e.title, e.description,
+		       e.amount, e.expense_date, e.payment_method, e.receipt_number, e.vendor,
+		       e.attachments, e.is_active, e.created_at, e.updated_at, e.created_by
+		FROM expenses e
+		LEFT JOIN expense_categories ec ON e.category_id = ec.id
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	var expArgs []interface{}
+	expArgs = append(expArgs, storeID)
+	expIdx := 2
+
+	if startDate != "" {
+		expensesListSQL += fmt.Sprintf(" AND DATE(e.expense_date) >= $%d::date", expIdx)
+		expArgs = append(expArgs, startDate)
+		expIdx++
+	}
+
+	if endDate != "" {
+		expensesListSQL += fmt.Sprintf(" AND DATE(e.expense_date) <= $%d::date", expIdx)
+		expArgs = append(expArgs, endDate)
+		expIdx++
+	}
+
+	expensesListSQL += " ORDER BY e.expense_date DESC"
+
+	expRows, err := r.db.QueryContext(ctx, expensesListSQL, expArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer expRows.Close()
+
+	var expenses []models.Expense
+	for expRows.Next() {
+		var e models.Expense
+		var categoryName, description, paymentMethod, receiptNumber, vendor, createdBy sql.NullString
+		var attachmentsBytes []byte
+		err := expRows.Scan(
+			&e.ID, &e.StoreID, &e.CategoryID, &categoryName, &e.Title, &description,
+			&e.Amount, &e.ExpenseDate, &paymentMethod, &receiptNumber, &vendor,
+			&attachmentsBytes, &e.IsActive, &e.CreatedAt, &e.UpdatedAt, &createdBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+		e.CategoryName = categoryName.String
+		e.Description = description.String
+		e.PaymentMethod = paymentMethod.String
+		e.ReceiptNumber = receiptNumber.String
+		e.Vendor = vendor.String
+		e.CreatedBy = createdBy.String
+
+		if len(attachmentsBytes) > 0 {
+			var attachments []string
+			if err := json.Unmarshal(attachmentsBytes, &attachments); err == nil {
+				e.Attachments = attachments
+			}
+		}
+		if e.Attachments == nil {
+			e.Attachments = []string{}
+		}
+
+		expenses = append(expenses, e)
+	}
+
+	report := &models.RevenueReport{
+		PeriodStart:       startDate,
+		PeriodEnd:         endDate,
+		TotalRevenue:      totalRevenue,
+		TotalExpenses:     totalExpenses,
+		NetProfit:         netProfit,
+		TotalOrders:       totalOrders,
+		TotalBills:        totalBills,
+		TotalExpenseCount: totalExpenseCount,
+		AverageOrderValue: avgOrderValue,
+		Bills:             bills,
+		Expenses:          expenses,
+	}
+
+	return report, nil
 }

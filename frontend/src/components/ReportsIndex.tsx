@@ -46,7 +46,7 @@ const ReportsIndex: React.FC = () => {
       color: '#b794f4',
     },
     {
-      title: 'Revenue Report',
+      title: 'Profit Report',
       description: 'Combined sales, revenue, and expense analysis with profit tracking',
       icon: <DollarSign size={32} />,
       path: '/reports/revenue',

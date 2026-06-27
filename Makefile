@@ -1,4 +1,4 @@
-.PHONY: up down build logs ps clean
+.PHONY: up down build logs ps clean set-version release
 
 # Docker Compose commands
 up:
@@ -74,3 +74,30 @@ go-printer-build:
 
 go-printer-build-windows:
 	cd frontend/src-tauri/mario-printer && GOOS=windows GOARCH=amd64 go build -o ../target/release/mario-printer.exe .
+
+# ── Version Management ─────────────────────────────────────────────────
+# Usage: make set-version VERSION=1.3.1
+set-version:
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make set-version VERSION=1.3.1"; exit 1; fi
+	@echo "Setting version to $(VERSION) ..."
+	@sed -i '' 's/"version": "[^"]*"/"version": "$(VERSION)"/' frontend/src-tauri/tauri.conf.json
+	@sed -i '' 's/^version = ".*"/version = "$(VERSION)"/' frontend/src-tauri/Cargo.toml
+	@sed -i '' 's/"version": "[^"]*"/"version": "$(VERSION)"/' frontend/package.json
+	@sed -i '' 's/^VITE_APP_VERSION=.*/VITE_APP_VERSION=$(VERSION)/' frontend/.env.development
+	@sed -i '' 's/^VITE_APP_VERSION=.*/VITE_APP_VERSION=$(VERSION)/' frontend/.env.example
+	@echo "Version updated to $(VERSION) in all files."
+
+# ── Release ────────────────────────────────────────────────────────────
+# Usage: make release VERSION=1.3.1
+# Bumps version, commits, pushes to main, creates and pushes a git tag.
+release: set-version
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=1.3.1"; exit 1; fi
+	@echo "Committing version bump ..."
+	@git add frontend/src-tauri/tauri.conf.json frontend/src-tauri/Cargo.toml frontend/package.json frontend/.env.development frontend/.env.example
+	@git commit -m "Bump version to $(VERSION)"
+	@echo "Pushing to main ..."
+	@git push origin main
+	@echo "Creating and pushing tag v$(VERSION) ..."
+	@git tag v$(VERSION)
+	@git push origin v$(VERSION)
+	@echo "Release v$(VERSION) pushed. Monitor: https://github.com/ntoric/mario_tauri/actions"
