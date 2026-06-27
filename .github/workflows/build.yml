@@ -92,11 +92,29 @@ jobs:
           echo "Checking for binary: frontend/src-tauri/binaries/mario-printer-${{ matrix.target }}${{ matrix.platform == 'windows-latest' && '.exe' || '' }}"
           ls -la frontend/src-tauri/binaries/
 
+      - name: Check signing secret
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Private key is EMPTY"
+            exit 1
+          else
+            echo "Private key exists, length: ${#TAURI_SIGNING_PRIVATE_KEY}"
+          fi
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
       - name: Build app
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Debug bundle output
+        shell: bash
+        run: |
+          echo "=== Bundle directory ==="
+          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -type f
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -126,26 +144,36 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Release version: $VERSION"
 
-          # Find the Windows setup exe and its signature
-          WIN_EXE=$(find mario-juicy-windows -name '*-setup.exe' | head -1)
-          WIN_SIG=$(find mario-juicy-windows -name '*-setup.exe.sig' | head -1)
+          # Debug: list all files in the windows artifact
+          echo "=== All files in mario-juicy-windows ==="
+          find mario-juicy-windows -type f
 
-          if [ -z "$WIN_EXE" ]; then
-            echo "No Windows setup exe found!"
+          # Prefer .nsis.zip (Tauri v2 updater format), fall back to -setup.exe (NSIS)
+          WIN_BUNDLE=$(find mario-juicy-windows -name '*.nsis.zip' | head -1)
+          WIN_BUNDLE_SIG=$(find mario-juicy-windows -name '*.nsis.zip.sig' | head -1)
+
+          if [ -z "$WIN_BUNDLE" ]; then
+            echo "No .nsis.zip found, falling back to -setup.exe"
+            WIN_BUNDLE=$(find mario-juicy-windows -name '*-setup.exe' | head -1)
+            WIN_BUNDLE_SIG=$(find mario-juicy-windows -name '*-setup.exe.sig' | head -1)
+          fi
+
+          if [ -z "$WIN_BUNDLE" ]; then
+            echo "ERROR: No Windows update bundle found!"
             exit 1
           fi
 
           # Extract just the filename for the URL
-          WIN_EXE_NAME=$(basename "$WIN_EXE")
+          WIN_BUNDLE_NAME=$(basename "$WIN_BUNDLE")
           # GitHub replaces spaces with dots in release asset names
-          WIN_URL_NAME="${WIN_EXE_NAME// /.}"
+          WIN_URL_NAME="${WIN_BUNDLE_NAME// /.}"
 
-          if [ -z "$WIN_SIG" ] || [ ! -f "$WIN_SIG" ]; then
+          if [ -z "$WIN_BUNDLE_SIG" ] || [ ! -f "$WIN_BUNDLE_SIG" ]; then
             echo "ERROR: No .sig file found! The signing key secret may be missing or invalid."
             echo "Ensure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets are set."
             exit 1
           fi
-          WIN_SIG_CONTENT=$(cat "$WIN_SIG")
+          WIN_SIG_CONTENT=$(cat "$WIN_BUNDLE_SIG")
 
           # Build the download URL from the GitHub release
           REPO="ntoric/mario_tauri"
@@ -180,6 +208,8 @@ jobs:
             mario-juicy-mac-amd64/**/*.app.tar.gz.sig
             mario-juicy-windows/**/*.exe
             mario-juicy-windows/**/*.exe.sig
+            mario-juicy-windows/**/*.nsis.zip
+            mario-juicy-windows/**/*.nsis.zip.sig
             mario-juicy-linux/**/*.AppImage
             mario-juicy-linux/**/*.AppImage.sig
             mario-juicy-linux/**/*.deb
