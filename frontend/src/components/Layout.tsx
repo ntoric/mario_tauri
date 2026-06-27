@@ -6,6 +6,7 @@ import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
 import UpdateBanner from './UpdateBanner';
 import { PageHeaderProvider, usePageHeader } from '../contexts/PageHeaderContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
@@ -374,7 +375,9 @@ const LayoutContent: React.FC = () => {
 const Layout: React.FC = () => {
   return (
     <PageHeaderProvider>
-      <LayoutContent />
+      <ThemeProvider>
+        <LayoutContent />
+      </ThemeProvider>
     </PageHeaderProvider>
   );
 };

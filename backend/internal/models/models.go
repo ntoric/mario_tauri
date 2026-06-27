@@ -26,6 +26,7 @@ type Store struct {
 	KOTPrintEnabled      bool      `json:"kotPrintEnabled"`
 	RemoteBillingEnabled bool      `json:"remoteBillingEnabled"`
 	LogoURL              string    `json:"logoUrl"`
+	ThemeColor           string    `json:"themeColor"`
 	IsActive             bool      `json:"isActive"`
 	CreatedAt            time.Time `json:"createdAt"`
 }

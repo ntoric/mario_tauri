@@ -119,13 +119,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -139,11 +139,11 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var stores []models.Store
 	for rows.Next() {
 		var s models.Store
-		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL sql.NullString
+		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-			&logoURL, &s.IsActive, &s.CreatedAt,
+			&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -157,21 +157,22 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.PrinterVendorID = printerVendor.String
 		s.PrinterProductID = printerProduct.String
 		s.LogoURL = logoURL.String
+		s.ThemeColor = themeColor.String
 		stores = append(stores, s)
 	}
 	return stores, nil
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
-	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL sql.NullString
+	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-		&logoURL, &s.IsActive, &s.CreatedAt,
+		&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -188,6 +189,7 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	s.PrinterVendorID = printerVendor.String
 	s.PrinterProductID = printerProduct.String
 	s.LogoURL = logoURL.String
+	s.ThemeColor = themeColor.String
 	return &s, nil
 }
 
