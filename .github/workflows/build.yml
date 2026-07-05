@@ -31,7 +31,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mario-tauri-backend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mario_v2_backend:latest
 
   build:
     strategy:
