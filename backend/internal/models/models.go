@@ -58,17 +58,52 @@ type Category struct {
 
 // Item represents item table schema and json dto
 type Item struct {
-	ID           string    `json:"id"`
-	StoreID      string    `json:"storeId"`
-	CategoryID   string    `json:"categoryId"`
-	CategoryName string    `json:"categoryName,omitempty"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	Price        float64   `json:"price"`
-	HSNCode      string    `json:"hsnCode"`
-	TaxPercent   float64   `json:"taxPercent"`
-	IsActive     bool      `json:"isActive"`
-	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	CategoryID    string    `json:"categoryId"`
+	CategoryName  string    `json:"categoryName,omitempty"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Price         float64   `json:"price"`
+	HSNCode       string    `json:"hsnCode"`
+	TaxPercent    float64   `json:"taxPercent"`
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt,omitempty"`
+	TotalCost     float64   `json:"totalCost,omitempty"`
+	Profit        float64   `json:"profit,omitempty"`
+	ProfitPercent float64   `json:"profitPercent,omitempty"`
+}
+
+// ItemExpense represents a cost component for preparing a menu item
+type ItemExpense struct {
+	ID          string    `json:"id"`
+	StoreID     string    `json:"storeId"`
+	ItemID      string    `json:"itemId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+}
+
+// ItemProfitEntry represents profit analysis for a single menu item
+type ItemProfitEntry struct {
+	Item          Item          `json:"item"`
+	Expenses      []ItemExpense `json:"expenses"`
+	TotalCost     float64       `json:"totalCost"`
+	Profit        float64       `json:"profit"`
+	ProfitPercent float64       `json:"profitPercent"`
+}
+
+// ItemProfitReport represents store-wide item profit analysis
+type ItemProfitReport struct {
+	StoreID              string            `json:"storeId"`
+	Items                []ItemProfitEntry `json:"items"`
+	TotalSellingValue    float64           `json:"totalSellingValue"`
+	TotalCost            float64           `json:"totalCost"`
+	TotalProfit          float64           `json:"totalProfit"`
+	AverageProfitPercent float64           `json:"averageProfitPercent"`
+	ItemsWithCostCount   int               `json:"itemsWithCostCount"`
 }
 
 // Table represents table/seat layout schema and json dto

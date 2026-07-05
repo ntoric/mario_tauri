@@ -34,6 +34,29 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+// Migrate opens a database connection and applies all pending migrations and seeds.
+func Migrate(cfg *config.Config) error {
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable default_query_exec_mode=simple_protocol",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+
+	db, err := sql.Open("pgx", connStr)
+	if err != nil {
+		return fmt.Errorf("error opening db connection: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("error pinging db: %w", err)
+	}
+
+	if err := runMigrations(db, cfg); err != nil {
+		return fmt.Errorf("migration failure: %w", err)
+	}
+
+	log.Println("Database migrations applied successfully")
+	return nil
+}
+
 func runMigrations(db *sql.DB, cfg *config.Config) error {
 	queries := []string{
 		// Stores table
@@ -232,6 +255,18 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			created_by VARCHAR(255) REFERENCES users(id)
 		)`,
+
+		// Item preparation expenses (cost components per menu item)
+		`CREATE TABLE IF NOT EXISTS item_expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range queries {
@@ -254,6 +289,17 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
+		// Item preparation expenses — additive migration for existing deployments
+		`CREATE TABLE IF NOT EXISTS item_expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range alterQueries {

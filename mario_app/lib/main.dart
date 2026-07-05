@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/data_provider.dart';
+import 'providers/theme_provider.dart';
 import 'utils/constants.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -23,15 +24,25 @@ class MarioApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => DataProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, ThemeProvider>(
+          create: (_) => ThemeProvider(),
+          update: (_, auth, themeProvider) {
+            final provider = themeProvider ?? ThemeProvider();
+            provider.syncForUser(auth.user?.id);
+            return provider;
+          },
+        ),
       ],
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.light,
-        navigatorObservers: [routeObserver],
-        home: const AppInitializer(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) => MaterialApp(
+          title: AppConstants.appName,
+          debugShowCheckedModeBanner: false,
+          theme: themeProvider.lightTheme,
+          darkTheme: themeProvider.darkTheme,
+          themeMode: ThemeMode.light,
+          navigatorObservers: [routeObserver],
+          home: const AppInitializer(),
+        ),
       ),
     );
   }
@@ -75,7 +86,7 @@ class _AppInitializerState extends State<AppInitializer> {
     // Database is connected! Check if authenticated
     if (auth.isAuthenticated) {
       final dataProvider = context.watch<DataProvider>();
-      
+
       // If tables are already loaded, mark data as loaded
       if (dataProvider.tables.isNotEmpty) {
         _isDataLoaded = true;

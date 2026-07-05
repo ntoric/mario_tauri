@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, ShoppingBag, Tag, TrendingUp, DollarSign, ArrowRight } from 'lucide-react';
+import { BarChart2, ShoppingBag, Tag, TrendingUp, DollarSign, ArrowRight, PieChart } from 'lucide-react';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 
 interface ReportCard {
@@ -51,6 +51,13 @@ const ReportsIndex: React.FC = () => {
       icon: <DollarSign size={32} />,
       path: '/reports/revenue',
       color: '#ed8936',
+    },
+    {
+      title: 'Item Profit Report',
+      description: 'Per-item preparation costs, profit margins, and expense breakdown',
+      icon: <PieChart size={32} />,
+      path: '/reports/item-profit',
+      color: '#4299e1',
     },
     {
       title: 'Expense Reports',

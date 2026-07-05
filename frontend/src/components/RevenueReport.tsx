@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Receipt, Download, Loader2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
 import { useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import type { RevenueReport, Bill, Expense } from '../types';
@@ -9,7 +9,6 @@ import { Button } from './ui/Button';
 
 const RevenueReport: React.FC = () => {
   const { currentStoreId } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
   const [periodFilter, setPeriodFilter] = useState<string>('today');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
@@ -64,14 +63,10 @@ const RevenueReport: React.FC = () => {
     }
   };
 
-  // Set page header
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Profit Report',
-      subtitle: 'Combined sales, revenue, and expense analysis',
-      actions: null,
-    });
-  }, [setHeaderContent]);
+  useReportPageHeader({
+    title: 'Profit Report',
+    subtitle: 'Combined sales, revenue, and expense analysis',
+  });
 
   const fetchReport = async () => {
     if (!currentStoreId) return;

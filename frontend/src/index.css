@@ -4178,3 +4178,36 @@ body {
     min-width: 600px;
   }
 }
+
+/* Item Profit Report KPI sections */
+.item-profit-report-page .kpi-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin-bottom: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.item-profit-report-page .kpi-section-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.25rem;
+}
+
+.item-profit-report-page .kpi-subtext {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin-top: 0.2rem;
+  font-weight: 500;
+}
+
+.item-profit-report-page .summary-cards {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}

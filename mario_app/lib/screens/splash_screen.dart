@@ -8,12 +8,17 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.cardDark, AppColors.darker],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFFCF8),
+              Color(0xFFFFF1E0),
+              Color(0xFFF3E6D8),
+            ],
           ),
         ),
         child: SafeArea(
@@ -24,16 +29,16 @@ class SplashScreen extends StatelessWidget {
                 Container(
                   width: 100,
                   height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
+                  decoration: ClayStyles.surface(
+                    radiusValue: 32,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white,
+                        AppColors.primarySoft,
+                      ],
+                    ),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -46,10 +51,10 @@ class SplashScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 Text(
                   'Mario POS',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: AppColors.dark,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -58,7 +63,7 @@ class SplashScreen extends StatelessWidget {
                   status,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.5),
+                    color: AppColors.gray500,
                   ),
                 ),
                 const SizedBox(height: 40),

@@ -222,8 +222,10 @@ class ApiService {
   }
 
   // Items
-  async getItems(storeId: string) {
-    return this.fetch(`/items?storeId=${storeId}`);
+  async getItems(storeId: string, includeProfit = false) {
+    let url = `/items?storeId=${storeId}`;
+    if (includeProfit) url += '&includeProfit=true';
+    return this.fetch(url);
   }
 
   async createItem(item: any) {
@@ -244,6 +246,37 @@ class ApiService {
     return this.fetch(`/items/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  // Item Expenses
+  async getItemExpenses(itemId: string) {
+    return this.fetch(`/items/${itemId}/expenses`);
+  }
+
+  async createItemExpense(itemId: string, expense: { name: string; description?: string; amount: number; storeId?: string }) {
+    return this.fetch(`/items/${itemId}/expenses`, {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async updateItemExpense(id: string, expense: { name: string; description?: string; amount: number; storeId?: string }) {
+    return this.fetch(`/item-expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async deleteItemExpense(id: string, storeId?: string) {
+    let url = `/item-expenses/${id}`;
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url, {
+      method: 'DELETE',
+    });
+  }
+
+  async getItemProfitReport(storeId: string) {
+    return this.fetch(`/reports/item-profit?storeId=${storeId}`);
   }
 
   // Tables

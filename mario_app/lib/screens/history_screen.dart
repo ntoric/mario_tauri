@@ -39,10 +39,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              onSurface: AppColors.dark,
-            ),
+                  primary: AppColors.primary,
+                  onPrimary: Colors.white,
+                  onSurface: AppColors.dark,
+                ),
           ),
           child: child!,
         );
@@ -60,6 +60,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
     final orders = data.orders.where((o) {
+      if (o.status == 'active') {
+        return false;
+      }
+
       // 1. Status Filter
       if (_filterStatus != 'all' && o.status != _filterStatus) {
         return false;
@@ -90,8 +94,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final query = _searchQuery.toLowerCase();
         final matchesTable = o.tableNumber.toString() == query ||
             'table ${o.tableNumber}'.toLowerCase().contains(query);
-        final matchesItems = o.items.any((item) =>
-            item.item.name.toLowerCase().contains(query));
+        final matchesItems =
+            o.items.any((item) => item.item.name.toLowerCase().contains(query));
 
         if (!matchesTable && !matchesItems) {
           return false;
@@ -114,8 +118,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Row(
                 children: [
                   _buildFilterChip('All', 'all'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Active', 'active'),
                   const SizedBox(width: 8),
                   _buildFilterChip('Completed', 'completed'),
                   const SizedBox(width: 8),
@@ -145,7 +147,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                       onChanged: (value) {
                         setState(() {
@@ -188,7 +191,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
@@ -259,7 +263,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     itemBuilder: (context, index) {
                       final order = orders[index];
                       final dateFormat = DateFormat('MMM dd, yyyy HH:mm');
-                      
+
                       Color statusColor;
                       IconData statusIcon;
                       switch (order.status) {
@@ -295,7 +299,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ),
                         child: ExpansionTile(
                           shape: const Border(),
-                          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                          tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 4),
                           leading: Container(
                             width: 48,
                             height: 48,
@@ -303,12 +308,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               color: statusColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            child: Icon(statusIcon, color: statusColor, size: 24),
+                            child:
+                                Icon(statusIcon, color: statusColor, size: 24),
                           ),
                           title: Row(
                             children: [
                               Text(
-                                order.tableNumber == 0 ? 'Parcel Order' : 'Table ${order.tableNumber}',
+                                order.tableNumber == 0
+                                    ? 'Parcel Order'
+                                    : 'Table ${order.tableNumber}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
@@ -372,9 +380,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   const SizedBox(height: 12),
                                   ...order.items.map((item) {
                                     return Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 6),
                                       child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Text(
                                             '${item.quantity}x ${item.item.name}',
@@ -398,35 +408,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   }),
                                   const Divider(),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       const Text(
                                         'Subtotal',
-                                        style: TextStyle(color: AppColors.gray500, fontSize: 14),
+                                        style: TextStyle(
+                                            color: AppColors.gray500,
+                                            fontSize: 14),
                                       ),
                                       Text(
                                         '₹${(order.totalAmount - order.taxAmount).toStringAsFixed(0)}',
-                                        style: const TextStyle(fontSize: 14, color: AppColors.gray700),
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            color: AppColors.gray700),
                                       ),
                                     ],
                                   ),
                                   if (order.taxAmount > 0)
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         const Text(
                                           'Tax',
-                                          style: TextStyle(color: AppColors.gray500, fontSize: 14),
+                                          style: TextStyle(
+                                              color: AppColors.gray500,
+                                              fontSize: 14),
                                         ),
                                         Text(
                                           '₹${order.taxAmount.toStringAsFixed(0)}',
-                                          style: const TextStyle(fontSize: 14, color: AppColors.gray700),
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              color: AppColors.gray700),
                                         ),
                                       ],
                                     ),
                                   const SizedBox(height: 8),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       const Text(
                                         'Total',
@@ -450,11 +471,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   if (order.paymentMethod != null) ...[
                                     const SizedBox(height: 8),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         const Text(
                                           'Payment Method',
-                                          style: TextStyle(color: AppColors.gray500, fontSize: 14),
+                                          style: TextStyle(
+                                              color: AppColors.gray500,
+                                              fontSize: 14),
                                         ),
                                         Text(
                                           order.paymentMethod!.toUpperCase(),
@@ -465,6 +489,110 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           ),
                                         ),
                                       ],
+                                    ),
+                                  ],
+                                  if (order.isCompleted) ...[
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton(
+                                        onPressed: () async {
+                                          final confirm =
+                                              await showDialog<bool>(
+                                            context: context,
+                                            builder: (dialogContext) =>
+                                                AlertDialog(
+                                              title:
+                                                  const Text('Cancel Order?'),
+                                              content: Text(
+                                                'Are you sure you want to cancel this completed order for ${order.tableNumber == 0 ? 'Parcel Order' : 'Table ${order.tableNumber}'}?',
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                    dialogContext,
+                                                    false,
+                                                  ),
+                                                  child: const Text('No'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                    dialogContext,
+                                                    true,
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        AppColors.danger,
+                                                  ),
+                                                  child: const Text(
+                                                    'Yes, Cancel',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirm != true ||
+                                              !context.mounted) {
+                                            return;
+                                          }
+
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (_) => const Center(
+                                              child: CircularProgressIndicator(
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                          );
+
+                                          try {
+                                            final success =
+                                                await data.cancelOrder(
+                                              order.id,
+                                            );
+
+                                            if (context.mounted) {
+                                              Navigator.pop(context);
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    success
+                                                        ? 'Order cancelled successfully'
+                                                        : (data.error ??
+                                                            'Failed to cancel order.'),
+                                                  ),
+                                                  backgroundColor:
+                                                      AppColors.danger,
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              Navigator.pop(context);
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Error: ${e.toString()}',
+                                                  ),
+                                                  backgroundColor:
+                                                      AppColors.danger,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.danger,
+                                        ),
+                                        child: const Text('Cancel Order'),
+                                      ),
                                     ),
                                   ],
                                 ],
@@ -510,7 +638,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: AppColors.primary,
+            color: isSelected ? AppColors.light : AppColors.primary,
           ),
         ),
       ),

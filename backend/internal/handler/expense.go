@@ -226,6 +226,10 @@ func (h *Handler) GetExpenseReportByCategory(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if reports == nil {
+		reports = []models.ExpenseReport{}
+	}
+
 	h.writeJSON(w, http.StatusOK, reports)
 }
 
@@ -244,6 +248,10 @@ func (h *Handler) GetExpenseSummaryByDate(w http.ResponseWriter, r *http.Request
 		log.Printf("[Expense Summary ByDate] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch expense summary")
 		return
+	}
+
+	if summaries == nil {
+		summaries = []models.ExpenseSummary{}
 	}
 
 	h.writeJSON(w, http.StatusOK, summaries)

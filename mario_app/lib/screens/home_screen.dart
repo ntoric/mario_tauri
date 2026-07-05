@@ -42,7 +42,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startPeriodicStoreCheck() {
     // Check store status every 30 seconds - refresh user data from server
-    _storeStatusCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _storeStatusCheckTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) async {
       final auth = context.read<AuthProvider>();
       await auth.refreshUser();
       _checkStoreStatus();
@@ -143,14 +144,35 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final navItems = [
-      _NavItem(icon: Icons.table_restaurant_outlined, activeIcon: Icons.table_restaurant, label: 'Tables'),
-      _NavItem(icon: Icons.receipt_outlined, activeIcon: Icons.receipt, label: 'Orders'),
-      _NavItem(icon: Icons.history_outlined, activeIcon: Icons.history, label: 'History'),
+      _NavItem(
+          icon: Icons.table_restaurant_outlined,
+          activeIcon: Icons.table_restaurant,
+          label: 'Tables'),
+      _NavItem(
+          icon: Icons.receipt_outlined,
+          activeIcon: Icons.receipt,
+          label: 'Orders'),
+      _NavItem(
+          icon: Icons.history_outlined,
+          activeIcon: Icons.history,
+          label: 'History'),
       if (canViewStats)
-        _NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Stats'),
-      _NavItem(icon: Icons.restaurant_menu_outlined, activeIcon: Icons.restaurant_menu, label: 'Menu'),
-      _NavItem(icon: Icons.shopping_bag_outlined, activeIcon: Icons.shopping_bag, label: 'Parcel'),
-      _NavItem(icon: Icons.settings_outlined, activeIcon: Icons.settings, label: 'Settings'),
+        _NavItem(
+            icon: Icons.bar_chart_outlined,
+            activeIcon: Icons.bar_chart,
+            label: 'Stats'),
+      _NavItem(
+          icon: Icons.restaurant_menu_outlined,
+          activeIcon: Icons.restaurant_menu,
+          label: 'Menu'),
+      _NavItem(
+          icon: Icons.shopping_bag_outlined,
+          activeIcon: Icons.shopping_bag,
+          label: 'Parcel'),
+      _NavItem(
+          icon: Icons.settings_outlined,
+          activeIcon: Icons.settings,
+          label: 'Settings'),
     ];
 
     final isTablet = ResponsiveHelper.isTablet(context);
@@ -161,115 +183,133 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.transparent,
         body: AnimatedGradientBackground(
           child: Row(
-          children: [
-            Container(
-              width: isDesktop ? 240 : 80,
-              decoration: BoxDecoration(
-                color: AppColors.light,
-                border: Border(
-                  right: BorderSide(color: AppColors.gray200, width: 1),
+            children: [
+              Container(
+                width: isDesktop ? 240 : 80,
+                margin: const EdgeInsets.fromLTRB(16, 20, 12, 20),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: ClayStyles.surface(
+                  radiusValue: 32,
+                  border: Border.all(color: Colors.white.withOpacity(0.55)),
                 ),
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: isDesktop ? 20 : 16),
-                    child: Row(
-                      mainAxisAlignment: isDesktop ? MainAxisAlignment.start : MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.gray200,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-                          ),
-                        ),
-                        if (isDesktop) ...[
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Mario POS',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.dark,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 24),
+                    Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: isDesktop ? 20 : 16),
+                      child: Row(
+                        mainAxisAlignment: isDesktop
+                            ? MainAxisAlignment.start
+                            : MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: ClayStyles.surface(radiusValue: 14),
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Image.asset('assets/images/logo.png',
+                                  fit: BoxFit.contain),
                             ),
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 12 : 16),
-                      itemCount: navItems.length,
-                      itemBuilder: (context, index) {
-                        final item = navItems[index];
-                        final isSelected = index == _currentIndex;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => setState(() => _currentIndex = index),
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isDesktop ? 16 : 0,
-                                  vertical: isDesktop ? 12 : 14,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primary.withOpacity(0.1) : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: isDesktop
-                                    ? Row(
-                                        children: [
-                                          Icon(
-                                            isSelected ? item.activeIcon : item.icon,
-                                            color: isSelected ? AppColors.primary : AppColors.gray500,
-                                            size: 24,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            item.label,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                              color: isSelected ? AppColors.primary : AppColors.gray600,
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : Icon(
-                                        isSelected ? item.activeIcon : item.icon,
-                                        color: isSelected ? AppColors.primary : AppColors.gray500,
-                                        size: 26,
-                                      ),
+                          if (isDesktop) ...[
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Mario POS',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.dark,
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: isDesktop ? 12 : 16),
+                        itemCount: navItems.length,
+                        itemBuilder: (context, index) {
+                          final item = navItems[index];
+                          final isSelected = index == _currentIndex;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () =>
+                                    setState(() => _currentIndex = index),
+                                borderRadius: ClayStyles.radius(20),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isDesktop ? 16 : 0,
+                                    vertical: isDesktop ? 12 : 14,
+                                  ),
+                                  decoration: isSelected
+                                      ? ClayStyles.accent(
+                                          accent: AppColors.primary,
+                                          radiusValue: 20,
+                                          opacity: 0.14,
+                                        )
+                                      : null,
+                                  child: isDesktop
+                                      ? Row(
+                                          children: [
+                                            Icon(
+                                              isSelected
+                                                  ? item.activeIcon
+                                                  : item.icon,
+                                              color: isSelected
+                                                  ? AppColors.primary
+                                                  : AppColors.gray500,
+                                              size: 24,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              item.label,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                                color: isSelected
+                                                    ? AppColors.primary
+                                                    : AppColors.gray600,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : Icon(
+                                          isSelected
+                                              ? item.activeIcon
+                                              : item.icon,
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.gray500,
+                                          size: 26,
+                                        ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: IndexedStack(
-                index: _currentIndex,
-                children: screens,
+              Expanded(
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: screens,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       );
     }
@@ -284,18 +324,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       extendBody: true,
       bottomNavigationBar: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.light,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.dark.withOpacity(0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: AppColors.gray100,
+          borderRadius: ClayStyles.radius(30),
+          border: Border.all(color: Colors.white.withOpacity(0.6)),
+          boxShadow: ClayStyles.raisedShadow(),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -306,13 +341,21 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => setState(() => _currentIndex = index),
               behavior: HitTestBehavior.opaque,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: isSelected
+                    ? ClayStyles.accent(
+                        accent: AppColors.primary,
+                        radiusValue: 22,
+                        opacity: 0.16,
+                      )
+                    : null,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       isSelected ? item.activeIcon : item.icon,
-                      color: isSelected ? AppColors.primary : AppColors.gray400,
+                      color: isSelected ? AppColors.primary : AppColors.gray500,
                       size: 24,
                     ),
                     const SizedBox(height: 4),
@@ -320,8 +363,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       item.label,
                       style: TextStyle(
                         fontSize: 10,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected ? AppColors.primary : AppColors.gray400,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color:
+                            isSelected ? AppColors.primary : AppColors.gray500,
                       ),
                     ),
                   ],

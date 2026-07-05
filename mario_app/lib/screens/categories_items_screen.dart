@@ -14,7 +14,8 @@ class CategoriesItemsScreen extends StatefulWidget {
   State<CategoriesItemsScreen> createState() => _CategoriesItemsScreenState();
 }
 
-class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with SingleTickerProviderStateMixin {
+class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _itemSearchController = TextEditingController();
   String _selectedCategoryId = 'all';
@@ -23,6 +24,11 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     _itemSearchController.addListener(() {
       setState(() {});
     });
@@ -47,7 +53,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
   // --- Category Dialog Form ---
   void _showCategoryDialog({Category? category}) {
     final nameController = TextEditingController(text: category?.name ?? '');
-    final descriptionController = TextEditingController(text: category?.description ?? '');
+    final descriptionController =
+        TextEditingController(text: category?.description ?? '');
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -97,15 +104,14 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   final name = nameController.text.trim();
-                  final description = descriptionController.text.trim().isEmpty 
-                      ? null 
+                  final description = descriptionController.text.trim().isEmpty
+                      ? null
                       : descriptionController.text.trim();
-                  
+
                   final auth = context.read<AuthProvider>();
                   final data = context.read<DataProvider>();
-                  
-                  Navigator.pop(context); // Close dialog
 
+                  Navigator.pop(context); // Close dialog
                 }
               },
               child: const Text('Save'),
@@ -116,14 +122,17 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
     );
   }
 
-
   // --- Item Dialog Form ---
   void _showItemDialog({Item? item}) {
     final nameController = TextEditingController(text: item?.name ?? '');
-    final priceController = TextEditingController(text: item != null ? item.price.toStringAsFixed(2) : '');
+    final priceController = TextEditingController(
+        text: item != null ? item.price.toStringAsFixed(2) : '');
     final hsnController = TextEditingController(text: item?.hsnCode ?? '');
-    final taxController = TextEditingController(text: item?.taxPercent?.toStringAsFixed(1) ?? '0.0',);
-    final descriptionController = TextEditingController(text: item?.description ?? '');
+    final taxController = TextEditingController(
+      text: item?.taxPercent?.toStringAsFixed(1) ?? '0.0',
+    );
+    final descriptionController =
+        TextEditingController(text: item?.description ?? '');
     final formKey = GlobalKey<FormState>();
 
     final data = context.read<DataProvider>();
@@ -194,7 +203,9 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                           Expanded(
                             child: TextFormField(
                               controller: priceController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                               decoration: const InputDecoration(
                                 labelText: 'Price * (₹)',
                                 hintText: '0.00',
@@ -216,7 +227,9 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                           Expanded(
                             child: TextFormField(
                               controller: taxController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
                               decoration: const InputDecoration(
                                 labelText: 'Tax (%)',
                                 hintText: '5.0',
@@ -270,14 +283,18 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                       final name = nameController.text.trim();
                       final price = double.parse(priceController.text);
                       final tax = double.parse(taxController.text);
-                      final hsn = hsnController.text.trim().isEmpty ? null : hsnController.text.trim();
-                      final description = descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim();
+                      final hsn = hsnController.text.trim().isEmpty
+                          ? null
+                          : hsnController.text.trim();
+                      final description =
+                          descriptionController.text.trim().isEmpty
+                              ? null
+                              : descriptionController.text.trim();
 
                       final auth = context.read<AuthProvider>();
                       final data = context.read<DataProvider>();
 
                       Navigator.pop(context); // Close dialog
-
                     }
                   },
                   child: const Text('Save'),
@@ -293,27 +310,50 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
-    const isStaff = true; // Categories and items are read-only in the mobile app
+    const isStaff =
+        true; // Categories and items are read-only in the mobile app
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppHeader(
         title: 'Menu List',
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.category_outlined),
-              text: 'Categories',
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(76),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.gray200,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.65)),
+                boxShadow: ClayStyles.raisedShadow(
+                  blur: 18,
+                  darkOffset: const Offset(8, 8),
+                  lightOffset: const Offset(-6, -6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildMenuTabSelector(
+                      icon: Icons.category_outlined,
+                      label: 'Categories',
+                      index: 0,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _buildMenuTabSelector(
+                      icon: Icons.fastfood_outlined,
+                      label: 'Food Items',
+                      index: 1,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Tab(
-              icon: Icon(Icons.fastfood_outlined),
-              text: 'Food Items',
-            ),
-          ],
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.gray600,
+          ),
         ),
       ),
       body: TabBarView(
@@ -324,6 +364,63 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
         ],
       ),
       floatingActionButton: null,
+    );
+  }
+
+  Widget _buildMenuTabSelector({
+    required IconData icon,
+    required String label,
+    required int index,
+  }) {
+    final isSelected = _tabController.index == index;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      decoration: isSelected
+          ? ClayStyles.accent(
+              accent: AppColors.primary,
+              radiusValue: 20,
+              opacity: 0.16,
+            )
+          : BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _tabController.animateTo(index),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isSelected ? AppColors.primary : AppColors.gray600,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: isSelected ? AppColors.primary : AppColors.gray600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -368,7 +465,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
       );
     }
 
-    final isTablet = ResponsiveHelper.isTablet(context) || ResponsiveHelper.isDesktop(context);
+    final isTablet = ResponsiveHelper.isTablet(context) ||
+        ResponsiveHelper.isDesktop(context);
 
     return RefreshIndicator(
       onRefresh: _refreshData,
@@ -383,7 +481,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
         itemCount: categories.length,
         itemBuilder: (context, index) {
           final cat = categories[index];
-          final itemsCount = data.items.where((i) => i.categoryId == cat.id).length;
+          final itemsCount =
+              data.items.where((i) => i.categoryId == cat.id).length;
 
           return Card(
             elevation: 2,
@@ -423,7 +522,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (cat.description != null && cat.description!.isNotEmpty) ...[
+                        if (cat.description != null &&
+                            cat.description!.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             cat.description!,
@@ -465,8 +565,9 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
     final filteredItems = data.items.where((item) {
       final matchesQuery = item.name.toLowerCase().contains(query) ||
           (item.description?.toLowerCase().contains(query) ?? false);
-      
-      final matchesCategory = _selectedCategoryId == 'all' || item.categoryId == _selectedCategoryId;
+
+      final matchesCategory = _selectedCategoryId == 'all' ||
+          item.categoryId == _selectedCategoryId;
 
       return matchesQuery && matchesCategory;
     }).toList();
@@ -492,7 +593,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                                 onPressed: () => _itemSearchController.clear(),
                               )
                             : null,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0, horizontal: 16),
                         fillColor: AppColors.light,
                       ),
                     ),
@@ -518,9 +620,12 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                         setState(() => _selectedCategoryId = 'all');
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedCategoryId == 'all' ? AppColors.primary.withOpacity(0.2) : AppColors.gray200,
+                          color: _selectedCategoryId == 'all'
+                              ? AppColors.primary.withOpacity(0.2)
+                              : AppColors.gray200,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.transparent),
                           boxShadow: [
@@ -535,7 +640,9 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                           'All Categories',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: _selectedCategoryId == 'all' ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight: _selectedCategoryId == 'all'
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             color: AppColors.primary,
                           ),
                         ),
@@ -549,9 +656,12 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                             setState(() => _selectedCategoryId = cat.id);
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
-                              color: _selectedCategoryId == cat.id ? AppColors.primary.withOpacity(0.2) : AppColors.gray200,
+                              color: _selectedCategoryId == cat.id
+                                  ? AppColors.primary.withOpacity(0.2)
+                                  : AppColors.gray200,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: Colors.transparent),
                               boxShadow: [
@@ -566,7 +676,9 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                               cat.name,
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: _selectedCategoryId == cat.id ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: _selectedCategoryId == cat.id
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: AppColors.primary,
                               ),
                             ),
@@ -604,9 +716,12 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                               query.isNotEmpty || _selectedCategoryId != 'all'
                                   ? 'No matching food items found'
                                   : 'No food items added yet',
-                              style: const TextStyle(fontSize: 16, color: AppColors.gray600),
+                              style: const TextStyle(
+                                  fontSize: 16, color: AppColors.gray600),
                             ),
-                            if (!isStaff && query.isEmpty && _selectedCategoryId == 'all') ...[
+                            if (!isStaff &&
+                                query.isEmpty &&
+                                _selectedCategoryId == 'all') ...[
                               const SizedBox(height: 16),
                               ElevatedButton.icon(
                                 onPressed: () => _showItemDialog(),
@@ -620,7 +735,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     itemCount: filteredItems.length,
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
@@ -636,7 +752,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                           ),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           leading: CircleAvatar(
                             backgroundColor: AppColors.primary.withOpacity(0.1),
                             child: const Icon(
@@ -672,7 +789,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: AppColors.gray200,
                                       borderRadius: BorderRadius.circular(4),
@@ -706,7 +824,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen> with Sing
                                   ],
                                 ],
                               ),
-                              if (item.description != null && item.description!.isNotEmpty) ...[
+                              if (item.description != null &&
+                                  item.description!.isNotEmpty) ...[
                                 const SizedBox(height: 4),
                                 Text(
                                   item.description!,

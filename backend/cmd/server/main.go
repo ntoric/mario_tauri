@@ -131,6 +131,10 @@ func main() {
 		r.Post("/api/items", h.CreateItem)
 		r.Put("/api/items/{id}", h.UpdateItem)
 		r.Delete("/api/items/{id}", h.DeleteItem)
+		r.Get("/api/items/{itemId}/expenses", h.GetItemExpenses)
+		r.Post("/api/items/{itemId}/expenses", h.CreateItemExpense)
+		r.Put("/api/item-expenses/{id}", h.UpdateItemExpense)
+		r.Delete("/api/item-expenses/{id}", h.DeleteItemExpense)
 
 		// Tables
 		r.Get("/api/tables", h.GetTables)
@@ -187,6 +191,7 @@ func main() {
 
 		// Revenue Report
 		r.Get("/api/reports/revenue", h.GetRevenueReport)
+		r.Get("/api/reports/item-profit", h.GetItemProfitReport)
 	})
 
 	// 6. Start HTTP Server with Graceful Shutdown

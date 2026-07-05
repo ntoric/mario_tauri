@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, BarChart3, TrendingUp, Download, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import type { ExpenseReport, ExpenseSummary } from '../types';
@@ -9,7 +9,6 @@ import { Button } from './ui/Button';
 
 const ExpenseReports: React.FC = () => {
   const { currentStoreId } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
   const [activeTab, setActiveTab] = useState<'category' | 'date'>('category');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -17,14 +16,10 @@ const ExpenseReports: React.FC = () => {
   const [dateSummaries, setDateSummaries] = useState<ExpenseSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Set page header
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Expense Reports',
-      subtitle: 'Analyze your business expenses',
-      actions: null,
-    });
-  }, [setHeaderContent]);
+  useReportPageHeader({
+    title: 'Expense Reports',
+    subtitle: 'Analyze your business expenses',
+  });
 
   const fetchReports = async () => {
     if (!currentStoreId) return;
@@ -33,13 +28,18 @@ const ExpenseReports: React.FC = () => {
     try {
       if (activeTab === 'category') {
         const reports = await api.getExpenseReportByCategory(currentStoreId, startDate, endDate);
-        setCategoryReports(reports);
+        setCategoryReports(Array.isArray(reports) ? reports : []);
       } else {
         const summaries = await api.getExpenseSummaryByDate(currentStoreId, startDate, endDate);
-        setDateSummaries(summaries);
+        setDateSummaries(Array.isArray(summaries) ? summaries : []);
       }
     } catch (error) {
       console.error('Failed to fetch expense reports:', error);
+      if (activeTab === 'category') {
+        setCategoryReports([]);
+      } else {
+        setDateSummaries([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -61,32 +61,32 @@ const ExpenseReports: React.FC = () => {
 
   const calculateTotal = () => {
     if (activeTab === 'category') {
-      return categoryReports.reduce((sum, report) => sum + report.totalAmount, 0);
-    } else {
-      return dateSummaries.reduce((sum, summary) => sum + summary.totalAmount, 0);
+      return (categoryReports ?? []).reduce((sum, report) => sum + report.totalAmount, 0);
     }
+    return (dateSummaries ?? []).reduce((sum, summary) => sum + summary.totalAmount, 0);
   };
 
   const calculateTotalCount = () => {
     if (activeTab === 'category') {
-      return categoryReports.reduce((sum, report) => sum + report.expenseCount, 0);
-    } else {
-      return dateSummaries.reduce((sum, summary) => sum + summary.expenseCount, 0);
+      return (categoryReports ?? []).reduce((sum, report) => sum + report.expenseCount, 0);
     }
+    return (dateSummaries ?? []).reduce((sum, summary) => sum + summary.expenseCount, 0);
   };
 
   const exportReport = () => {
-    const data = activeTab === 'category' ? categoryReports : dateSummaries;
-    const csvContent = [
-      activeTab === 'category' 
-        ? ['Category', 'Total Amount', 'Expense Count'].join(',')
-        : ['Date', 'Total Amount', 'Expense Count'].join(','),
-      ...data.map(item => 
-        activeTab === 'category'
-          ? [item.categoryName, item.totalAmount.toFixed(2), item.expenseCount].join(',')
-          : [item.date, item.totalAmount.toFixed(2), item.expenseCount].join(',')
-      )
-    ].join('\n');
+    const header = activeTab === 'category'
+      ? ['Category', 'Total Amount', 'Expense Count'].join(',')
+      : ['Date', 'Total Amount', 'Expense Count'].join(',');
+
+    const rows = activeTab === 'category'
+      ? (categoryReports ?? []).map((item) =>
+          [item.categoryName, item.totalAmount.toFixed(2), item.expenseCount].join(',')
+        )
+      : (dateSummaries ?? []).map((item) =>
+          [item.date, item.totalAmount.toFixed(2), item.expenseCount].join(',')
+        );
+
+    const csvContent = [header, ...rows].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);

@@ -40,8 +40,11 @@ interface DataState {
   deleteCategory: (id: string) => Promise<void>;
   
   // Items
-  fetchItems: () => Promise<void>;
-  createItem: (item: Omit<Item, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Item, 'isActive'>>) => Promise<void>;
+  fetchItems: (options?: { includeProfit?: boolean }) => Promise<void>;
+  createItem: (
+    item: Omit<Item, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Item, 'isActive'>>,
+    options?: { skipRefresh?: boolean }
+  ) => Promise<Item>;
   updateItem: (id: string, item: Partial<Item>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   
@@ -259,11 +262,12 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Items
-  fetchItems: async () => {
+  fetchItems: async (options?: { includeProfit?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
+    const includeProfit = options?.includeProfit ?? false;
     try {
-      const cacheKey = cacheKeys.items(currentStoreId);
+      const cacheKey = cacheKeys.items(currentStoreId, includeProfit);
       
       // Try cache first
       const cached = cache.get<Item[]>(cacheKey);
@@ -272,7 +276,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         return;
       }
       
-      const items = await api.getItems(currentStoreId);
+      const items = await api.getItems(currentStoreId, includeProfit);
       cache.set(cacheKey, items);
       set({ items });
     } catch (error) {
@@ -280,14 +284,18 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
-  createItem: async (item) => {
+  createItem: async (item, options) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.createItem({ ...item, storeId: currentStoreId });
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    const created = await api.createItem({ ...item, storeId: currentStoreId }) as Item;
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    if (!options?.skipRefresh) {
+      await get().fetchItems({ includeProfit: true });
+    }
+    return created;
   },
 
   updateItem: async (id, item) => {
@@ -296,8 +304,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.updateItem(id, item);
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    await get().fetchItems({ includeProfit: true });
   },
 
   deleteItem: async (id) => {
@@ -306,8 +315,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.deleteItem(id);
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    await get().fetchItems({ includeProfit: true });
   },
 
   // Tables

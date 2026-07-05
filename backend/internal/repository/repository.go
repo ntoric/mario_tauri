@@ -82,6 +82,7 @@ type Repository struct {
 	SupportConfig      *SupportConfigRepository
 	ExpenseCategory    *ExpenseCategoryRepository
 	Expense            *ExpenseRepository
+	ItemExpense        *ItemExpenseRepository
 	RevenueReport      *RevenueReportRepository
 	Cache              *MemoryCache
 }
@@ -101,6 +102,7 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		SupportConfig:   &SupportConfigRepository{db: db},
 		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
+		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
 		RevenueReport:   &RevenueReportRepository{db: db},
 		Cache:           cache,
 	}
@@ -569,8 +571,47 @@ type ItemRepository struct {
 	redis *RedisCache
 }
 
-func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.Item, error) {
-	cacheKey := "items:" + storeID
+const itemsCacheKeyPrefix = "items:v2:"
+
+func itemsCacheKey(storeID string, includeProfit bool) string {
+	if includeProfit {
+		return itemsCacheKeyPrefix + "profit:" + storeID
+	}
+	return itemsCacheKeyPrefix + storeID
+}
+
+func itemExpensesTableExists(ctx context.Context, db *sql.DB) bool {
+	var exists bool
+	err := db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = current_schema() AND table_name = 'item_expenses'
+		)
+	`).Scan(&exists)
+	return err == nil && exists
+}
+
+func applyItemProfitFields(i *models.Item) {
+	if i.TotalCost <= 0 {
+		i.TotalCost = 0
+		i.Profit = 0
+		i.ProfitPercent = 0
+		return
+	}
+	i.Profit, i.ProfitPercent = computeItemProfit(i.Price, i.TotalCost)
+}
+
+func (r *ItemRepository) invalidateCache(ctx context.Context, storeID string) {
+	if r.redis == nil {
+		return
+	}
+	r.redis.Delete(ctx, itemsCacheKey(storeID, false))
+	r.redis.Delete(ctx, itemsCacheKey(storeID, true))
+	r.redis.Delete(ctx, "items:"+storeID)
+}
+
+func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProfit bool) ([]models.Item, error) {
+	cacheKey := itemsCacheKey(storeID, includeProfit)
 	if r.redis != nil {
 		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
 			var cached []models.Item
@@ -580,14 +621,31 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.I
 		}
 	}
 
-	sqlStr := `
-		SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
-		       c.name as category_name
-		FROM items i
-		LEFT JOIN categories c ON i.category_id = c.id
-		WHERE i.store_id = $1 AND i.is_active = true
-		ORDER BY i.name
-	`
+	hasItemExpenses := includeProfit && itemExpensesTableExists(ctx, r.db)
+
+	var sqlStr string
+	if hasItemExpenses {
+		sqlStr = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name,
+			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	} else {
+		// Legacy response shape for clients that do not request profit data
+		sqlStr = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	}
+
 	rows, err := r.db.QueryContext(ctx, sqlStr, storeID)
 	if err != nil {
 		return nil, err
@@ -598,16 +656,26 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.I
 	for rows.Next() {
 		var i models.Item
 		var desc, hsn, catName sql.NullString
-		err := rows.Scan(
-			&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
-			&catName,
-		)
+		if hasItemExpenses {
+			err = rows.Scan(
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&catName, &i.TotalCost,
+			)
+		} else {
+			err = rows.Scan(
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&catName,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
 		i.Description = desc.String
 		i.HSNCode = hsn.String
 		i.CategoryName = catName.String
+		if includeProfit {
+			applyItemProfitFields(&i)
+		}
 		items = append(items, i)
 	}
 
@@ -623,7 +691,7 @@ func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
 	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent)
 	if err == nil && r.redis != nil {
-		r.redis.Delete(ctx, "items:"+i.StoreID)
+		r.invalidateCache(ctx, i.StoreID)
 	}
 	return err
 }
@@ -632,6 +700,7 @@ func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
 	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6 WHERE id = $7"
 	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.ID)
 	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
 	}
 	return err
@@ -640,9 +709,203 @@ func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
 func (r *ItemRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, "UPDATE items SET is_active = false WHERE id = $1", id)
 	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
 	}
 	return err
+}
+
+func computeItemProfit(price, totalCost float64) (profit, profitPercent float64) {
+	profit = price - totalCost
+	if price > 0 {
+		profitPercent = (profit / price) * 100
+	}
+	return
+}
+
+// ==========================================
+// ITEM EXPENSE REPOSITORY
+// ==========================================
+
+type ItemExpenseRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+func (r *ItemExpenseRepository) invalidateItemCache(ctx context.Context, storeID string) {
+	if r.redis != nil {
+		r.redis.Delete(ctx, itemsCacheKey(storeID, false))
+		r.redis.Delete(ctx, itemsCacheKey(storeID, true))
+		r.redis.Delete(ctx, "items:"+storeID)
+	}
+}
+
+func (r *ItemExpenseRepository) tableExists(ctx context.Context) bool {
+	return itemExpensesTableExists(ctx, r.db)
+}
+
+func (r *ItemExpenseRepository) GetByItemID(ctx context.Context, itemID string) ([]models.ItemExpense, error) {
+	if !r.tableExists(ctx) {
+		return []models.ItemExpense{}, nil
+	}
+	sqlStr := `
+		SELECT id, store_id, item_id, name, description, amount, is_active, created_at
+		FROM item_expenses
+		WHERE item_id = $1 AND is_active = true
+		ORDER BY name
+	`
+	rows, err := r.db.QueryContext(ctx, sqlStr, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var expenses []models.ItemExpense
+	for rows.Next() {
+		var e models.ItemExpense
+		var desc sql.NullString
+		var createdAt sql.NullTime
+		if err := rows.Scan(&e.ID, &e.StoreID, &e.ItemID, &e.Name, &desc, &e.Amount, &e.IsActive, &createdAt); err != nil {
+			return nil, err
+		}
+		e.Description = desc.String
+		if createdAt.Valid {
+			e.CreatedAt = createdAt.Time
+		}
+		expenses = append(expenses, e)
+	}
+	if expenses == nil {
+		expenses = []models.ItemExpense{}
+	}
+	return expenses, nil
+}
+
+func (r *ItemExpenseRepository) Create(ctx context.Context, e models.ItemExpense) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	sqlStr := `INSERT INTO item_expenses (id, store_id, item_id, name, description, amount) VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := r.db.ExecContext(ctx, sqlStr, e.ID, e.StoreID, e.ItemID, e.Name, e.Description, e.Amount)
+	if err == nil {
+		r.invalidateItemCache(ctx, e.StoreID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) Update(ctx context.Context, e models.ItemExpense) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	sqlStr := `UPDATE item_expenses SET name = $1, description = $2, amount = $3 WHERE id = $4`
+	_, err := r.db.ExecContext(ctx, sqlStr, e.Name, e.Description, e.Amount, e.ID)
+	if err == nil {
+		r.invalidateItemCache(ctx, e.StoreID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) Delete(ctx context.Context, id, storeID string) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE item_expenses SET is_active = false WHERE id = $1", id)
+	if err == nil {
+		r.invalidateItemCache(ctx, storeID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) GetProfitReport(ctx context.Context, storeID string) (*models.ItemProfitReport, error) {
+	hasItemExpenses := r.tableExists(ctx)
+
+	var query string
+	if hasItemExpenses {
+		query = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name,
+			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	} else {
+		query = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	}
+
+	items, err := r.db.QueryContext(ctx, query, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer items.Close()
+
+	report := &models.ItemProfitReport{
+		StoreID: storeID,
+		Items:   []models.ItemProfitEntry{},
+	}
+
+	var profitPercents []float64
+	for items.Next() {
+		var item models.Item
+		var desc, hsn, catName sql.NullString
+		if hasItemExpenses {
+			if err := items.Scan(
+				&item.ID, &item.StoreID, &item.CategoryID, &item.Name, &desc, &item.Price, &hsn, &item.TaxPercent, &item.IsActive,
+				&catName, &item.TotalCost,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := items.Scan(
+				&item.ID, &item.StoreID, &item.CategoryID, &item.Name, &desc, &item.Price, &hsn, &item.TaxPercent, &item.IsActive,
+				&catName,
+			); err != nil {
+				return nil, err
+			}
+		}
+		item.Description = desc.String
+		item.HSNCode = hsn.String
+		item.CategoryName = catName.String
+		applyItemProfitFields(&item)
+
+		expenses, err := r.GetByItemID(ctx, item.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		entry := models.ItemProfitEntry{
+			Item:          item,
+			Expenses:      expenses,
+			TotalCost:     item.TotalCost,
+			Profit:        item.Profit,
+			ProfitPercent: item.ProfitPercent,
+		}
+		report.Items = append(report.Items, entry)
+		report.TotalSellingValue += item.Price
+		report.TotalCost += item.TotalCost
+		report.TotalProfit += item.Profit
+		if item.TotalCost > 0 {
+			report.ItemsWithCostCount++
+			profitPercents = append(profitPercents, item.ProfitPercent)
+		}
+	}
+
+	if len(profitPercents) > 0 {
+		var sum float64
+		for _, p := range profitPercents {
+			sum += p
+		}
+		report.AverageProfitPercent = sum / float64(len(profitPercents))
+	}
+
+	return report, nil
 }
 
 // ==========================================
@@ -1258,8 +1521,11 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 		results["tables"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
-	// Reset items
+	// Reset items (item_expenses cascade via FK when table exists)
 	if p.Items {
+		if itemExpensesTableExists(ctx, r.db) {
+			_, _ = tx.ExecContext(ctx, "DELETE FROM item_expenses")
+		}
 		_, err = tx.ExecContext(ctx, "DELETE FROM items")
 		if err != nil {
 			return nil, err

@@ -52,6 +52,38 @@ export interface Item {
   hsnCode?: string;
   taxPercent: number;
   isActive: boolean;
+  totalCost?: number;
+  profit?: number;
+  profitPercent?: number;
+}
+
+export interface ItemExpense {
+  id: string;
+  storeId: string;
+  itemId: string;
+  name: string;
+  description?: string;
+  amount: number;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface ItemProfitEntry {
+  item: Item;
+  expenses: ItemExpense[];
+  totalCost: number;
+  profit: number;
+  profitPercent: number;
+}
+
+export interface ItemProfitReport {
+  storeId: string;
+  items: ItemProfitEntry[];
+  totalSellingValue: number;
+  totalCost: number;
+  totalProfit: number;
+  averageProfitPercent: number;
+  itemsWithCostCount: number;
 }
 
 export interface Table {

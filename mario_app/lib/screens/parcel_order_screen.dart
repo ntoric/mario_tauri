@@ -26,10 +26,11 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   bool _isLoadingItems = false;
   bool _isSaving = false;
   bool _showSummary = false;
-  
+
   // Customer details
   final TextEditingController _customerNameController = TextEditingController();
-  final TextEditingController _customerMobileController = TextEditingController();
+  final TextEditingController _customerMobileController =
+      TextEditingController();
   String _paymentMethod = 'cash';
 
   @override
@@ -72,7 +73,12 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
 
   double get _taxAmount => _orderItems.fold(
         0,
-        (sum, item) => sum + (item.item.price * item.quantity * (item.item.taxPercent ?? 0) / 100),
+        (sum, item) =>
+            sum +
+            (item.item.price *
+                item.quantity *
+                (item.item.taxPercent ?? 0) /
+                100),
       );
 
   double get _total => _subtotal + _taxAmount;
@@ -121,7 +127,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
 
   void _showFeedback(String message, {bool isError = false}) {
     if (!mounted) return;
-    
+
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -153,7 +159,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         duration: const Duration(seconds: 3),
       ),
     );
-    
+
     try {
       Fluttertoast.showToast(
         msg: message,
@@ -187,13 +193,15 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       final data = context.read<DataProvider>();
       final storeId = auth.currentStore!.id;
 
-      final itemsData = _orderItems.map((i) => {
-        'itemId': i.itemId,
-        'quantity': i.quantity,
-        'unitPrice': i.item.price,
-        'taxPercent': i.item.taxPercent ?? 0,
-        'item': i.item.toJson(),
-      }).toList();
+      final itemsData = _orderItems
+          .map((i) => {
+                'itemId': i.itemId,
+                'quantity': i.quantity,
+                'unitPrice': i.item.price,
+                'taxPercent': i.item.taxPercent ?? 0,
+                'item': i.item.toJson(),
+              })
+          .toList();
 
       final order = await data.createParcelOrder(
         items: itemsData,
@@ -201,11 +209,11 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         taxAmount: _taxAmount,
         storeId: storeId,
         paymentMethod: _paymentMethod,
-        customerName: _customerNameController.text.trim().isEmpty 
-            ? null 
+        customerName: _customerNameController.text.trim().isEmpty
+            ? null
             : _customerNameController.text.trim(),
-        customerMobile: _customerMobileController.text.trim().isEmpty 
-            ? null 
+        customerMobile: _customerMobileController.text.trim().isEmpty
+            ? null
             : _customerMobileController.text.trim(),
       );
 
@@ -240,14 +248,15 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
     final data = context.watch<DataProvider>();
     final categories = data.categories;
     final items = data.items.where((item) {
-      final matchesCategory = _selectedCategoryId == null ||
-          item.categoryId == _selectedCategoryId;
+      final matchesCategory =
+          _selectedCategoryId == null || item.categoryId == _selectedCategoryId;
       final matchesSearch = _searchQuery.isEmpty ||
           item.name.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     }).toList();
 
-    final isTablet = ResponsiveHelper.isTablet(context) || ResponsiveHelper.isDesktop(context);
+    final isTablet = ResponsiveHelper.isTablet(context) ||
+        ResponsiveHelper.isDesktop(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -380,30 +389,36 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                       title: const Text('Cash'),
                       value: 'cash',
                       groupValue: _paymentMethod,
-                      onChanged: _isSaving ? null : (value) {
-                        setDialogState(() => _paymentMethod = value!);
-                        setState(() => _paymentMethod = value!);
-                      },
+                      onChanged: _isSaving
+                          ? null
+                          : (value) {
+                              setDialogState(() => _paymentMethod = value!);
+                              setState(() => _paymentMethod = value!);
+                            },
                       activeColor: AppColors.primary,
                     ),
                     RadioListTile<String>(
                       title: const Text('Card'),
                       value: 'card',
                       groupValue: _paymentMethod,
-                      onChanged: _isSaving ? null : (value) {
-                        setDialogState(() => _paymentMethod = value!);
-                        setState(() => _paymentMethod = value!);
-                      },
+                      onChanged: _isSaving
+                          ? null
+                          : (value) {
+                              setDialogState(() => _paymentMethod = value!);
+                              setState(() => _paymentMethod = value!);
+                            },
                       activeColor: AppColors.primary,
                     ),
                     RadioListTile<String>(
                       title: const Text('UPI'),
                       value: 'upi',
                       groupValue: _paymentMethod,
-                      onChanged: _isSaving ? null : (value) {
-                        setDialogState(() => _paymentMethod = value!);
-                        setState(() => _paymentMethod = value!);
-                      },
+                      onChanged: _isSaving
+                          ? null
+                          : (value) {
+                              setDialogState(() => _paymentMethod = value!);
+                              setState(() => _paymentMethod = value!);
+                            },
                       activeColor: AppColors.primary,
                     ),
                   ],
@@ -413,16 +428,20 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: _isSaving ? null : () {
-                Navigator.pop(dialogContext);
-              },
+              onPressed: _isSaving
+                  ? null
+                  : () {
+                      Navigator.pop(dialogContext);
+                    },
               child: const Text('Cancel'),
             ),
             ElevatedButton.icon(
-              onPressed: _isSaving ? null : () async {
-                Navigator.pop(dialogContext);
-                await _submitOrder();
-              },
+              onPressed: _isSaving
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await _submitOrder();
+                    },
               icon: _isSaving
                   ? const SizedBox(
                       width: 18,
@@ -563,7 +582,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -594,7 +614,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
             borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
           ),
           child: ClipRRect(
-            borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+            borderRadius:
+                const BorderRadius.horizontal(left: Radius.circular(20)),
             child: _buildOrderSummaryContent(),
           ),
         ),
@@ -836,67 +857,26 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
-                GestureDetector(
+                _buildCategoryChip(
+                  label: 'All',
+                  isSelected: _selectedCategoryId == null,
                   onTap: () {
                     setState(() => _selectedCategoryId = null);
                   },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _selectedCategoryId == null ? AppColors.primary.withOpacity(0.2) : AppColors.gray200,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.transparent),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.dark.withOpacity(0.15),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      'All',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: _selectedCategoryId == null ? FontWeight.w700 : FontWeight.w500,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 8),
                 ...categories.map((cat) {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
+                    child: _buildCategoryChip(
+                      label: cat.name,
+                      isSelected: _selectedCategoryId == cat.id,
                       onTap: () {
                         setState(() {
-                          _selectedCategoryId = _selectedCategoryId == cat.id ? null : cat.id;
+                          _selectedCategoryId =
+                              _selectedCategoryId == cat.id ? null : cat.id;
                         });
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedCategoryId == cat.id ? AppColors.primary.withOpacity(0.2) : AppColors.gray200,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.transparent),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.dark.withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          cat.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: _selectedCategoryId == cat.id ? FontWeight.w700 : FontWeight.w500,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
                     ),
                   );
                 }),
@@ -938,7 +918,11 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     final item = items[index];
                     final category = categories.firstWhere(
                       (cat) => cat.id == item.categoryId,
-                      orElse: () => Category(id: '', name: 'Uncategorized', storeId: '', isActive: true),
+                      orElse: () => Category(
+                          id: '',
+                          name: 'Uncategorized',
+                          storeId: '',
+                          isActive: true),
                     );
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -971,7 +955,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary.withOpacity(0.1),
+                                        color:
+                                            AppColors.primary.withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -1009,6 +994,51 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCategoryChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          alignment: Alignment.center,
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary.withOpacity(0.2)
+                : AppColors.gray200,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.transparent),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.dark.withOpacity(0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -23,6 +23,7 @@ import ParcelOrderPage from './components/ParcelOrderPage';
 import Expenses from './components/Expenses';
 import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
+import ItemProfitReport from './components/ItemProfitReport';
 import { api } from './services/api';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -124,6 +125,7 @@ const AppRoutes: React.FC = () => {
         <Route path="reports/top-items" element={<TopSellingItemsReport />} />
         <Route path="reports/top-categories" element={<TopSellingCategoriesReport />} />
         <Route path="reports/revenue" element={<RevenueReport />} />
+        <Route path="reports/item-profit" element={<ItemProfitReport />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="expense-reports" element={<ExpenseReports />} />
       </Route>

@@ -1,4 +1,4 @@
-.PHONY: up down build logs ps clean set-version release
+.PHONY: up down build logs ps clean set-version release migrate db-migrate
 
 # Docker Compose commands
 up:
@@ -23,7 +23,7 @@ logs-backend:
 	docker-compose logs -f backend
 
 logs-db:
-	docker-compose logs -f postgres
+	docker-compose logs -f db
 
 ps:
 	docker-compose ps
@@ -33,10 +33,15 @@ clean:
 
 # Database commands
 db-shell:
-	docker-compose exec postgres psql -U postgres -d cafe
+	docker-compose exec db psql -U $${DB_USER:-postgres} -d $${DB_NAME:-cafe}
 
+# Run migrations locally (uses .env from project root or backend/)
+migrate:
+	cd backend && go run ./cmd/migrate
+
+# Run migrations inside the Docker backend container
 db-migrate:
-	docker-compose exec backend ./server migrate
+	docker-compose exec backend ./migrate
 
 # Health checks
 health:

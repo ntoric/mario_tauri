@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 
@@ -22,7 +22,6 @@ interface ItemDateRow {
 const TopSellingItemsReport: React.FC = () => {
   const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
   const [dateRange, setDateRange] = useState<DateRange>('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('count');
@@ -33,13 +32,10 @@ const TopSellingItemsReport: React.FC = () => {
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Top Selling Items',
-      subtitle: 'Detailed item-wise sales report',
-      actions: null,
-    });
-  }, [setHeaderContent]);
+  useReportPageHeader({
+    title: 'Top Selling Items',
+    subtitle: 'Detailed item-wise sales report',
+  });
 
   const getRangeStart = (range: DateRange): Date => {
     const d = new Date();

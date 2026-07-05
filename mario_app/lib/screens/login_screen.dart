@@ -20,7 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
 
   @override
@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final auth = context.read<AuthProvider>();
-    
+
     final success = await auth.login(
       _usernameController.text.trim(),
       _passwordController.text,
@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // Check if store is active
       final store = auth.currentStore;
       final user = auth.user;
-      
+
       // If user is not superadmin and store is inactive, show support page
       if (user?.role != 'superadmin' && store != null && !store.isActive) {
         // Fetch support config
@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final response = await http.get(
             Uri.parse('${auth.backend.api.baseUrl}/support-config'),
           );
-          
+
           if (response.statusCode == 200) {
             final data = json.decode(response.body);
             Navigator.of(context).pushReplacement(
@@ -84,17 +84,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
       }
-      
+
       final dataProvider = context.read<DataProvider>();
       await dataProvider.loadAllData(auth);
-      
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -111,25 +109,26 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Container(
                 constraints: BoxConstraints(
-                  maxWidth: isDesktop ? 440 : (isTablet ? 400 : double.infinity),
+                  maxWidth:
+                      isDesktop ? 440 : (isTablet ? 400 : double.infinity),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 48),
                     Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: AppColors.light,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.15),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                      width: 82,
+                      height: 82,
+                      decoration: ClayStyles.surface(
+                        radiusValue: 26,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white,
+                            AppColors.primarySoft,
+                          ],
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
@@ -158,101 +157,130 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    if (auth.error != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: AppColors.danger,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                auth.error!,
-                                style: const TextStyle(
-                                  color: AppColors.danger,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: ClayStyles.surface(
+                        radiusValue: 32,
+                        border:
+                            Border.all(color: Colors.white.withOpacity(0.7)),
                       ),
-                      const SizedBox(height: 16),
-                    ],
-                    Form(
-                      key: _formKey,
                       child: Column(
                         children: [
-                          TextFormField(
-                            controller: _usernameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Username',
-                              prefixIcon: Icon(Icons.person_outline),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your username';
-                              }
-                              return null;
-                            },
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            decoration: InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
+                          if (auth.error != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: ClayStyles.accent(
+                                accent: AppColors.danger,
+                                radiusValue: 20,
+                                opacity: 0.12,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: AppColors.danger,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      auth.error!,
+                                      style: const TextStyle(
+                                        color: AppColors.danger,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your password';
-                              }
-                              return null;
-                            },
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _login(),
-                          ),
-                          const SizedBox(height: 28),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: auth.isLoading ? null : _login,
-                              child: auth.isLoading
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          AppColors.light,
+                            const SizedBox(height: 16),
+                          ],
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              children: [
+                                Container(
+                                  decoration: ClayStyles.inset(radiusValue: 22),
+                                  child: TextFormField(
+                                    controller: _usernameController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Username',
+                                      prefixIcon: Icon(Icons.person_outline),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter your username';
+                                      }
+                                      return null;
+                                    },
+                                    textInputAction: TextInputAction.next,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Container(
+                                  decoration: ClayStyles.inset(radiusValue: 22),
+                                  child: TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    decoration: InputDecoration(
+                                      labelText: 'Password',
+                                      prefixIcon:
+                                          const Icon(Icons.lock_outline),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_off
+                                              : Icons.visibility,
                                         ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _obscurePassword =
+                                                !_obscurePassword;
+                                          });
+                                        },
                                       ),
-                                    )
-                                  : const Text('Sign In'),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter your password';
+                                      }
+                                      return null;
+                                    },
+                                    textInputAction: TextInputAction.done,
+                                    onFieldSubmitted: (_) => _login(),
+                                  ),
+                                ),
+                                const SizedBox(height: 28),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 58,
+                                  child: ElevatedButton(
+                                    onPressed: auth.isLoading ? null : _login,
+                                    style: ElevatedButton.styleFrom(
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: ClayStyles.radius(22),
+                                      ),
+                                      backgroundColor: AppColors.primary,
+                                      shadowColor: Colors.transparent,
+                                    ),
+                                    child: auth.isLoading
+                                        ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                AppColors.light,
+                                              ),
+                                            ),
+                                          )
+                                        : const Text('Sign In'),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
