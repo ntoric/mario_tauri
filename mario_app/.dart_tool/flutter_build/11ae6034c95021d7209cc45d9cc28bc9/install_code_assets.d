@@ -1,0 +1,1 @@
+ /Users/apple/Projects/test/mario_tauri/mario_app/.dart_tool/flutter_build/11ae6034c95021d7209cc45d9cc28bc9/native_assets.json: 
