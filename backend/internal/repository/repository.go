@@ -70,33 +70,41 @@ func (c *MemoryCache) DeleteAllWithPrefix(prefix string) {
 }
 
 type Repository struct {
-	Store         *StoreRepository
-	User          *UserRepository
-	Category      *CategoryRepository
-	Item          *ItemRepository
-	Table         *TableRepository
-	Order         *OrderRepository
-	Bill          *BillRepository
-	System        *SystemRepository
-	AppUpdate     *AppUpdateRepository
-	SupportConfig *SupportConfigRepository
-	Cache         *MemoryCache
+	Store              *StoreRepository
+	User               *UserRepository
+	Category           *CategoryRepository
+	Item               *ItemRepository
+	Table              *TableRepository
+	Order              *OrderRepository
+	Bill               *BillRepository
+	System             *SystemRepository
+	AppUpdate          *AppUpdateRepository
+	SupportConfig      *SupportConfigRepository
+	ExpenseCategory    *ExpenseCategoryRepository
+	Expense            *ExpenseRepository
+	ItemExpense        *ItemExpenseRepository
+	RevenueReport      *RevenueReportRepository
+	Cache              *MemoryCache
 }
 
 func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 	cache := NewMemoryCache()
 	return &Repository{
-		Store:         &StoreRepository{db: db},
-		User:          &UserRepository{db: db},
-		Category:      &CategoryRepository{db: db, redis: redisCache},
-		Item:          &ItemRepository{db: db, redis: redisCache},
-		Table:         &TableRepository{db: db, cache: cache},
-		Order:         &OrderRepository{db: db},
-		Bill:          &BillRepository{db: db, redis: redisCache},
-		System:        &SystemRepository{db: db},
-		AppUpdate:     &AppUpdateRepository{db: db},
-		SupportConfig: &SupportConfigRepository{db: db},
-		Cache:         cache,
+		Store:           &StoreRepository{db: db},
+		User:            &UserRepository{db: db},
+		Category:        &CategoryRepository{db: db, redis: redisCache},
+		Item:            &ItemRepository{db: db, redis: redisCache},
+		Table:           &TableRepository{db: db, cache: cache},
+		Order:           &OrderRepository{db: db},
+		Bill:            &BillRepository{db: db, redis: redisCache},
+		System:          &SystemRepository{db: db},
+		AppUpdate:       &AppUpdateRepository{db: db},
+		SupportConfig:   &SupportConfigRepository{db: db},
+		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
+		Expense:         &ExpenseRepository{db: db, redis: redisCache},
+		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
+		RevenueReport:   &RevenueReportRepository{db: db},
+		Cache:           cache,
 	}
 }
 
@@ -113,13 +121,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -133,11 +141,11 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var stores []models.Store
 	for rows.Next() {
 		var s models.Store
-		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL sql.NullString
+		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-			&logoURL, &s.IsActive, &s.CreatedAt,
+			&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -151,21 +159,22 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.PrinterVendorID = printerVendor.String
 		s.PrinterProductID = printerProduct.String
 		s.LogoURL = logoURL.String
+		s.ThemeColor = themeColor.String
 		stores = append(stores, s)
 	}
 	return stores, nil
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, is_active, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
-	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL sql.NullString
+	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-		&logoURL, &s.IsActive, &s.CreatedAt,
+		&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -182,6 +191,7 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	s.PrinterVendorID = printerVendor.String
 	s.PrinterProductID = printerProduct.String
 	s.LogoURL = logoURL.String
+	s.ThemeColor = themeColor.String
 	return &s, nil
 }
 
@@ -561,8 +571,47 @@ type ItemRepository struct {
 	redis *RedisCache
 }
 
-func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.Item, error) {
-	cacheKey := "items:" + storeID
+const itemsCacheKeyPrefix = "items:v2:"
+
+func itemsCacheKey(storeID string, includeProfit bool) string {
+	if includeProfit {
+		return itemsCacheKeyPrefix + "profit:" + storeID
+	}
+	return itemsCacheKeyPrefix + storeID
+}
+
+func itemExpensesTableExists(ctx context.Context, db *sql.DB) bool {
+	var exists bool
+	err := db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = current_schema() AND table_name = 'item_expenses'
+		)
+	`).Scan(&exists)
+	return err == nil && exists
+}
+
+func applyItemProfitFields(i *models.Item) {
+	if i.TotalCost <= 0 {
+		i.TotalCost = 0
+		i.Profit = 0
+		i.ProfitPercent = 0
+		return
+	}
+	i.Profit, i.ProfitPercent = computeItemProfit(i.Price, i.TotalCost)
+}
+
+func (r *ItemRepository) invalidateCache(ctx context.Context, storeID string) {
+	if r.redis == nil {
+		return
+	}
+	r.redis.Delete(ctx, itemsCacheKey(storeID, false))
+	r.redis.Delete(ctx, itemsCacheKey(storeID, true))
+	r.redis.Delete(ctx, "items:"+storeID)
+}
+
+func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProfit bool) ([]models.Item, error) {
+	cacheKey := itemsCacheKey(storeID, includeProfit)
 	if r.redis != nil {
 		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
 			var cached []models.Item
@@ -572,14 +621,31 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.I
 		}
 	}
 
-	sqlStr := `
-		SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
-		       c.name as category_name
-		FROM items i
-		LEFT JOIN categories c ON i.category_id = c.id
-		WHERE i.store_id = $1 AND i.is_active = true
-		ORDER BY i.name
-	`
+	hasItemExpenses := includeProfit && itemExpensesTableExists(ctx, r.db)
+
+	var sqlStr string
+	if hasItemExpenses {
+		sqlStr = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name,
+			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	} else {
+		// Legacy response shape for clients that do not request profit data
+		sqlStr = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	}
+
 	rows, err := r.db.QueryContext(ctx, sqlStr, storeID)
 	if err != nil {
 		return nil, err
@@ -590,16 +656,26 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string) ([]models.I
 	for rows.Next() {
 		var i models.Item
 		var desc, hsn, catName sql.NullString
-		err := rows.Scan(
-			&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
-			&catName,
-		)
+		if hasItemExpenses {
+			err = rows.Scan(
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&catName, &i.TotalCost,
+			)
+		} else {
+			err = rows.Scan(
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&catName,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
 		i.Description = desc.String
 		i.HSNCode = hsn.String
 		i.CategoryName = catName.String
+		if includeProfit {
+			applyItemProfitFields(&i)
+		}
 		items = append(items, i)
 	}
 
@@ -615,7 +691,7 @@ func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
 	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
 	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent)
 	if err == nil && r.redis != nil {
-		r.redis.Delete(ctx, "items:"+i.StoreID)
+		r.invalidateCache(ctx, i.StoreID)
 	}
 	return err
 }
@@ -624,6 +700,7 @@ func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
 	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6 WHERE id = $7"
 	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.ID)
 	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
 	}
 	return err
@@ -632,9 +709,203 @@ func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
 func (r *ItemRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, "UPDATE items SET is_active = false WHERE id = $1", id)
 	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
 	}
 	return err
+}
+
+func computeItemProfit(price, totalCost float64) (profit, profitPercent float64) {
+	profit = price - totalCost
+	if price > 0 {
+		profitPercent = (profit / price) * 100
+	}
+	return
+}
+
+// ==========================================
+// ITEM EXPENSE REPOSITORY
+// ==========================================
+
+type ItemExpenseRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+func (r *ItemExpenseRepository) invalidateItemCache(ctx context.Context, storeID string) {
+	if r.redis != nil {
+		r.redis.Delete(ctx, itemsCacheKey(storeID, false))
+		r.redis.Delete(ctx, itemsCacheKey(storeID, true))
+		r.redis.Delete(ctx, "items:"+storeID)
+	}
+}
+
+func (r *ItemExpenseRepository) tableExists(ctx context.Context) bool {
+	return itemExpensesTableExists(ctx, r.db)
+}
+
+func (r *ItemExpenseRepository) GetByItemID(ctx context.Context, itemID string) ([]models.ItemExpense, error) {
+	if !r.tableExists(ctx) {
+		return []models.ItemExpense{}, nil
+	}
+	sqlStr := `
+		SELECT id, store_id, item_id, name, description, amount, is_active, created_at
+		FROM item_expenses
+		WHERE item_id = $1 AND is_active = true
+		ORDER BY name
+	`
+	rows, err := r.db.QueryContext(ctx, sqlStr, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var expenses []models.ItemExpense
+	for rows.Next() {
+		var e models.ItemExpense
+		var desc sql.NullString
+		var createdAt sql.NullTime
+		if err := rows.Scan(&e.ID, &e.StoreID, &e.ItemID, &e.Name, &desc, &e.Amount, &e.IsActive, &createdAt); err != nil {
+			return nil, err
+		}
+		e.Description = desc.String
+		if createdAt.Valid {
+			e.CreatedAt = createdAt.Time
+		}
+		expenses = append(expenses, e)
+	}
+	if expenses == nil {
+		expenses = []models.ItemExpense{}
+	}
+	return expenses, nil
+}
+
+func (r *ItemExpenseRepository) Create(ctx context.Context, e models.ItemExpense) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	sqlStr := `INSERT INTO item_expenses (id, store_id, item_id, name, description, amount) VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := r.db.ExecContext(ctx, sqlStr, e.ID, e.StoreID, e.ItemID, e.Name, e.Description, e.Amount)
+	if err == nil {
+		r.invalidateItemCache(ctx, e.StoreID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) Update(ctx context.Context, e models.ItemExpense) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	sqlStr := `UPDATE item_expenses SET name = $1, description = $2, amount = $3 WHERE id = $4`
+	_, err := r.db.ExecContext(ctx, sqlStr, e.Name, e.Description, e.Amount, e.ID)
+	if err == nil {
+		r.invalidateItemCache(ctx, e.StoreID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) Delete(ctx context.Context, id, storeID string) error {
+	if !r.tableExists(ctx) {
+		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE item_expenses SET is_active = false WHERE id = $1", id)
+	if err == nil {
+		r.invalidateItemCache(ctx, storeID)
+	}
+	return err
+}
+
+func (r *ItemExpenseRepository) GetProfitReport(ctx context.Context, storeID string) (*models.ItemProfitReport, error) {
+	hasItemExpenses := r.tableExists(ctx)
+
+	var query string
+	if hasItemExpenses {
+		query = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name,
+			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	} else {
+		query = `
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			       c.name as category_name
+			FROM items i
+			LEFT JOIN categories c ON i.category_id = c.id
+			WHERE i.store_id = $1 AND i.is_active = true
+			ORDER BY i.name
+		`
+	}
+
+	items, err := r.db.QueryContext(ctx, query, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer items.Close()
+
+	report := &models.ItemProfitReport{
+		StoreID: storeID,
+		Items:   []models.ItemProfitEntry{},
+	}
+
+	var profitPercents []float64
+	for items.Next() {
+		var item models.Item
+		var desc, hsn, catName sql.NullString
+		if hasItemExpenses {
+			if err := items.Scan(
+				&item.ID, &item.StoreID, &item.CategoryID, &item.Name, &desc, &item.Price, &hsn, &item.TaxPercent, &item.IsActive,
+				&catName, &item.TotalCost,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := items.Scan(
+				&item.ID, &item.StoreID, &item.CategoryID, &item.Name, &desc, &item.Price, &hsn, &item.TaxPercent, &item.IsActive,
+				&catName,
+			); err != nil {
+				return nil, err
+			}
+		}
+		item.Description = desc.String
+		item.HSNCode = hsn.String
+		item.CategoryName = catName.String
+		applyItemProfitFields(&item)
+
+		expenses, err := r.GetByItemID(ctx, item.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		entry := models.ItemProfitEntry{
+			Item:          item,
+			Expenses:      expenses,
+			TotalCost:     item.TotalCost,
+			Profit:        item.Profit,
+			ProfitPercent: item.ProfitPercent,
+		}
+		report.Items = append(report.Items, entry)
+		report.TotalSellingValue += item.Price
+		report.TotalCost += item.TotalCost
+		report.TotalProfit += item.Profit
+		if item.TotalCost > 0 {
+			report.ItemsWithCostCount++
+			profitPercents = append(profitPercents, item.ProfitPercent)
+		}
+	}
+
+	if len(profitPercents) > 0 {
+		var sum float64
+		for _, p := range profitPercents {
+			sum += p
+		}
+		report.AverageProfitPercent = sum / float64(len(profitPercents))
+	}
+
+	return report, nil
 }
 
 // ==========================================
@@ -666,8 +937,13 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 }
 
 func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
+	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d seats=%d pos=(%d,%d)\n",
+		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
 	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, seats, position_x, position_y) VALUES ($1, $2, $3, $4, $5, $6)",
 		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
+	if err != nil {
+		fmt.Println("TableRepository.Create: exec error -", err)
+	}
 	return err
 }
 
@@ -690,7 +966,7 @@ func (r *TableRepository) Update(ctx context.Context, t models.Table) error {
 }
 
 func (r *TableRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE tables SET is_active = false WHERE id = $1", id)
+	_, err := r.db.ExecContext(ctx, "DELETE FROM tables WHERE id = $1", id)
 	return err
 }
 
@@ -703,10 +979,10 @@ type OrderRepository struct {
 }
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
-	sqlStr := `
+		sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -755,11 +1031,12 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 	for rows.Next() {
 		var o models.Order
 		var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+		var cancelledAt sql.NullTime
 		var itemsBytes []byte
 		err := rows.Scan(
 			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
 			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt,
+			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 			&itemsBytes,
 		)
 		if err != nil {
@@ -772,6 +1049,9 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 		o.OrderType = orderType.String
 		o.CustomerName = customerName.String
 		o.CustomerMobile = customerMobile.String
+		if cancelledAt.Valid {
+			o.CancelledAt = &cancelledAt.Time
+		}
 
 		if len(itemsBytes) > 0 {
 			var items []models.OrderItem
@@ -792,7 +1072,7 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -821,11 +1101,12 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 
 	var o models.Order
 	var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+	var cancelledAt sql.NullTime
 	var itemsBytes []byte
 	err := row.Scan(
 		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
 		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt,
+		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 		&itemsBytes,
 	)
 	if err != nil {
@@ -841,6 +1122,9 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	o.OrderType = orderType.String
 	o.CustomerName = customerName.String
 	o.CustomerMobile = customerMobile.String
+	if cancelledAt.Valid {
+		o.CancelledAt = &cancelledAt.Time
+	}
 
 	if len(itemsBytes) > 0 {
 		var items []models.OrderItem
@@ -978,10 +1262,27 @@ func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod string
 }
 
 func (r *OrderRepository) Cancel(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1
 	`, id)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE bills SET status = 'cancelled' WHERE order_id = $1 AND (status IS NULL OR status = 'active')
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // ==========================================
@@ -996,7 +1297,7 @@ type BillRepository struct {
 func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.Bill, error) {
 	sqlStr := `
 		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
-		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
+		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.status, b.generated_at, b.generated_by,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -1031,11 +1332,11 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 	var bills []models.Bill
 	for rows.Next() {
 		var b models.Bill
-		var method, customer, customerMobile, generatedBy sql.NullString
+		var method, customer, customerMobile, generatedBy, billStatus sql.NullString
 		var itemsBytes []byte
 		err := rows.Scan(
 			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
-			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
+			&method, &customer, &customerMobile, &b.IsPrinted, &billStatus, &b.GeneratedAt, &generatedBy,
 			&itemsBytes,
 		)
 		if err != nil {
@@ -1045,6 +1346,10 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 		b.CustomerName = customer.String
 		b.CustomerMobile = customerMobile.String
 		b.GeneratedBy = generatedBy.String
+		b.Status = billStatus.String
+		if b.Status == "" {
+			b.Status = "active"
+		}
 
 		if len(itemsBytes) > 0 {
 			var items []models.OrderItem
@@ -1216,8 +1521,11 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 		results["tables"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
-	// Reset items
+	// Reset items (item_expenses cascade via FK when table exists)
 	if p.Items {
+		if itemExpensesTableExists(ctx, r.db) {
+			_, _ = tx.ExecContext(ctx, "DELETE FROM item_expenses")
+		}
 		_, err = tx.ExecContext(ctx, "DELETE FROM items")
 		if err != nil {
 			return nil, err
@@ -1535,4 +1843,628 @@ func (r *SupportConfigRepository) Save(ctx context.Context, req models.SupportCo
 	}
 
 	return tx.Commit()
+}
+
+// ==========================================
+// EXPENSE CATEGORY REPOSITORY
+// ==========================================
+
+type ExpenseCategoryRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+func (r *ExpenseCategoryRepository) GetAll(ctx context.Context, storeID string) ([]models.ExpenseCategory, error) {
+	cacheKey := "expense_categories:" + storeID
+	if r.redis != nil {
+		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
+			var cached []models.ExpenseCategory
+			if err := json.Unmarshal(raw, &cached); err == nil {
+				return cached, nil
+			}
+		}
+	}
+
+	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, name, description, is_active FROM expense_categories WHERE store_id = $1 AND is_active = true ORDER BY name", storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []models.ExpenseCategory
+	for rows.Next() {
+		var c models.ExpenseCategory
+		var desc sql.NullString
+		if err := rows.Scan(&c.ID, &c.StoreID, &c.Name, &desc, &c.IsActive); err != nil {
+			return nil, err
+		}
+		c.Description = desc.String
+		categories = append(categories, c)
+	}
+
+	if r.redis != nil {
+		if raw, err := json.Marshal(categories); err == nil {
+			r.redis.Set(ctx, cacheKey, raw, 30*time.Minute)
+		}
+	}
+	return categories, nil
+}
+
+func (r *ExpenseCategoryRepository) Create(ctx context.Context, c models.ExpenseCategory) error {
+	_, err := r.db.ExecContext(ctx, "INSERT INTO expense_categories (id, store_id, name, description) VALUES ($1, $2, $3, $4)",
+		c.ID, c.StoreID, c.Name, c.Description)
+	if err == nil && r.redis != nil {
+		r.redis.Delete(ctx, "expense_categories:"+c.StoreID)
+	}
+	return err
+}
+
+func (r *ExpenseCategoryRepository) Update(ctx context.Context, c models.ExpenseCategory) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET name = $1, description = $2 WHERE id = $3",
+		c.Name, c.Description, c.ID)
+	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, "expense_categories:")
+	}
+	return err
+}
+
+func (r *ExpenseCategoryRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET is_active = false WHERE id = $1", id)
+	if err == nil && r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, "expense_categories:")
+	}
+	return err
+}
+
+// ==========================================
+// EXPENSE REPOSITORY
+// ==========================================
+
+type ExpenseRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+func (r *ExpenseRepository) GetAll(ctx context.Context, storeID string, startDate, endDate string) ([]models.Expense, error) {
+	sqlStr := `
+		SELECT e.id, e.store_id, e.category_id, ec.name as category_name, e.title, e.description, 
+		       e.amount, e.expense_date, e.payment_method, e.receipt_number, e.vendor, 
+		       e.attachments, e.is_active, e.created_at, e.updated_at, e.created_by
+		FROM expenses e
+		LEFT JOIN expense_categories ec ON e.category_id = ec.id
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	var args []interface{}
+	args = append(args, storeID)
+	idx := 2
+
+	if startDate != "" {
+		sqlStr += fmt.Sprintf(" AND e.expense_date >= $%d", idx)
+		args = append(args, startDate)
+		idx++
+	}
+
+	if endDate != "" {
+		sqlStr += fmt.Sprintf(" AND e.expense_date <= $%d", idx)
+		args = append(args, endDate)
+		idx++
+	}
+
+	sqlStr += " ORDER BY e.expense_date DESC"
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var expenses []models.Expense
+	for rows.Next() {
+		var e models.Expense
+		var categoryName, description, paymentMethod, receiptNumber, vendor, createdBy sql.NullString
+		var attachmentsBytes []byte
+		err := rows.Scan(
+			&e.ID, &e.StoreID, &e.CategoryID, &categoryName, &e.Title, &description,
+			&e.Amount, &e.ExpenseDate, &paymentMethod, &receiptNumber, &vendor,
+			&attachmentsBytes, &e.IsActive, &e.CreatedAt, &e.UpdatedAt, &createdBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+		e.CategoryName = categoryName.String
+		e.Description = description.String
+		e.PaymentMethod = paymentMethod.String
+		e.ReceiptNumber = receiptNumber.String
+		e.Vendor = vendor.String
+		e.CreatedBy = createdBy.String
+
+		if len(attachmentsBytes) > 0 {
+			var attachments []string
+			if err := json.Unmarshal(attachmentsBytes, &attachments); err == nil {
+				e.Attachments = attachments
+			}
+		}
+		if e.Attachments == nil {
+			e.Attachments = []string{}
+		}
+
+		expenses = append(expenses, e)
+	}
+	return expenses, nil
+}
+
+func (r *ExpenseRepository) GetByID(ctx context.Context, id string) (*models.Expense, error) {
+	sqlStr := `
+		SELECT e.id, e.store_id, e.category_id, ec.name as category_name, e.title, e.description, 
+		       e.amount, e.expense_date, e.payment_method, e.receipt_number, e.vendor, 
+		       e.attachments, e.is_active, e.created_at, e.updated_at, e.created_by
+		FROM expenses e
+		LEFT JOIN expense_categories ec ON e.category_id = ec.id
+		WHERE e.id = $1
+	`
+	row := r.db.QueryRowContext(ctx, sqlStr, id)
+
+	var e models.Expense
+	var categoryName, description, paymentMethod, receiptNumber, vendor, createdBy sql.NullString
+	var attachmentsBytes []byte
+	err := row.Scan(
+		&e.ID, &e.StoreID, &e.CategoryID, &categoryName, &e.Title, &description,
+		&e.Amount, &e.ExpenseDate, &paymentMethod, &receiptNumber, &vendor,
+		&attachmentsBytes, &e.IsActive, &e.CreatedAt, &e.UpdatedAt, &createdBy,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	e.CategoryName = categoryName.String
+	e.Description = description.String
+	e.PaymentMethod = paymentMethod.String
+	e.ReceiptNumber = receiptNumber.String
+	e.Vendor = vendor.String
+	e.CreatedBy = createdBy.String
+
+	if len(attachmentsBytes) > 0 {
+		var attachments []string
+		if err := json.Unmarshal(attachmentsBytes, &attachments); err == nil {
+			e.Attachments = attachments
+		}
+	}
+	if e.Attachments == nil {
+		e.Attachments = []string{}
+	}
+
+	return &e, nil
+}
+
+func (r *ExpenseRepository) Create(ctx context.Context, e models.Expense) error {
+	if e.Attachments == nil {
+		e.Attachments = []string{}
+	}
+	attachmentsJSON, err := json.Marshal(e.Attachments)
+	if err != nil {
+		return err
+	}
+
+	sqlStr := `INSERT INTO expenses (id, store_id, category_id, title, description, amount, expense_date, payment_method, receipt_number, vendor, attachments, created_by)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)`
+	
+	var categoryID, paymentMethod, receiptNumber, vendor, createdBy interface{}
+	if e.CategoryID != "" {
+		categoryID = e.CategoryID
+	}
+	if e.PaymentMethod != "" {
+		paymentMethod = e.PaymentMethod
+	}
+	if e.ReceiptNumber != "" {
+		receiptNumber = e.ReceiptNumber
+	}
+	if e.Vendor != "" {
+		vendor = e.Vendor
+	}
+	if e.CreatedBy != "" {
+		createdBy = e.CreatedBy
+	}
+
+	_, err = r.db.ExecContext(ctx, sqlStr,
+		e.ID, e.StoreID, categoryID, e.Title, e.Description, e.Amount, e.ExpenseDate,
+		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), createdBy)
+	return err
+}
+
+func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error {
+	if e.Attachments == nil {
+		e.Attachments = []string{}
+	}
+	attachmentsJSON, err := json.Marshal(e.Attachments)
+	if err != nil {
+		return err
+	}
+
+	sqlStr := `UPDATE expenses SET category_id = $1, title = $2, description = $3, amount = $4, 
+	           expense_date = $5, payment_method = $6, receipt_number = $7, vendor = $8, 
+	           attachments = $9::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
+	
+	var categoryID, paymentMethod, receiptNumber, vendor interface{}
+	if e.CategoryID != "" {
+		categoryID = e.CategoryID
+	}
+	if e.PaymentMethod != "" {
+		paymentMethod = e.PaymentMethod
+	}
+	if e.ReceiptNumber != "" {
+		receiptNumber = e.ReceiptNumber
+	}
+	if e.Vendor != "" {
+		vendor = e.Vendor
+	}
+
+	_, err = r.db.ExecContext(ctx, sqlStr,
+		categoryID, e.Title, e.Description, e.Amount, e.ExpenseDate,
+		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), e.ID)
+	return err
+}
+
+func (r *ExpenseRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE expenses SET is_active = false WHERE id = $1", id)
+	return err
+}
+
+func (r *ExpenseRepository) GetReportByCategory(ctx context.Context, storeID, startDate, endDate string) ([]models.ExpenseReport, error) {
+	sqlStr := `
+		SELECT ec.id as category_id, ec.name as category_name, 
+		       COALESCE(SUM(e.amount), 0) as total_amount,
+		       COUNT(e.id) as expense_count
+		FROM expense_categories ec
+		LEFT JOIN expenses e ON ec.id = e.category_id 
+			AND e.store_id = $1 
+			AND e.is_active = true
+		WHERE ec.store_id = $1 AND ec.is_active = true
+	`
+	var args []interface{}
+	args = append(args, storeID)
+	idx := 2
+
+	if startDate != "" {
+		sqlStr += fmt.Sprintf(" AND (e.expense_date IS NULL OR e.expense_date >= $%d)", idx)
+		args = append(args, startDate)
+		idx++
+	}
+
+	if endDate != "" {
+		sqlStr += fmt.Sprintf(" AND (e.expense_date IS NULL OR e.expense_date <= $%d)", idx)
+		args = append(args, endDate)
+		idx++
+	}
+
+	sqlStr += " GROUP BY ec.id, ec.name ORDER BY total_amount DESC"
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reports []models.ExpenseReport
+	for rows.Next() {
+		var r models.ExpenseReport
+		if err := rows.Scan(&r.CategoryID, &r.CategoryName, &r.TotalAmount, &r.ExpenseCount); err != nil {
+			return nil, err
+		}
+		reports = append(reports, r)
+	}
+	return reports, nil
+}
+
+func (r *ExpenseRepository) GetSummaryByDate(ctx context.Context, storeID, startDate, endDate string) ([]models.ExpenseSummary, error) {
+	sqlStr := `
+		SELECT DATE(e.expense_date) as date, 
+		       COALESCE(SUM(e.amount), 0) as total_amount,
+		       COUNT(e.id) as expense_count
+		FROM expenses e
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	var args []interface{}
+	args = append(args, storeID)
+	idx := 2
+
+	if startDate != "" {
+		sqlStr += fmt.Sprintf(" AND e.expense_date >= $%d", idx)
+		args = append(args, startDate)
+		idx++
+	}
+
+	if endDate != "" {
+		sqlStr += fmt.Sprintf(" AND e.expense_date <= $%d", idx)
+		args = append(args, endDate)
+		idx++
+	}
+
+	sqlStr += " GROUP BY DATE(e.expense_date) ORDER BY date DESC"
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []models.ExpenseSummary
+	for rows.Next() {
+		var s models.ExpenseSummary
+		if err := rows.Scan(&s.Date, &s.TotalAmount, &s.ExpenseCount); err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, s)
+	}
+	return summaries, nil
+}
+
+// ==========================================
+// REVENUE REPORT REPOSITORY
+// ==========================================
+
+type RevenueReportRepository struct {
+	db *sql.DB
+}
+
+func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID, startDate, endDate string) (*models.RevenueReport, error) {
+	// Build date filter conditions
+	var dateFilter string
+	var args []interface{}
+	args = append(args, storeID)
+	idx := 2
+
+	if startDate != "" {
+		dateFilter += fmt.Sprintf(" AND DATE(b.generated_at) >= $%d::date", idx)
+		args = append(args, startDate)
+		idx++
+	}
+
+	if endDate != "" {
+		dateFilter += fmt.Sprintf(" AND DATE(b.generated_at) <= $%d::date", idx)
+		args = append(args, endDate)
+		idx++
+	}
+
+	// Get total revenue from bills (exclude cancelled bills)
+	revenueSQL := `
+		SELECT COALESCE(SUM(b.total), 0), COUNT(b.id)
+		FROM bills b
+		WHERE b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')
+	` + dateFilter
+
+	var totalRevenue float64
+	var totalBills int
+	err := r.db.QueryRowContext(ctx, revenueSQL, args...).Scan(&totalRevenue, &totalBills)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get total expenses
+	expenseSQL := `
+		SELECT COALESCE(SUM(e.amount), 0), COUNT(e.id)
+		FROM expenses e
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	var expenseArgs []interface{}
+	expenseArgs = append(expenseArgs, storeID)
+	expenseIdx := 2
+
+	if startDate != "" {
+		expenseSQL += fmt.Sprintf(" AND DATE(e.expense_date) >= $%d::date", expenseIdx)
+		expenseArgs = append(expenseArgs, startDate)
+		expenseIdx++
+	}
+
+	if endDate != "" {
+		expenseSQL += fmt.Sprintf(" AND DATE(e.expense_date) <= $%d::date", expenseIdx)
+		expenseArgs = append(expenseArgs, endDate)
+		expenseIdx++
+	}
+
+	var totalExpenses float64
+	var totalExpenseCount int
+	err = r.db.QueryRowContext(ctx, expenseSQL, expenseArgs...).Scan(&totalExpenses, &totalExpenseCount)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get completed orders count
+	orderSQL := `
+		SELECT COUNT(o.id)
+		FROM orders o
+		WHERE o.store_id = $1 AND o.status = 'completed'
+	`
+	var orderArgs []interface{}
+	orderArgs = append(orderArgs, storeID)
+	orderIdx := 2
+
+	if startDate != "" {
+		orderSQL += fmt.Sprintf(" AND DATE(o.created_at) >= $%d::date", orderIdx)
+		orderArgs = append(orderArgs, startDate)
+		orderIdx++
+	}
+
+	if endDate != "" {
+		orderSQL += fmt.Sprintf(" AND DATE(o.created_at) <= $%d::date", orderIdx)
+		orderArgs = append(orderArgs, endDate)
+		orderIdx++
+	}
+
+	var totalOrders int
+	err = r.db.QueryRowContext(ctx, orderSQL, orderArgs...).Scan(&totalOrders)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate net profit and average order value
+	netProfit := totalRevenue - totalExpenses
+	avgOrderValue := 0.0
+	if totalOrders > 0 {
+		avgOrderValue = totalRevenue / float64(totalOrders)
+	}
+
+	// Fetch individual bills (revenue entries) with items
+	billsSQL := `
+		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
+		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
+		       COALESCE(
+		         json_agg(
+		           json_build_object(
+		             'itemId', oi.item_id,
+		             'quantity', oi.quantity,
+		             'unitPrice', oi.unit_price,
+		             'item', json_build_object(
+		               'id', i.id,
+		               'name', i.name,
+		               'price', i.price,
+		               'categoryId', i.category_id,
+		               'categoryName', COALESCE(c.name, 'Uncategorised')
+		             )
+		           )
+		         ) FILTER (WHERE oi.id IS NOT NULL),
+		         '[]'
+		       ) as items
+		FROM bills b
+		LEFT JOIN order_items oi ON b.order_id = oi.order_id
+		LEFT JOIN items i ON oi.item_id = i.id
+		LEFT JOIN categories c ON i.category_id = c.id
+		WHERE b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')
+	`
+	var billArgs []interface{}
+	billArgs = append(billArgs, storeID)
+	billIdx := 2
+
+	if startDate != "" {
+		billsSQL += fmt.Sprintf(" AND DATE(b.generated_at) >= $%d::date", billIdx)
+		billArgs = append(billArgs, startDate)
+		billIdx++
+	}
+
+	if endDate != "" {
+		billsSQL += fmt.Sprintf(" AND DATE(b.generated_at) <= $%d::date", billIdx)
+		billArgs = append(billArgs, endDate)
+		billIdx++
+	}
+
+	billsSQL += " GROUP BY b.id ORDER BY b.generated_at DESC"
+
+	billRows, err := r.db.QueryContext(ctx, billsSQL, billArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer billRows.Close()
+
+	var bills []models.Bill
+	for billRows.Next() {
+		var b models.Bill
+		var method, customer, customerMobile, generatedBy sql.NullString
+		var itemsBytes []byte
+		err := billRows.Scan(
+			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
+			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
+			&itemsBytes,
+		)
+		if err != nil {
+			return nil, err
+		}
+		b.PaymentMethod = method.String
+		b.CustomerName = customer.String
+		b.CustomerMobile = customerMobile.String
+		b.GeneratedBy = generatedBy.String
+
+		if len(itemsBytes) > 0 {
+			var items []models.OrderItem
+			if err := json.Unmarshal(itemsBytes, &items); err == nil {
+				b.Items = items
+			}
+		}
+		if b.Items == nil {
+			b.Items = []models.OrderItem{}
+		}
+		bills = append(bills, b)
+	}
+
+	// Fetch individual expenses
+	expensesListSQL := `
+		SELECT e.id, e.store_id, e.category_id, ec.name as category_name, e.title, e.description,
+		       e.amount, e.expense_date, e.payment_method, e.receipt_number, e.vendor,
+		       e.attachments, e.is_active, e.created_at, e.updated_at, e.created_by
+		FROM expenses e
+		LEFT JOIN expense_categories ec ON e.category_id = ec.id
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	var expArgs []interface{}
+	expArgs = append(expArgs, storeID)
+	expIdx := 2
+
+	if startDate != "" {
+		expensesListSQL += fmt.Sprintf(" AND DATE(e.expense_date) >= $%d::date", expIdx)
+		expArgs = append(expArgs, startDate)
+		expIdx++
+	}
+
+	if endDate != "" {
+		expensesListSQL += fmt.Sprintf(" AND DATE(e.expense_date) <= $%d::date", expIdx)
+		expArgs = append(expArgs, endDate)
+		expIdx++
+	}
+
+	expensesListSQL += " ORDER BY e.expense_date DESC"
+
+	expRows, err := r.db.QueryContext(ctx, expensesListSQL, expArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer expRows.Close()
+
+	var expenses []models.Expense
+	for expRows.Next() {
+		var e models.Expense
+		var categoryName, description, paymentMethod, receiptNumber, vendor, createdBy sql.NullString
+		var attachmentsBytes []byte
+		err := expRows.Scan(
+			&e.ID, &e.StoreID, &e.CategoryID, &categoryName, &e.Title, &description,
+			&e.Amount, &e.ExpenseDate, &paymentMethod, &receiptNumber, &vendor,
+			&attachmentsBytes, &e.IsActive, &e.CreatedAt, &e.UpdatedAt, &createdBy,
+		)
+		if err != nil {
+			return nil, err
+		}
+		e.CategoryName = categoryName.String
+		e.Description = description.String
+		e.PaymentMethod = paymentMethod.String
+		e.ReceiptNumber = receiptNumber.String
+		e.Vendor = vendor.String
+		e.CreatedBy = createdBy.String
+
+		if len(attachmentsBytes) > 0 {
+			var attachments []string
+			if err := json.Unmarshal(attachmentsBytes, &attachments); err == nil {
+				e.Attachments = attachments
+			}
+		}
+		if e.Attachments == nil {
+			e.Attachments = []string{}
+		}
+
+		expenses = append(expenses, e)
+	}
+
+	report := &models.RevenueReport{
+		PeriodStart:       startDate,
+		PeriodEnd:         endDate,
+		TotalRevenue:      totalRevenue,
+		TotalExpenses:     totalExpenses,
+		NetProfit:         netProfit,
+		TotalOrders:       totalOrders,
+		TotalBills:        totalBills,
+		TotalExpenseCount: totalExpenseCount,
+		AverageOrderValue: avgOrderValue,
+		Bills:             bills,
+		Expenses:          expenses,
+	}
+
+	return report, nil
 }

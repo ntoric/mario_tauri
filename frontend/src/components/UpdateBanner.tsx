@@ -13,7 +13,7 @@ interface AppUpdate {
   updatedAt: string | null;
 }
 
-const CURRENT_APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
+const CURRENT_APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.2.2';
 
 const UpdateBanner: React.FC = () => {
   const [update, setUpdate] = useState<AppUpdate | null>(null);

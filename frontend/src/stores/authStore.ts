@@ -137,17 +137,17 @@ export const useAuthStore = create<AuthState>()(
         try {
           const data = await api.getMe();
           const { currentStoreId: existingStoreId } = get();
-          const defaultStoreId = getDefaultStoreId(data.user);
+          const defaultStoreId = getDefaultStoreId(data);
           
           // Preserve existing store selection if it's still valid for the user
           // Only reset to default if no store is currently selected
           const newStoreId = existingStoreId || defaultStoreId;
           
           set({
-            user: data.user,
+            user: data,
             currentStoreId: newStoreId,
           });
-          return data.user;
+          return data;
         } catch (error) {
           console.error('Failed to refresh user:', error);
           return null;

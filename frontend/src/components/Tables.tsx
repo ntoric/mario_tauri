@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package } from 'lucide-react';
-import { useDataStore, useUIStore, useAuthStore } from '../stores';
+import { useNavigate } from 'react-router-dom';
+import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
-import OrderModal from './OrderModal';
-import ParcelOrderModal from './ParcelOrderModal';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
+import OrderTimer from './OrderTimer';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
   const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue } = useDataStore();
-  const { openOrderModal, openParcelOrderModal } = useUIStore();
+  const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const { setHeaderContent } = usePageHeader();
@@ -44,7 +44,7 @@ const Tables: React.FC = () => {
       try {
         await Promise.all([
           fetchTables(),
-          fetchOrders(true),
+          fetchOrders(),
         ]);
       } finally {
         isSyncing = false;
@@ -109,7 +109,7 @@ const Tables: React.FC = () => {
         const queueItems = useDataStore.getState().billQueue;
         if (!queueItems.length) return;
 
-        await fetchOrders(true);
+        await fetchOrders();
         const allOrders = useDataStore.getState().orders;
 
         for (const queueItem of queueItems) {
@@ -150,8 +150,8 @@ const Tables: React.FC = () => {
                   name: currentStore?.name || 'Cafe',
                   branch: currentStore?.branch || '',
                   location: currentStore?.location || '',
-                  gst_number: currentStore?.gstin || '',
-                  fssai_lic_no: currentStore?.fssaiNo || '',
+                  ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+                  ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
                   phone: currentStore?.phone || '',
                   address: currentStore?.location || '',
                 },
@@ -178,7 +178,6 @@ const Tables: React.FC = () => {
                   balance: 0,
                 },
                 payment_mode: billPayload.paymentMethod || 'cash',
-                dr_ref: '',
                 footer: ['Thank You Visit Again'],
               },
             });
@@ -204,6 +203,8 @@ const Tables: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTable, setNewTable] = useState({ number: '', seats: 4 });
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
   
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
@@ -255,37 +256,43 @@ const Tables: React.FC = () => {
               <List size={18} />
             </button>
           </div>
-          <button className="btn btn-primary" onClick={openParcelOrderModal}>
+          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
             <Package size={18} />
             Parcel Order
           </button>
-          {isAdmin && (
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
               <Plus size={18} />
               Add Table
+            </button>
+          {isAdmin && (
+            <button
+              className={`btn ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
+              onClick={() => setDeleteMode(!deleteMode)}
+              title="Toggle delete mode"
+            >
+              <Trash2 size={18} />
+              {deleteMode ? 'Done' : 'Delete Tables'}
             </button>
           )}
         </>
       ),
     });
-  }, [viewMode, isAdmin, setHeaderContent, openParcelOrderModal]);
+  }, [viewMode, isAdmin, setHeaderContent, navigate, user, deleteMode]);
 
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
 
     setCheckingTableId(table.id);
     setCheckingTableId(null);
-    const activeOrder = getActiveOrderByTable(table.id);
-    openOrderModal({ table, existingOrder: activeOrder });
+    navigate(`/order/${table.id}`);
   };
 
   const handleBillClick = (e: React.MouseEvent, table: Table) => {
     e.stopPropagation();
     const activeOrder = getActiveOrderByTable(table.id);
     if (activeOrder) {
-      setBillDialogTable(table);
       setPaymentMethod('upi');
-      setIsPrinting(false);
+      handlePrintAndComplete(table);
     }
   };
 
@@ -317,10 +324,11 @@ const Tables: React.FC = () => {
     }
   };
 
-  const handlePrintAndComplete = async () => {
-    if (!billDialogTable || isPrinting) return;
+  const handlePrintAndComplete = async (table?: Table) => {
+    const targetTable = table || billDialogTable;
+    if (!targetTable || isPrinting) return;
 
-    const activeOrder = getActiveOrderByTable(billDialogTable.id);
+    const activeOrder = getActiveOrderByTable(targetTable.id);
     if (!activeOrder) return;
 
     const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
@@ -336,30 +344,9 @@ const Tables: React.FC = () => {
       setPrinterConfirm({
         show: true,
         title: 'Printer Not Available',
-        message: 'No printer is configured in settings. Complete order without printing bill?',
-        onConfirm: async () => {
+        message: 'No printer is configured. Keep order on table?',
+        onConfirm: () => {
           setPrinterConfirm(p => ({ ...p, show: false }));
-          setIsPrinting(true);
-          try {
-            await createBill({
-              orderId: activeOrder.id,
-              tableNumber: billDialogTable.number,
-              invoiceNo,
-              subtotal,
-              taxTotal: tax,
-              discount: 0,
-              total,
-              paymentMethod,
-              customerName: 'Walk-in Customer',
-            });
-            await completeOrder(activeOrder.id, paymentMethod);
-            setBillDialogTable(null);
-          } catch (error) {
-            console.error('Failed to complete order:', error);
-            setErrorDialog({ show: true, message: (error as Error).message || 'Failed to complete order. Please try again.' });
-          } finally {
-            setIsPrinting(false);
-          }
         },
       });
       return;
@@ -368,19 +355,6 @@ const Tables: React.FC = () => {
     setIsPrinting(true);
 
     try {
-      // Create bill
-      await createBill({
-        orderId: activeOrder.id,
-        tableNumber: billDialogTable.number,
-        invoiceNo,
-        subtotal,
-        taxTotal: tax,
-        discount: 0,
-        total,
-        paymentMethod,
-        customerName: 'Walk-in Customer',
-      });
-
       // Print invoice via printer service
       const printItems = activeOrder.items.map((oi: any) => {
         const itemTotal = oi.item.price * oi.quantity;
@@ -415,8 +389,8 @@ const Tables: React.FC = () => {
               name: currentStore?.name || 'Cafe',
               branch: currentStore?.branch || '',
               location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
+              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
               phone: currentStore?.phone || '',
               address: currentStore?.location || '',
             },
@@ -443,7 +417,6 @@ const Tables: React.FC = () => {
               balance: 0,
             },
             payment_mode: paymentMethod,
-            dr_ref: '',
             footer: ['Thank You Visit Again'],
           },
         });
@@ -452,29 +425,30 @@ const Tables: React.FC = () => {
         setIsPrinting(false);
         setPrinterConfirm({
           show: true,
-          title: 'Print Failed',
-          message: 'Failed to print the bill. Complete order without printing?',
-          onConfirm: async () => {
+          title: 'Printer Not Working',
+          message: 'Failed to print the bill. Keep order on table?',
+          onConfirm: () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
-            setIsPrinting(true);
-            try {
-              await completeOrder(activeOrder.id, paymentMethod);
-              setBillDialogTable(null);
-            } catch (err) {
-              console.error('Failed to complete order:', err);
-              setErrorDialog({ show: true, message: (err as Error).message || 'Failed to complete order. Please try again.' });
-            } finally {
-              setIsPrinting(false);
-            }
           },
         });
         return;
       }
 
-      // Complete order
+      // Print succeeded - create bill and complete order
+      await createBill({
+        orderId: activeOrder.id,
+        tableNumber: targetTable.number,
+        invoiceNo,
+        subtotal,
+        taxTotal: tax,
+        discount: 0,
+        total,
+        paymentMethod,
+        customerName: 'Walk-in Customer',
+      });
+
       await completeOrder(activeOrder.id, paymentMethod);
 
-      // Close dialog
       setBillDialogTable(null);
     } catch (error) {
       console.error('Failed to print and complete:', error);
@@ -517,14 +491,19 @@ const Tables: React.FC = () => {
     }
   };
 
-  const handleDeleteTable = async (id: string) => {
-    if (confirm('Are you sure you want to delete this table?')) {
-      setLoadingTableId(id);
-      try {
-        await deleteTable(id);
-      } finally {
-        setLoadingTableId(null);
-      }
+  const handleDeleteTable = (table: Table) => {
+    setDeleteConfirmTable(table);
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!deleteConfirmTable) return;
+    const id = deleteConfirmTable.id;
+    setDeleteConfirmTable(null);
+    setLoadingTableId(id);
+    try {
+      await deleteTable(id);
+    } finally {
+      setLoadingTableId(null);
     }
   };
 
@@ -577,12 +556,12 @@ const Tables: React.FC = () => {
                           <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
                         </div>
                       )}
-                      {isAdmin && (
+                      {isAdmin && deleteMode && (
                         <button
                           className="table-delete-btn"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteTable(table.id);
+                            handleDeleteTable(table);
                           }}
                           disabled={loadingTableId === table.id}
                         >
@@ -616,6 +595,9 @@ const Tables: React.FC = () => {
                       <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
                         {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
                       </div>
+                      {activeOrder && (
+                        <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
+                      )}
                     </div>
                   );
                 })}
@@ -661,9 +643,14 @@ const Tables: React.FC = () => {
                         </td>
                         <td>
                           {activeOrder ? (
-                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                              {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
-                            </span>
+                            <div>
+                              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
+                              </span>
+                              <div style={{ marginTop: '0.25rem' }}>
+                                <OrderTimer createdAt={activeOrder.createdAt} className="list-timer" />
+                              </div>
+                            </div>
                           ) : (
                             <span style={{ color: 'var(--gray-500)' }}>-</span>
                           )}
@@ -690,10 +677,10 @@ const Tables: React.FC = () => {
                                 </button>
                               </>
                             )}
-                            {isAdmin && (
+                            {isAdmin && deleteMode && (
                               <button 
                                 className="action-btn delete" 
-                                onClick={() => handleDeleteTable(table.id)}
+                                onClick={() => handleDeleteTable(table)}
                                 disabled={loadingTableId === table.id}
                                 style={{
                                   opacity: loadingTableId === table.id ? 0.5 : 1,
@@ -799,39 +786,12 @@ const Tables: React.FC = () => {
                 <span className="bill-total-value">{formatCurrency(billDialogTotal)}</span>
               </div>
               
-              <div className="payment-method-section">
-                <label className="payment-label">Payment Method</label>
-                <div className="payment-options">
-                  <button
-                    className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('cash')}
-                    data-method="cash"
-                  >
-                    Cash
-                  </button>
-                  <button
-                    className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('card')}
-                    data-method="card"
-                  >
-                    Card
-                  </button>
-                  <button
-                    className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod('upi')}
-                    data-method="upi"
-                  >
-                    UPI
-                  </button>
-                </div>
-              </div>
-
               <p className="bill-hint">Press Enter or click Print to complete</p>
             </div>
             <div className="modal-footer">
               <button
                 className="btn btn-primary btn-lg"
-                onClick={handlePrintAndComplete}
+                onClick={() => handlePrintAndComplete()}
               >
                 {isPrinting ? 'Completing...' : 'Complete Order'}
               </button>
@@ -866,6 +826,16 @@ const Tables: React.FC = () => {
         variant="danger"
         onConfirm={() => setErrorDialog({ show: false, message: '' })}
         onCancel={() => setErrorDialog({ show: false, message: '' })}
+      />
+      <ConfirmDialog
+        isOpen={!!deleteConfirmTable}
+        title="Delete Table"
+        message={`Are you sure you want to delete Table ${deleteConfirmTable?.number}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmDeleteTable}
+        onCancel={() => setDeleteConfirmTable(null)}
       />
 
       {/* Change Table Dialog */}
@@ -954,8 +924,6 @@ const Tables: React.FC = () => {
         </div>
       )}
 
-      <OrderModal />
-      <ParcelOrderModal />
       <BillModal />
     </>
   );

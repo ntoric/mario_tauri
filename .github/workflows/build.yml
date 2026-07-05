@@ -70,30 +70,51 @@ jobs:
         run: cd frontend && npm ci
 
       - name: Build Go printer binary
+        shell: bash
         run: |
+          mkdir -p frontend/src-tauri/binaries
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            GOOS=windows GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer.exe .
+            GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ../binaries/mario-printer-${{ matrix.target }}.exe .
           elif [ "${{ matrix.platform }}" = "macos-latest" ] || [ "${{ matrix.platform }}" = "macos-13" ]; then
             if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-              GOOS=darwin GOARCH=arm64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+              GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
             else
-              GOOS=darwin GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+              GOOS=darwin GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
             fi
           else
-            GOOS=linux GOARCH=amd64 go build -o ../target/${{ matrix.target }}/release/mario-printer .
+            GOOS=linux GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
           fi
+
+      - name: Verify Go binary exists
+        shell: bash
+        run: |
+          echo "Checking for binary: frontend/src-tauri/binaries/mario-printer-${{ matrix.target }}${{ matrix.platform == 'windows-latest' && '.exe' || '' }}"
+          ls -la frontend/src-tauri/binaries/
+
+      - name: Check signing secret
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Private key is EMPTY"
+            exit 1
+          else
+            echo "Private key exists, length: ${#TAURI_SIGNING_PRIVATE_KEY}"
+          fi
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build app
         run: cd frontend && npm run tauri build -- --target ${{ matrix.target }} --features go-printer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
-      - name: Copy Go printer binary to bundle
+      - name: Debug bundle output
+        shell: bash
         run: |
-          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
-            cp frontend/src-tauri/target/${{ matrix.target }}/release/mario-printer.exe frontend/src-tauri/target/${{ matrix.target }}/release/bundle/
-          else
-            cp frontend/src-tauri/target/${{ matrix.target }}/release/mario-printer frontend/src-tauri/target/${{ matrix.target }}/release/bundle/
-          fi
+          echo "=== Bundle directory ==="
+          find frontend/src-tauri/target/${{ matrix.target }}/release/bundle -type f
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -116,15 +137,83 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
+      - name: Generate latest.json manifest
+        shell: bash
+        run: |
+          # Extract version from git tag (e.g. v1.2.2 -> 1.2.2)
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Release version: $VERSION"
+
+          # Debug: list all files in the windows artifact
+          echo "=== All files in mario-juicy-windows ==="
+          find mario-juicy-windows -type f
+
+          # Prefer .nsis.zip (Tauri v2 updater format), fall back to -setup.exe (NSIS)
+          WIN_BUNDLE=$(find mario-juicy-windows -name '*.nsis.zip' | head -1)
+          WIN_BUNDLE_SIG=$(find mario-juicy-windows -name '*.nsis.zip.sig' | head -1)
+
+          if [ -z "$WIN_BUNDLE" ]; then
+            echo "No .nsis.zip found, falling back to -setup.exe"
+            WIN_BUNDLE=$(find mario-juicy-windows -name '*-setup.exe' | head -1)
+            WIN_BUNDLE_SIG=$(find mario-juicy-windows -name '*-setup.exe.sig' | head -1)
+          fi
+
+          if [ -z "$WIN_BUNDLE" ]; then
+            echo "ERROR: No Windows update bundle found!"
+            exit 1
+          fi
+
+          # Extract just the filename for the URL
+          WIN_BUNDLE_NAME=$(basename "$WIN_BUNDLE")
+          # GitHub replaces spaces with dots in release asset names
+          WIN_URL_NAME="${WIN_BUNDLE_NAME// /.}"
+
+          if [ -z "$WIN_BUNDLE_SIG" ] || [ ! -f "$WIN_BUNDLE_SIG" ]; then
+            echo "ERROR: No .sig file found! The signing key secret may be missing or invalid."
+            echo "Ensure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets are set."
+            exit 1
+          fi
+          WIN_SIG_CONTENT=$(cat "$WIN_BUNDLE_SIG")
+
+          # Build the download URL from the GitHub release
+          REPO="ntoric/mario_tauri"
+          WIN_URL="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}/${WIN_URL_NAME}"
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "Release ${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${WIN_SIG_CONTENT}",
+                "url": "${WIN_URL}"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat latest.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             mario-juicy-mac-arm64/**/*.dmg
+            mario-juicy-mac-arm64/**/*.app.tar.gz
+            mario-juicy-mac-arm64/**/*.app.tar.gz.sig
             mario-juicy-mac-amd64/**/*.dmg
+            mario-juicy-mac-amd64/**/*.app.tar.gz
+            mario-juicy-mac-amd64/**/*.app.tar.gz.sig
             mario-juicy-windows/**/*.exe
+            mario-juicy-windows/**/*.exe.sig
+            mario-juicy-windows/**/*.nsis.zip
+            mario-juicy-windows/**/*.nsis.zip.sig
             mario-juicy-linux/**/*.AppImage
+            mario-juicy-linux/**/*.AppImage.sig
             mario-juicy-linux/**/*.deb
+            latest.json
           draft: false
           prerelease: false
           generate_release_notes: true

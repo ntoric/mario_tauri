@@ -134,7 +134,9 @@ func (h *Handler) GetItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := h.Repo.Item.GetAll(r.Context(), targetStoreID)
+	includeProfit := r.URL.Query().Get("includeProfit") == "true"
+
+	items, err := h.Repo.Item.GetAll(r.Context(), targetStoreID, includeProfit)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

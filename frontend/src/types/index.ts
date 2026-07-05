@@ -28,6 +28,7 @@ export interface Store {
   kotPrintEnabled?: boolean;
   remoteBillingEnabled?: boolean;
   logoUrl?: string;
+  themeColor?: string;
   isActive: boolean;
   createdAt?: string;
 }
@@ -51,6 +52,38 @@ export interface Item {
   hsnCode?: string;
   taxPercent: number;
   isActive: boolean;
+  totalCost?: number;
+  profit?: number;
+  profitPercent?: number;
+}
+
+export interface ItemExpense {
+  id: string;
+  storeId: string;
+  itemId: string;
+  name: string;
+  description?: string;
+  amount: number;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface ItemProfitEntry {
+  item: Item;
+  expenses: ItemExpense[];
+  totalCost: number;
+  profit: number;
+  profitPercent: number;
+}
+
+export interface ItemProfitReport {
+  storeId: string;
+  items: ItemProfitEntry[];
+  totalSellingValue: number;
+  totalCost: number;
+  totalProfit: number;
+  averageProfitPercent: number;
+  itemsWithCostCount: number;
 }
 
 export interface Table {
@@ -91,6 +124,7 @@ export interface Order {
   paymentStatus?: string;
   createdAt: string;
   updatedAt: string;
+  cancelledAt?: string;
   createdBy: string;
 }
 
@@ -109,6 +143,7 @@ export interface Bill {
   customerName?: string;
   customerMobile?: string;
   isPrinted: boolean;
+  status?: string;
   generatedAt: string;
   generatedBy: string;
 }
@@ -122,4 +157,59 @@ export interface BillQueueItem {
   errorMessage?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  storeId: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface Expense {
+  id: string;
+  storeId: string;
+  categoryId: string;
+  categoryName?: string;
+  title: string;
+  description?: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod?: string;
+  receiptNumber?: string;
+  vendor?: string;
+  attachments?: string[];
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
+export interface ExpenseReport {
+  categoryId: string;
+  categoryName: string;
+  totalAmount: number;
+  expenseCount: number;
+}
+
+export interface ExpenseSummary {
+  date: string;
+  totalAmount: number;
+  expenseCount: number;
+}
+
+export interface RevenueReport {
+  periodStart: string;
+  periodEnd: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  totalOrders: number;
+  totalBills: number;
+  totalExpenseCount: number;
+  averageOrderValue: number;
+  bills: Bill[];
+  expenses: Expense[];
 }

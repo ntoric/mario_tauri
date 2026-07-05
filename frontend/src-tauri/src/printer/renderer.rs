@@ -66,10 +66,14 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
         data.extend_from_slice(format!("MOB : {}\n", phone).as_bytes());
     }
     if let Some(gst) = &invoice.store.gst_number {
-        data.extend_from_slice(format!("GSTIN : {}\n", gst).as_bytes());
+        if !gst.is_empty() {
+            data.extend_from_slice(format!("GSTIN : {}\n", gst).as_bytes());
+        }
     }
     if let Some(fssai) = &invoice.store.fssai_lic_no {
-        data.extend_from_slice(format!("FSSAI LIC NO : {}\n", fssai).as_bytes());
+        if !fssai.is_empty() {
+            data.extend_from_slice(format!("FSSAI LIC NO : {}\n", fssai).as_bytes());
+        }
     }
 
     data.push(b'\n');
@@ -92,7 +96,9 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
     data.extend_from_slice(format!("Bill No: {}\n", invoice.bill_no).as_bytes());
     data.extend_from_slice(format!("Payment Mode: {}\n", invoice.payment_mode).as_bytes());
     if let Some(dr_ref) = &invoice.dr_ref {
-        data.extend_from_slice(format!("DR Ref : {}\n", dr_ref).as_bytes());
+        if !dr_ref.is_empty() {
+            data.extend_from_slice(format!("DR Ref : {}\n", dr_ref).as_bytes());
+        }
     }
     data.extend_from_slice(format!("{}\n", "-".repeat(line_width)).as_bytes());
 

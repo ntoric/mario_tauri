@@ -45,6 +45,8 @@ class ApiService {
     }
 
     console.log(`Fetching: ${url}`);
+    console.log(`Token present: ${!!token}`);
+    console.log(`Token length: ${token?.length || 0}`);
     const response = await fetch(url, {
       ...options,
       headers,
@@ -54,7 +56,9 @@ class ApiService {
     console.log(`Response status: ${response.status}`);
 
     if (!response.ok) {
+      console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
       if (response.status === 401 && !skipAuthRedirect) {
+        console.error('[API ERROR] 401 Unauthorized - clearing token and redirecting to login');
         this.clearToken();
         window.location.replace('/#/login');
       }
@@ -218,8 +222,10 @@ class ApiService {
   }
 
   // Items
-  async getItems(storeId: string) {
-    return this.fetch(`/items?storeId=${storeId}`);
+  async getItems(storeId: string, includeProfit = false) {
+    let url = `/items?storeId=${storeId}`;
+    if (includeProfit) url += '&includeProfit=true';
+    return this.fetch(url);
   }
 
   async createItem(item: any) {
@@ -240,6 +246,37 @@ class ApiService {
     return this.fetch(`/items/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  // Item Expenses
+  async getItemExpenses(itemId: string) {
+    return this.fetch(`/items/${itemId}/expenses`);
+  }
+
+  async createItemExpense(itemId: string, expense: { name: string; description?: string; amount: number; storeId?: string }) {
+    return this.fetch(`/items/${itemId}/expenses`, {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async updateItemExpense(id: string, expense: { name: string; description?: string; amount: number; storeId?: string }) {
+    return this.fetch(`/item-expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async deleteItemExpense(id: string, storeId?: string) {
+    let url = `/item-expenses/${id}`;
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url, {
+      method: 'DELETE',
+    });
+  }
+
+  async getItemProfitReport(storeId: string) {
+    return this.fetch(`/reports/item-profit?storeId=${storeId}`);
   }
 
   // Tables
@@ -275,10 +312,13 @@ class ApiService {
   }
 
   async createOrder(order: any) {
-    return this.fetch('/orders', {
+    console.log('[API] Creating order', order);
+    const result = await this.fetch('/orders', {
       method: 'POST',
       body: JSON.stringify(order),
     });
+    console.log('[API] Order created response', result);
+    return result;
   }
 
   async createParcelOrder(order: any) {
@@ -288,11 +328,28 @@ class ApiService {
     });
   }
 
+  async saveEBill(order: any) {
+    return this.fetch('/orders/save-ebill', {
+      method: 'POST',
+      body: JSON.stringify(order),
+    });
+  }
+
+  async savePrint(orderId: string, bill: any) {
+    return this.fetch(`/orders/${orderId}/save-print`, {
+      method: 'POST',
+      body: JSON.stringify(bill),
+    });
+  }
+
   async updateOrder(id: string, order: any) {
-    return this.fetch(`/orders/${id}`, {
+    console.log('[API] Updating order', { id, order });
+    const result = await this.fetch(`/orders/${id}`, {
       method: 'PUT',
       body: JSON.stringify(order),
     });
+    console.log('[API] Order updated response', result);
+    return result;
   }
 
   async completeOrder(id: string, paymentMethod?: string) {
@@ -302,9 +359,10 @@ class ApiService {
     });
   }
 
-  async cancelOrder(id: string) {
+  async cancelOrder(id: string, reason?: string) {
     return this.fetch(`/orders/${id}/cancel`, {
       method: 'PATCH',
+      body: JSON.stringify({ reason }),
     });
   }
 
@@ -387,6 +445,86 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(config),
     });
+  }
+
+  // Expense Categories
+  async getExpenseCategories(storeId: string) {
+    return this.fetch(`/expense-categories?storeId=${storeId}`);
+  }
+
+  async createExpenseCategory(category: any) {
+    return this.fetch('/expense-categories', {
+      method: 'POST',
+      body: JSON.stringify(category),
+    });
+  }
+
+  async updateExpenseCategory(id: string, category: any) {
+    return this.fetch(`/expense-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(category),
+    });
+  }
+
+  async deleteExpenseCategory(id: string) {
+    return this.fetch(`/expense-categories/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Expenses
+  async getExpenses(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getExpense(id: string) {
+    return this.fetch(`/expenses/${id}`);
+  }
+
+  async createExpense(expense: any) {
+    return this.fetch('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async updateExpense(id: string, expense: any) {
+    return this.fetch(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expense),
+    });
+  }
+
+  async deleteExpense(id: string) {
+    return this.fetch(`/expenses/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Expense Reports
+  async getExpenseReportByCategory(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses/report/by-category?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getExpenseSummaryByDate(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/expenses/report/by-date?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  // Revenue Report
+  async getRevenueReport(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/reports/revenue?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
   }
 
 }

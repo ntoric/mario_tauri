@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"cafe-backend/internal/middleware"
@@ -46,22 +47,28 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
+		fmt.Println("CreateTable: unauthorized - no claims in context")
 		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	fmt.Println("CreateTable: claims =", claims)
 
 	var req models.Table
 	if err := h.readJSON(r, &req); err != nil {
+		fmt.Println("CreateTable: invalid JSON payload -", err)
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
+	fmt.Println("CreateTable: request =", req)
 
 	targetStoreID := req.StoreID
 	if targetStoreID == "" {
 		targetStoreID = claims.StoreID
 	}
+	fmt.Println("CreateTable: targetStoreID =", targetStoreID)
 
 	if targetStoreID == "" {
+		fmt.Println("CreateTable: store ID required")
 		h.writeError(w, http.StatusBadRequest, "Store ID required")
 		return
 	}
@@ -69,11 +76,14 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.IsActive = true
+	fmt.Println("CreateTable: prepared table =", req)
 
 	if err := h.Repo.Table.Create(r.Context(), req); err != nil {
+		fmt.Println("CreateTable: repo create error -", err)
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	fmt.Println("CreateTable: table created successfully")
 	h.broadcastTableStatusUpdate(req.StoreID, "table_created")
 
 	h.writeJSON(w, http.StatusCreated, req)

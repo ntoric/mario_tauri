@@ -26,6 +26,7 @@ type Store struct {
 	KOTPrintEnabled      bool      `json:"kotPrintEnabled"`
 	RemoteBillingEnabled bool      `json:"remoteBillingEnabled"`
 	LogoURL              string    `json:"logoUrl"`
+	ThemeColor           string    `json:"themeColor"`
 	IsActive             bool      `json:"isActive"`
 	CreatedAt            time.Time `json:"createdAt"`
 }
@@ -57,17 +58,52 @@ type Category struct {
 
 // Item represents item table schema and json dto
 type Item struct {
-	ID           string    `json:"id"`
-	StoreID      string    `json:"storeId"`
-	CategoryID   string    `json:"categoryId"`
-	CategoryName string    `json:"categoryName,omitempty"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	Price        float64   `json:"price"`
-	HSNCode      string    `json:"hsnCode"`
-	TaxPercent   float64   `json:"taxPercent"`
-	IsActive     bool      `json:"isActive"`
-	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	CategoryID    string    `json:"categoryId"`
+	CategoryName  string    `json:"categoryName,omitempty"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Price         float64   `json:"price"`
+	HSNCode       string    `json:"hsnCode"`
+	TaxPercent    float64   `json:"taxPercent"`
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt,omitempty"`
+	TotalCost     float64   `json:"totalCost,omitempty"`
+	Profit        float64   `json:"profit,omitempty"`
+	ProfitPercent float64   `json:"profitPercent,omitempty"`
+}
+
+// ItemExpense represents a cost component for preparing a menu item
+type ItemExpense struct {
+	ID          string    `json:"id"`
+	StoreID     string    `json:"storeId"`
+	ItemID      string    `json:"itemId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+}
+
+// ItemProfitEntry represents profit analysis for a single menu item
+type ItemProfitEntry struct {
+	Item          Item          `json:"item"`
+	Expenses      []ItemExpense `json:"expenses"`
+	TotalCost     float64       `json:"totalCost"`
+	Profit        float64       `json:"profit"`
+	ProfitPercent float64       `json:"profitPercent"`
+}
+
+// ItemProfitReport represents store-wide item profit analysis
+type ItemProfitReport struct {
+	StoreID              string            `json:"storeId"`
+	Items                []ItemProfitEntry `json:"items"`
+	TotalSellingValue    float64           `json:"totalSellingValue"`
+	TotalCost            float64           `json:"totalCost"`
+	TotalProfit          float64           `json:"totalProfit"`
+	AverageProfitPercent float64           `json:"averageProfitPercent"`
+	ItemsWithCostCount   int               `json:"itemsWithCostCount"`
 }
 
 // Table represents table/seat layout schema and json dto
@@ -119,6 +155,7 @@ type Order struct {
 	CreatedBy      string      `json:"createdBy"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
+	CancelledAt    *time.Time  `json:"cancelledAt,omitempty"`
 	Items          []OrderItem `json:"items"`
 }
 
@@ -137,6 +174,7 @@ type Bill struct {
 	CustomerName   string      `json:"customerName"`
 	CustomerMobile string      `json:"customerMobile"`
 	IsPrinted      bool        `json:"isPrinted"`
+	Status         string      `json:"status"`
 	GeneratedAt    time.Time   `json:"generatedAt"`
 	GeneratedBy    string      `json:"generatedBy"`
 	Items          []OrderItem `json:"items"`
@@ -276,4 +314,64 @@ type SupportConfigRequest struct {
 	Email        string `json:"email"`
 	Phone        string `json:"phone"`
 	WhatsAppLink string `json:"whatsappLink"`
+}
+
+// ExpenseCategory represents expense category table schema and json dto
+type ExpenseCategory struct {
+	ID          string    `json:"id"`
+	StoreID     string    `json:"storeId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+}
+
+// Expense represents expense table schema and json dto
+type Expense struct {
+	ID               string          `json:"id"`
+	StoreID          string          `json:"storeId"`
+	CategoryID       string          `json:"categoryId"`
+	CategoryName     string          `json:"categoryName,omitempty"`
+	Title            string          `json:"title"`
+	Description      string          `json:"description"`
+	Amount           float64         `json:"amount"`
+	ExpenseDate      time.Time       `json:"expenseDate"`
+	PaymentMethod    string          `json:"paymentMethod"`
+	ReceiptNumber    string          `json:"receiptNumber"`
+	Vendor           string          `json:"vendor"`
+	Attachments      []string        `json:"attachments,omitempty"`
+	IsActive         bool            `json:"isActive"`
+	CreatedAt        time.Time       `json:"createdAt,omitempty"`
+	UpdatedAt        time.Time       `json:"updatedAt,omitempty"`
+	CreatedBy        string          `json:"createdBy"`
+}
+
+// ExpenseReport represents aggregated expense data for reports
+type ExpenseReport struct {
+	CategoryID       string  `json:"categoryId"`
+	CategoryName     string  `json:"categoryName"`
+	TotalAmount      float64 `json:"totalAmount"`
+	ExpenseCount     int     `json:"expenseCount"`
+}
+
+// ExpenseSummary represents daily/monthly expense summary
+type ExpenseSummary struct {
+	Date             string  `json:"date"`
+	TotalAmount      float64 `json:"totalAmount"`
+	ExpenseCount     int     `json:"expenseCount"`
+}
+
+// RevenueReport represents combined revenue, sales, and expense data
+type RevenueReport struct {
+	PeriodStart       string    `json:"periodStart"`
+	PeriodEnd         string    `json:"periodEnd"`
+	TotalRevenue      float64   `json:"totalRevenue"`
+	TotalExpenses     float64   `json:"totalExpenses"`
+	NetProfit         float64   `json:"netProfit"`
+	TotalOrders       int       `json:"totalOrders"`
+	TotalBills        int       `json:"totalBills"`
+	TotalExpenseCount int       `json:"totalExpenseCount"`
+	AverageOrderValue float64   `json:"averageOrderValue"`
+	Bills             []Bill    `json:"bills"`
+	Expenses          []Expense `json:"expenses"`
 }

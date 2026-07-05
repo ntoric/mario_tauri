@@ -34,6 +34,29 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+// Migrate opens a database connection and applies all pending migrations and seeds.
+func Migrate(cfg *config.Config) error {
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable default_query_exec_mode=simple_protocol",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+
+	db, err := sql.Open("pgx", connStr)
+	if err != nil {
+		return fmt.Errorf("error opening db connection: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("error pinging db: %w", err)
+	}
+
+	if err := runMigrations(db, cfg); err != nil {
+		return fmt.Errorf("migration failure: %w", err)
+	}
+
+	log.Println("Database migrations applied successfully")
+	return nil
+}
+
 func runMigrations(db *sql.DB, cfg *config.Config) error {
 	queries := []string{
 		// Stores table
@@ -203,6 +226,47 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(platform)
 		)`,
+
+		// Expense categories table
+		`CREATE TABLE IF NOT EXISTS expense_categories (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Expenses table
+		`CREATE TABLE IF NOT EXISTS expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			category_id VARCHAR(255) REFERENCES expense_categories(id) ON DELETE SET NULL,
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			expense_date TIMESTAMP NOT NULL,
+			payment_method VARCHAR(50),
+			receipt_number VARCHAR(100),
+			vendor VARCHAR(255),
+			attachments JSONB DEFAULT '[]'::jsonb,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
+
+		// Item preparation expenses (cost components per menu item)
+		`CREATE TABLE IF NOT EXISTS item_expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range queries {
@@ -217,11 +281,25 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS kot_print_enabled BOOLEAN DEFAULT true`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS remote_billing_enabled BOOLEAN DEFAULT false`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
+		// Item preparation expenses — additive migration for existing deployments
+		`CREATE TABLE IF NOT EXISTS item_expenses (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			amount DECIMAL(10, 2) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range alterQueries {

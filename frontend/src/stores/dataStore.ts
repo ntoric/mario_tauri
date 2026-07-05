@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, Order, Bill, Store, BillQueueItem } from '../types';
+import type { Category, Item, Table, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
 
 interface DataState {
   // Data
@@ -14,6 +14,8 @@ interface DataState {
   bills: Bill[];
   billQueue: BillQueueItem[];
   users: any[];
+  expenseCategories: ExpenseCategory[];
+  expenses: Expense[];
   
   // Loading states
   isLoading: boolean;
@@ -38,8 +40,11 @@ interface DataState {
   deleteCategory: (id: string) => Promise<void>;
   
   // Items
-  fetchItems: () => Promise<void>;
-  createItem: (item: Omit<Item, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Item, 'isActive'>>) => Promise<void>;
+  fetchItems: (options?: { includeProfit?: boolean }) => Promise<void>;
+  createItem: (
+    item: Omit<Item, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Item, 'isActive'>>,
+    options?: { skipRefresh?: boolean }
+  ) => Promise<Item>;
   updateItem: (id: string, item: Partial<Item>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   
@@ -50,11 +55,13 @@ interface DataState {
   deleteTable: (id: string) => Promise<void>;
   
   // Orders
-  fetchOrders: (bypassCache?: boolean) => Promise<void>;
+  fetchOrders: () => Promise<void>;
   createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
+  saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
+  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
-  cancelOrder: (id: string) => Promise<void>;
+  cancelOrder: (id: string, reason?: string) => Promise<void>;
   getActiveOrderByTable: (tableId: string) => Order | undefined;
   
   // Bills
@@ -71,6 +78,18 @@ interface DataState {
   deleteUser: (id: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   resetPassword: (userId: string, password: string) => Promise<void>;
+
+  // Expense Categories
+  fetchExpenseCategories: () => Promise<void>;
+  createExpenseCategory: (category: Omit<ExpenseCategory, 'id' | 'storeId' | 'isActive' | 'createdAt'>) => Promise<void>;
+  updateExpenseCategory: (id: string, category: Partial<ExpenseCategory>) => Promise<void>;
+  deleteExpenseCategory: (id: string) => Promise<void>;
+
+  // Expenses
+  fetchExpenses: (startDate?: string, endDate?: string) => Promise<void>;
+  createExpense: (expense: Omit<Expense, 'id' | 'storeId' | 'isActive' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<void>;
+  updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
@@ -82,6 +101,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   bills: [],
   billQueue: [],
   users: [],
+  expenseCategories: [],
+  expenses: [],
   isLoading: false,
   isInitialized: false,
 
@@ -241,11 +262,12 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Items
-  fetchItems: async () => {
+  fetchItems: async (options?: { includeProfit?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
+    const includeProfit = options?.includeProfit ?? false;
     try {
-      const cacheKey = cacheKeys.items(currentStoreId);
+      const cacheKey = cacheKeys.items(currentStoreId, includeProfit);
       
       // Try cache first
       const cached = cache.get<Item[]>(cacheKey);
@@ -254,7 +276,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         return;
       }
       
-      const items = await api.getItems(currentStoreId);
+      const items = await api.getItems(currentStoreId, includeProfit);
       cache.set(cacheKey, items);
       set({ items });
     } catch (error) {
@@ -262,14 +284,18 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
-  createItem: async (item) => {
+  createItem: async (item, options) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.createItem({ ...item, storeId: currentStoreId });
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    const created = await api.createItem({ ...item, storeId: currentStoreId }) as Item;
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    if (!options?.skipRefresh) {
+      await get().fetchItems({ includeProfit: true });
+    }
+    return created;
   },
 
   updateItem: async (id, item) => {
@@ -278,8 +304,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.updateItem(id, item);
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    await get().fetchItems({ includeProfit: true });
   },
 
   deleteItem: async (id) => {
@@ -288,8 +315,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.deleteItem(id);
-    cache.delete(cacheKeys.items(currentStoreId));
-    await get().fetchItems();
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    await get().fetchItems({ includeProfit: true });
   },
 
   // Tables
@@ -326,23 +354,11 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Orders
-  fetchOrders: async (bypassCache = false) => {
+  fetchOrders: async () => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
-      const cacheKey = cacheKeys.orders(currentStoreId);
-      
-      if (!bypassCache) {
-        // Try cache first
-        const cached = cache.get<Order[]>(cacheKey);
-        if (cached) {
-          set({ orders: cached });
-          return;
-        }
-      }
-      
       const orders = await api.getOrders(currentStoreId);
-      cache.set(cacheKey, orders, 2 * 60 * 1000); // 2 minutes TTL for orders (frequently changing)
       set({ orders });
     } catch (error) {
       console.error('Failed to fetch orders:', error);
@@ -350,19 +366,64 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   createOrder: async (order) => {
-    const currentStoreId = useAuthStore.getState().currentStoreId;
-    const currentUser = useAuthStore.getState().user;
+    let currentStoreId = useAuthStore.getState().currentStoreId;
+    let currentUser = useAuthStore.getState().user;
+    
+    console.log('[DataStore] Auth check:', { currentStoreId, currentUser, hasStoreId: !!currentStoreId, hasUser: !!currentUser });
+    
+    // If user is null, try to refresh from server
+    if (!currentUser) {
+      console.log('[DataStore] User is null, attempting to refresh...');
+      const authStore = useAuthStore.getState();
+      currentUser = await authStore.refreshUser();
+      currentStoreId = authStore.currentStoreId;
+      console.log('[DataStore] After refresh:', { currentUser, currentStoreId });
+    }
+    
     if (!currentStoreId || !currentUser) {
+      console.error('[DataStore] Auth failed:', { currentStoreId, currentUser });
       throw new Error('User or store not authenticated');
     }
+    console.log('[DataStore] Creating order', { order, currentStoreId, userId: currentUser.id });
     const newOrder = await api.createOrder({
       ...order,
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    cache.delete(cacheKeys.orders(currentStoreId));
+    console.log('[DataStore] Order created successfully', newOrder);
     await get().fetchOrders();
     return newOrder;
+  },
+
+  saveEBill: async (order) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    const savedOrder = await api.saveEBill({
+      ...order,
+      storeId: currentStoreId,
+      createdBy: currentUser.id,
+    });
+    await get().fetchOrders();
+    await get().fetchBills();
+    return savedOrder;
+  },
+
+  savePrint: async (orderId, bill) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.savePrint(orderId, {
+      ...bill,
+      storeId: currentStoreId,
+      generatedBy: currentUser.id,
+    });
+    await get().fetchOrders();
+    await get().fetchBills();
   },
 
   updateOrder: async (id, order) => {
@@ -370,8 +431,9 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
+    console.log('[DataStore] Updating order', { id, order });
     await api.updateOrder(id, order);
-    cache.delete(cacheKeys.orders(currentStoreId));
+    console.log('[DataStore] Order updated successfully');
     await get().fetchOrders();
   },
 
@@ -381,17 +443,15 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.completeOrder(id, paymentMethod);
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
   },
 
-  cancelOrder: async (id) => {
+  cancelOrder: async (id, reason) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.cancelOrder(id);
-    cache.delete(cacheKeys.orders(currentStoreId));
+    await api.cancelOrder(id, reason);
     await get().fetchOrders();
   },
 
@@ -456,7 +516,6 @@ export const useDataStore = create<DataState>((set, get) => ({
     });
     // Mark order as completed and release the table
     await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
-    cache.delete(cacheKeys.orders(currentStoreId));
     await get().fetchOrders();
   },
 
@@ -528,5 +587,72 @@ export const useDataStore = create<DataState>((set, get) => ({
 
   resetPassword: async (userId, password) => {
     await api.resetPassword(userId, password);
+  },
+
+  // Expense Categories
+  fetchExpenseCategories: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const expenseCategories = await api.getExpenseCategories(currentStoreId);
+      set({ expenseCategories: expenseCategories || [] });
+    } catch (error) {
+      console.error('Failed to fetch expense categories:', error);
+    }
+  },
+
+  createExpenseCategory: async (category) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.createExpenseCategory({ ...category, storeId: currentStoreId });
+    await get().fetchExpenseCategories();
+  },
+
+  updateExpenseCategory: async (id, category) => {
+    await api.updateExpenseCategory(id, category);
+    await get().fetchExpenseCategories();
+  },
+
+  deleteExpenseCategory: async (id) => {
+    await api.deleteExpenseCategory(id);
+    await get().fetchExpenseCategories();
+  },
+
+  // Expenses
+  fetchExpenses: async (startDate, endDate) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const expenses = await api.getExpenses(currentStoreId, startDate, endDate);
+      set({ expenses: expenses || [] });
+    } catch (error) {
+      console.error('Failed to fetch expenses:', error);
+    }
+  },
+
+  createExpense: async (expense) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.createExpense({
+      ...expense,
+      storeId: currentStoreId,
+      createdBy: currentUser.id,
+    });
+    await get().fetchExpenses();
+  },
+
+  updateExpense: async (id, expense) => {
+    await api.updateExpense(id, expense);
+    await get().fetchExpenses();
+  },
+
+  deleteExpense: async (id) => {
+    await api.deleteExpense(id);
+    await get().fetchExpenses();
   },
 }));

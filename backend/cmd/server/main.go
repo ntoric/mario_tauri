@@ -131,6 +131,10 @@ func main() {
 		r.Post("/api/items", h.CreateItem)
 		r.Put("/api/items/{id}", h.UpdateItem)
 		r.Delete("/api/items/{id}", h.DeleteItem)
+		r.Get("/api/items/{itemId}/expenses", h.GetItemExpenses)
+		r.Post("/api/items/{itemId}/expenses", h.CreateItemExpense)
+		r.Put("/api/item-expenses/{id}", h.UpdateItemExpense)
+		r.Delete("/api/item-expenses/{id}", h.DeleteItemExpense)
 
 		// Tables
 		r.Get("/api/tables", h.GetTables)
@@ -142,6 +146,8 @@ func main() {
 		// Orders
 		r.Get("/api/orders", h.GetOrders)
 		r.Post("/api/orders", h.CreateOrder)
+		r.Post("/api/orders/save-ebill", h.SaveEBill)
+		r.Post("/api/orders/{id}/save-print", h.SavePrint)
 		r.Post("/api/orders/parcel", h.CreateParcelOrder)
 		r.Put("/api/orders/{id}", h.UpdateOrder)
 		r.Patch("/api/orders/{id}/complete", h.CompleteOrder)
@@ -165,6 +171,27 @@ func main() {
 
 		// Support Config (POST requires superadmin)
 		r.Post("/api/support-config", h.UpdateSupportConfig)
+
+		// Expense Categories
+		r.Get("/api/expense-categories", h.GetExpenseCategories)
+		r.Post("/api/expense-categories", h.CreateExpenseCategory)
+		r.Put("/api/expense-categories/{id}", h.UpdateExpenseCategory)
+		r.Delete("/api/expense-categories/{id}", h.DeleteExpenseCategory)
+
+		// Expenses
+		r.Get("/api/expenses", h.GetExpenses)
+		r.Get("/api/expenses/{id}", h.GetExpense)
+		r.Post("/api/expenses", h.CreateExpense)
+		r.Put("/api/expenses/{id}", h.UpdateExpense)
+		r.Delete("/api/expenses/{id}", h.DeleteExpense)
+
+		// Expense Reports
+		r.Get("/api/expenses/report/by-category", h.GetExpenseReportByCategory)
+		r.Get("/api/expenses/report/by-date", h.GetExpenseSummaryByDate)
+
+		// Revenue Report
+		r.Get("/api/reports/revenue", h.GetRevenueReport)
+		r.Get("/api/reports/item-profit", h.GetItemProfitReport)
 	})
 
 	// 6. Start HTTP Server with Graceful Shutdown

@@ -171,7 +171,14 @@ const UpdateManagement: React.FC = () => {
                   <div className="detail-row">
                     <span className="detail-label">Last Updated:</span>
                     <span className="detail-value">
-                      {new Date(appUpdates.mobile.updatedAt).toLocaleString()}
+                      {new Date(appUpdates.mobile.updatedAt).toLocaleString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </span>
                   </div>
                 )}
@@ -264,7 +271,14 @@ const UpdateManagement: React.FC = () => {
                   <div className="detail-row">
                     <span className="detail-label">Last Updated:</span>
                     <span className="detail-value">
-                      {new Date(appUpdates.desktop.updatedAt).toLocaleString()}
+                      {new Date(appUpdates.desktop.updatedAt).toLocaleString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </span>
                   </div>
                 )}

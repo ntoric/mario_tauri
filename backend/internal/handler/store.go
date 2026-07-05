@@ -177,6 +177,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 		"kotPrintEnabled":   "kot_print_enabled",
 		"remoteBillingEnabled": "remote_billing_enabled",
 		"isActive":          "is_active",
+		"themeColor":        "theme_color",
 	}
 
 	for jsonKey, sqlCol := range keyMapping {

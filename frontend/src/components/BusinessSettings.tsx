@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image } from 'lucide-react';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
 
 interface PrinterDevice {
@@ -30,7 +31,7 @@ const BusinessSettings: React.FC = () => {
   
   const currentStore = stores.find(s => s.id === currentStoreId);
   
-  const [activeTab, setActiveTab] = useState<'general' | 'printer'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'printer' | 'appearance'>('general');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -63,6 +64,10 @@ const BusinessSettings: React.FC = () => {
     remoteBillingEnabled: false,
   });
 
+  const [appearanceSettings, setAppearanceSettings] = useState({
+    themeColor: '',
+  });
+
   useEffect(() => {
     if (currentStore) {
       setGeneralSettings({
@@ -83,6 +88,9 @@ const BusinessSettings: React.FC = () => {
       });
       setSelectedPrinterName(currentStore.printerName || '');
       setLogoPreview(currentStore.logoUrl || null);
+      setAppearanceSettings({
+        themeColor: currentStore.themeColor || '',
+      });
     }
   }, [currentStore]);
 
@@ -162,6 +170,24 @@ const BusinessSettings: React.FC = () => {
         remoteBillingEnabled: printerSettings.remoteBillingEnabled,
       });
       setSaveMessage('Printer settings saved successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (error) {
+      setSaveMessage('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAppearance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentStore) return;
+
+    setIsSaving(true);
+    try {
+      await updateStore(currentStore.id, {
+        themeColor: appearanceSettings.themeColor || '',
+      });
+      setSaveMessage('Appearance settings saved successfully!');
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
       setSaveMessage('Failed to save settings');
@@ -277,6 +303,13 @@ const BusinessSettings: React.FC = () => {
         >
           <Printer size={18} />
           Printer & Invoice
+        </button>
+        <button
+          className={`tab ${activeTab === 'appearance' ? 'active' : ''}`}
+          onClick={() => setActiveTab('appearance')}
+        >
+          <Palette size={18} />
+          Appearance
         </button>
       </div>
 
@@ -437,6 +470,164 @@ const BusinessSettings: React.FC = () => {
                   onChange={e => setGeneralSettings({ ...generalSettings, phone: e.target.value })}
                   placeholder="Contact number"
                 />
+              </div>
+            </div>
+            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+                <Save size={18} />
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activeTab === 'appearance' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">UI Theme Color</span>
+          </div>
+          <form onSubmit={handleSaveAppearance}>
+            <div className="card-body">
+              <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
+                Choose a color theme for this store. This will change the primary color used throughout the UI (buttons, active states, highlights). The default theme is Orange.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
+                {/* Default / No custom color */}
+                <label
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    padding: '1rem',
+                    border: '2px solid',
+                    borderColor: !appearanceSettings.themeColor ? 'var(--primary)' : 'var(--gray-200)',
+                    borderRadius: 'var(--radius)',
+                    background: !appearanceSettings.themeColor ? 'rgba(255,107,53,0.05)' : 'white',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="themeColor"
+                    value=""
+                    checked={!appearanceSettings.themeColor}
+                    onChange={() => {
+                      setAppearanceSettings({ themeColor: '' });
+                      applyThemeColor(undefined);
+                    }}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ff8c61 0%, #ff6b35 50%, #e55a2b 100%)',
+                    boxShadow: '0 2px 8px rgba(255,107,53,0.3)',
+                  }} />
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Default (Orange)</span>
+                </label>
+
+                {THEME_PRESETS.filter(t => t.id !== 'default').map((preset) => {
+                  const selected = appearanceSettings.themeColor === preset.primary;
+                  return (
+                    <label
+                      key={preset.id}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        cursor: 'pointer',
+                        padding: '1rem',
+                        border: '2px solid',
+                        borderColor: selected ? preset.primary : 'var(--gray-200)',
+                        borderRadius: 'var(--radius)',
+                        background: selected ? `${preset.primary}10` : 'white',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="themeColor"
+                        value={preset.primary}
+                        checked={selected}
+                        onChange={() => {
+                          setAppearanceSettings({ themeColor: preset.primary });
+                          applyThemeColor(preset.primary);
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: `linear-gradient(135deg, ${preset.primaryLight} 0%, ${preset.primary} 50%, ${preset.primaryDark} 100%)`,
+                        boxShadow: `0 2px 8px ${preset.primary}50`,
+                      }} />
+                      <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{preset.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Custom color picker */}
+              <div style={{
+                marginTop: '2rem',
+                padding: '1rem',
+                background: 'var(--gray-50)',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--gray-200)',
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
+                  <input
+                    type="color"
+                    value={appearanceSettings.themeColor || '#ff6b35'}
+                    onChange={(e) => {
+                      setAppearanceSettings({ themeColor: e.target.value });
+                      applyThemeColor(e.target.value);
+                    }}
+                    style={{ width: '44px', height: '44px', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', padding: 0 }}
+                  />
+                  <div>
+                    <span style={{ fontWeight: 600 }}>Custom Color</span>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
+                      Pick any color using the color picker above.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Preview */}
+              <div style={{
+                marginTop: '1.5rem',
+                padding: '1.5rem',
+                background: 'var(--gray-50)',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--gray-200)',
+              }}>
+                <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>Preview</h4>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button type="button" className="btn btn-primary" disabled>
+                    Primary Button
+                  </button>
+                  <button type="button" className="btn btn-outline" disabled>
+                    Outline Button
+                  </button>
+                  <span style={{
+                    padding: '0.375rem 0.875rem',
+                    borderRadius: '20px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    background: 'rgba(255,107,53,0.1)',
+                    color: 'var(--primary)',
+                  }}>
+                    Active Badge
+                  </span>
+                </div>
               </div>
             </div>
             <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mario Juicy",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "identifier": "com.mario.juicy",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -26,12 +26,16 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/mario-printer"
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
@@ -40,6 +44,23 @@
       "frameworks": [],
       "providerShortName": null,
       "signingIdentity": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5NjI2N0FBM0JEMUEzNDkKUldSSm85RTdxbWRpaVk3b2FXdjViN21BR0VXWldhekV1Y0xXQWJpUDREOWhNcWIyQ0prUVg1YlUK",
+      "endpoints": [
+        "https://github.com/ntoric/mario_tauri/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

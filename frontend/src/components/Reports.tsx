@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, TrendingUp, ShoppingBag, CreditCard, Package, Users, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
@@ -10,22 +10,18 @@ type DateRange = 'today' | 'week' | 'month' | 'all';
 const Reports: React.FC = () => {
   const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRange>('today');
 
   useEffect(() => {
-    fetchOrders(true);
+    fetchOrders();
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Reports',
-      subtitle: 'Sales analytics and business insights',
-      actions: null,
-    });
-  }, [setHeaderContent]);
+  useReportPageHeader({
+    title: 'Sales Analytics',
+    subtitle: 'Sales analytics and business insights',
+  });
 
   const now = new Date();
 

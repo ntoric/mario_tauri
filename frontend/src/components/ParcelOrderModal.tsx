@@ -251,8 +251,8 @@ const ParcelOrderModal: React.FC = () => {
               name: currentStore?.name || 'Cafe',
               branch: currentStore?.branch || '',
               location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
+              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
               phone: currentStore?.phone || '',
               address: currentStore?.location || '',
             },
@@ -279,7 +279,6 @@ const ParcelOrderModal: React.FC = () => {
               balance: 0,
             },
             payment_mode: paymentMethod,
-            dr_ref: '',
             footer: ['Thank You Visit Again'],
           },
         });
@@ -540,35 +539,6 @@ const ParcelOrderModal: React.FC = () => {
                   />
                 </div>
 
-                <div className="payment-method-section" style={{ marginTop: '1rem' }}>
-                  <label className="payment-label">Payment Method</label>
-                  <div className="payment-options">
-                    <button
-                      className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('cash')}
-                      data-method="cash"
-                      disabled={isSubmitting}
-                    >
-                      Cash
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('card')}
-                      data-method="card"
-                      disabled={isSubmitting}
-                    >
-                      Card
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('upi')}
-                      data-method="upi"
-                      disabled={isSubmitting}
-                    >
-                      UPI
-                    </button>
-                  </div>
-                </div>
               </div>
               <div className="modal-footer">
                 <button

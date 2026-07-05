@@ -130,8 +130,8 @@ const BillModal: React.FC = () => {
               name: currentStore?.name || 'Cafe',
               branch: currentStore?.branch || '',
               location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
+              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
               phone: currentStore?.phone || '',
               address: currentStore?.location || '',
             },
@@ -158,7 +158,6 @@ const BillModal: React.FC = () => {
               balance: 0,
             },
             payment_mode: paymentMethod,
-            dr_ref: '',
             footer: ['Thank You Visit Again'],
           },
         });
@@ -197,7 +196,14 @@ const BillModal: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return new Date(dateString).toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   return (

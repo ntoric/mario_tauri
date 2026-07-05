@@ -321,8 +321,8 @@ const OrderModal: React.FC = () => {
               name: currentStore?.name || 'Cafe',
               branch: currentStore?.branch || '',
               location: currentStore?.location || '',
-              gst_number: currentStore?.gstin || '',
-              fssai_lic_no: currentStore?.fssaiNo || '',
+              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
               phone: currentStore?.phone || '',
               address: currentStore?.location || '',
             },
@@ -349,7 +349,6 @@ const OrderModal: React.FC = () => {
               balance: 0,
             },
             payment_mode: paymentMethod,
-            dr_ref: '',
             footer: ['Thank You Visit Again'],
           },
         });
@@ -672,33 +671,6 @@ const OrderModal: React.FC = () => {
                   <span className="bill-total-value">{formatCurrency(total)}</span>
                 </div>
                 
-                <div className="payment-method-section">
-                  <label className="payment-label">Payment Method</label>
-                  <div className="payment-options">
-                    <button
-                      className={`payment-option ${paymentMethod === 'cash' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('cash')}
-                      data-method="cash"
-                    >
-                      Cash
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'card' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('card')}
-                      data-method="card"
-                    >
-                      Card
-                    </button>
-                    <button
-                      className={`payment-option ${paymentMethod === 'upi' ? 'active' : ''}`}
-                      onClick={() => setPaymentMethod('upi')}
-                      data-method="upi"
-                    >
-                      UPI
-                    </button>
-                  </div>
-                </div>
-
                 <p className="bill-hint">Press Enter or click Print to complete</p>
               </div>
               <div className="modal-footer">

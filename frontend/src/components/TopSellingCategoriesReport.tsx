@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 
@@ -21,24 +21,20 @@ interface CategoryDateRow {
 const TopSellingCategoriesReport: React.FC = () => {
   const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
   const [dateRange, setDateRange] = useState<DateRange>('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('count');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
-    fetchOrders(true);
+    fetchOrders();
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Top Selling Categories',
-      subtitle: 'Detailed category-wise sales report',
-      actions: null,
-    });
-  }, [setHeaderContent]);
+  useReportPageHeader({
+    title: 'Top Selling Categories',
+    subtitle: 'Detailed category-wise sales report',
+  });
 
   const getRangeStart = (range: DateRange): Date => {
     const d = new Date();

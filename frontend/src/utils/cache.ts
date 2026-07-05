@@ -90,7 +90,8 @@ export const cache = new Cache();
 export const cacheKeys = {
   stores: () => 'stores',
   categories: (storeId: string) => `categories:${storeId}`,
-  items: (storeId: string) => `items:${storeId}`,
+  items: (storeId: string, includeProfit?: boolean) =>
+    includeProfit ? `items:profit:${storeId}` : `items:${storeId}`,
   orders: (storeId: string) => `orders:${storeId}`,
   bills: (storeId: string) => `bills:${storeId}`,
   users: () => 'users',
