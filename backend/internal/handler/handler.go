@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"cafe-backend/internal/config"
@@ -25,8 +26,7 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// Log error or fall back
-		http.Error(w, `{"error": "Internal Server Error"}`, http.StatusInternalServerError)
+		log.Printf("[Handler] Failed to encode JSON response: %v", err)
 	}
 }
 

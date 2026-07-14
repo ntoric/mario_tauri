@@ -48,9 +48,11 @@ func checkAndRunCleanup(db *sql.DB) {
 	settings := make(map[string]string)
 	for rows.Next() {
 		var key, val string
-		if err := rows.Scan(&key, &val); err == nil {
-			settings[key] = val
+		if err := rows.Scan(&key, &val); err != nil {
+			log.Printf("[Cleanup Error] Failed to scan setting row: %v", err)
+			continue
 		}
+		settings[key] = val
 	}
 
 	enabled := settings["cleanup_enabled"] == "true"

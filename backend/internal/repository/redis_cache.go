@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -33,11 +34,15 @@ func (r *RedisCache) Get(ctx context.Context, key string) ([]byte, bool) {
 }
 
 func (r *RedisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) {
-	_ = r.client.Set(ctx, key, value, ttl).Err()
+	if err := r.client.Set(ctx, key, value, ttl).Err(); err != nil {
+		log.Printf("[Redis] Failed to SET key %q: %v", key, err)
+	}
 }
 
 func (r *RedisCache) Delete(ctx context.Context, key string) {
-	_ = r.client.Del(ctx, key).Err()
+	if err := r.client.Del(ctx, key).Err(); err != nil {
+		log.Printf("[Redis] Failed to DEL key %q: %v", key, err)
+	}
 }
 
 func (r *RedisCache) DeleteByPrefix(ctx context.Context, prefix string) {
@@ -45,10 +50,13 @@ func (r *RedisCache) DeleteByPrefix(ctx context.Context, prefix string) {
 	for {
 		keys, nextCursor, err := r.client.Scan(ctx, cursor, prefix+"*", 100).Result()
 		if err != nil {
+			log.Printf("[Redis] Failed to SCAN prefix %q: %v", prefix, err)
 			return
 		}
 		if len(keys) > 0 {
-			_ = r.client.Del(ctx, keys...).Err()
+			if err := r.client.Del(ctx, keys...).Err(); err != nil {
+				log.Printf("[Redis] Failed to DEL keys with prefix %q: %v", prefix, err)
+			}
 		}
 		cursor = nextCursor
 		if cursor == 0 {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -162,6 +163,9 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.ThemeColor = themeColor.String
 		stores = append(stores, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return stores, nil
 }
 
@@ -317,6 +321,9 @@ func (r *UserRepository) GetAll(ctx context.Context, role, userID, storeID strin
 		u.StoreIDs = []string(storeIDs)
 		users = append(users, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return users, nil
 }
 
@@ -398,6 +405,9 @@ func (r *UserRepository) GetUserStores(ctx context.Context, userID string) ([]mo
 		}
 		s.Branch = branch.String
 		stores = append(stores, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return stores, nil
 }
@@ -526,6 +536,9 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 		}
 		c.Description = desc.String
 		categories = append(categories, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	if r.redis != nil {
@@ -677,6 +690,9 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 			applyItemProfitFields(&i)
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	if r.redis != nil {
@@ -932,6 +948,9 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 		}
 		tables = append(tables, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return tables, nil
 }
@@ -1064,6 +1083,9 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 		}
 
 		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return orders, nil
 }
@@ -1363,6 +1385,9 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 
 		bills = append(bills, b)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return bills, nil
 }
 
@@ -1491,7 +1516,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM bills").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM bills").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining bills: %v", err)
+		}
 		results["bills"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1506,7 +1533,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM orders").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM orders").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining orders: %v", err)
+		}
 		results["orders"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1517,7 +1546,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tables").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM tables").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining tables: %v", err)
+		}
 		results["tables"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1531,7 +1562,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM items").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM items").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining items: %v", err)
+		}
 		results["items"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1542,27 +1575,41 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM categories").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM categories").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining categories: %v", err)
+		}
 		results["categories"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
 	// Reset stores
 	if p.Stores {
 		if !p.Bills {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM bills")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM bills"); err != nil {
+				return nil, fmt.Errorf("cascade delete bills: %w", err)
+			}
 		}
 		if !p.Orders {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM order_items")
-			_, _ = tx.ExecContext(ctx, "DELETE FROM orders")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM order_items"); err != nil {
+				return nil, fmt.Errorf("cascade delete order_items: %w", err)
+			}
+			if _, err = tx.ExecContext(ctx, "DELETE FROM orders"); err != nil {
+				return nil, fmt.Errorf("cascade delete orders: %w", err)
+			}
 		}
 		if !p.Tables {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM tables")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM tables"); err != nil {
+				return nil, fmt.Errorf("cascade delete tables: %w", err)
+			}
 		}
 		if !p.Items {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM items")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM items"); err != nil {
+				return nil, fmt.Errorf("cascade delete items: %w", err)
+			}
 		}
 		if !p.Categories {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM categories")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM categories"); err != nil {
+				return nil, fmt.Errorf("cascade delete categories: %w", err)
+			}
 		}
 
 		// Clear store_id from users to avoid FK issues
@@ -1584,7 +1631,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 		}
 
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM stores").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM stores").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining stores: %v", err)
+		}
 		results["stores"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1595,10 +1644,14 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 			return nil, err
 		}
 		if !p.Stores {
-			_, _ = tx.ExecContext(ctx, "DELETE FROM user_stores")
+			if _, err = tx.ExecContext(ctx, "DELETE FROM user_stores"); err != nil {
+				return nil, fmt.Errorf("cascade delete user_stores: %w", err)
+			}
 		}
 		var count int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+			log.Printf("[System Reset] Failed to count remaining users: %v", err)
+		}
 		results["users"] = map[string]interface{}{"success": true, "remaining": count}
 	}
 
@@ -1639,6 +1692,9 @@ func (r *SystemRepository) GetConfig(ctx context.Context) (map[string]string, er
 			return nil, err
 		}
 		settings[key] = val
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return settings, nil
 }
@@ -1730,6 +1786,9 @@ func (r *AppUpdateRepository) GetAll(ctx context.Context) ([]AppUpdate, error) {
 		}
 		updates = append(updates, update)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return updates, nil
 }
 
@@ -1807,6 +1866,9 @@ func (r *SupportConfigRepository) Get(ctx context.Context) (*models.SupportConfi
 		case "support_whatsapp_link":
 			config.WhatsAppLink = val
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return config, nil
 }

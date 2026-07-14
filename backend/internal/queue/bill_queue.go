@@ -67,9 +67,11 @@ func processPendingQueues(db *sql.DB, cfg *config.Config) {
 	var storeIDs []string
 	for rows.Next() {
 		var storeID string
-		if err := rows.Scan(&storeID); err == nil {
-			storeIDs = append(storeIDs, storeID)
+		if err := rows.Scan(&storeID); err != nil {
+			log.Printf("[Bill Queue Error] Failed to scan store ID: %v", err)
+			continue
 		}
+		storeIDs = append(storeIDs, storeID)
 	}
 
 	if len(storeIDs) == 0 {

@@ -45,7 +45,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		// Business admin and staff see their assigned store only
 		if user.StoreID != "" {
 			s, errStore := h.Repo.Store.GetByID(r.Context(), user.StoreID)
-			if errStore == nil && s != nil {
+			if errStore != nil {
+				err = errStore
+			} else if s != nil {
 				stores = []models.Store{*s}
 			}
 		}
@@ -105,7 +107,9 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		stores, err = h.Repo.User.GetUserStores(r.Context(), user.ID)
 	} else if user.StoreID != "" {
 		s, errStore := h.Repo.Store.GetByID(r.Context(), user.StoreID)
-		if errStore == nil && s != nil {
+		if errStore != nil {
+			err = errStore
+		} else if s != nil {
 			stores = []models.Store{*s}
 		}
 	}
