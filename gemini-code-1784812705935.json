@@ -1,0 +1,210 @@
+[
+  {
+    "category": "Soda Specials",
+    "items": [
+      {"name": "Lime Soda", "price": 30},
+      {"name": "Masala Soda", "price": 40},
+      {"name": "Ginger Soda", "price": 40},
+      {"name": "Chilli Soda", "price": 40},
+      {"name": "Mint Lime Soda", "price": 50},
+      {"name": "Nannari Soda", "price": 50},
+      {"name": "Grape Soda", "price": 50},
+      {"name": "Passion Fruit Soda", "price": 60},
+      {"name": "Mango Chilli Soda", "price": 60}
+    ]
+  },
+  {
+    "category": "Latte & Coffee",
+    "items": [
+      {"name": "Classic Cold Coffee", "price": 60},
+      {"name": "Choco Coffee", "price": 80},
+      {"name": "Caramel Iced Coffee", "price": 100},
+      {"name": "Iced Mocha", "price": 110},
+      {"name": "Blue Curacao Latte", "price": 90},
+      {"name": "Strawberry Latte", "price": 90},
+      {"name": "Oatmeal Coffee Smoothie", "price": 90},
+      {"name": "Dates Coffee", "price": 90}
+    ]
+  },
+  {
+    "category": "Falooda & Salad",
+    "items": [
+      {"name": "Fruit with Ice Cream", "price": 50},
+      {"name": "Mario Fruit Salad", "price": 80},
+      {"name": "Falooda", "price": 110},
+      {"name": "Royal Falooda", "price": 140},
+      {"name": "Irish Falooda", "price": 180},
+      {"name": "Strawberry Falooda", "price": 130},
+      {"name": "Chocolate Falooda", "price": 150},
+      {"name": "Butterscotch Falooda", "price": 140},
+      {"name": "Falooda Boat", "price": 190},
+      {"name": "Arabian Special Falooda", "price": 150},
+      {"name": "Spanish Special Falooda", "price": 190},
+      {"name": "Special Falooda", "price": 180}
+    ]
+  },
+  {
+    "category": "Mojito Special",
+    "items": [
+      {"name": "Blue Mojito", "price": 80},
+      {"name": "Mint Mojito", "price": 80},
+      {"name": "Watermelon Mojito", "price": 80},
+      {"name": "Strawberry Mojito", "price": 80},
+      {"name": "Pineapple Mojito", "price": 80},
+      {"name": "Green Apple Mojito", "price": 90},
+      {"name": "Passion Fruit Mojito", "price": 90},
+      {"name": "Red Wine Mojito", "price": 90}
+    ]
+  },
+  {
+    "category": "Tender Coconut Special",
+    "items": [
+      {"name": "Tender Milkshake", "price": 70},
+      {"name": "Tender Chikku", "price": 80},
+      {"name": "Tender Dry Fruits", "price": 100},
+      {"name": "Tender Mango", "price": 80},
+      {"name": "Tender Strawberry", "price": 80},
+      {"name": "Tender KitKat", "price": 100},
+      {"name": "Tender Boost", "price": 90},
+      {"name": "Tender Seetha", "price": 90},
+      {"name": "Tender Boosted", "price": 90},
+      {"name": "Tender Cashew Nut", "price": 80},
+      {"name": "Tender Dates & Badam", "price": 100},
+      {"name": "Tender Dates & Cashew", "price": 100},
+      {"name": "Tender Butter Fruit", "price": 100}
+    ]
+  },
+  {
+    "category": "Malba",
+    "items": [
+      {"name": "Chikku Malba", "price": 100},
+      {"name": "Mango Malba (Season)", "price": 100},
+      {"name": "Tender Malba", "price": 100},
+      {"name": "Strawberry Malba (season)", "price": 100}
+    ]
+  },
+  {
+    "category": "Lassi Special",
+    "items": [
+      {"name": "Sweet Lassi", "price": 40},
+      {"name": "Strawberry Lassi", "price": 60},
+      {"name": "Strawberry Lassi with Ice Cream", "price": 90},
+      {"name": "Mango Lassi", "price": 60},
+      {"name": "Mango Lassi with Ice Cream", "price": 90},
+      {"name": "Chikku Lassi", "price": 60},
+      {"name": "Fruit Lassi", "price": 70},
+      {"name": "Dry Fruits Lassi", "price": 90}
+    ]
+  },
+  {
+    "category": "Special Dessert",
+    "items": [
+      {"name": "Brownie with Ice Cream", "price": 90},
+      {"name": "Sizzling Brownie", "price": 130}
+    ]
+  },
+  {
+    "category": "Continental & Salad",
+    "items": [
+      {"name": "Arabic Salad", "price": 130},
+      {"name": "Caesar Salad", "price": 150}
+    ]
+  },
+  {
+    "category": "Burgers & Snacks",
+    "items": [
+      {"name": "Chicken Burger", "price": 90},
+      {"name": "Chicken Cheese Burger", "price": 100},
+      {"name": "Chicken Maggi Cheese Burger", "price": 120},
+      {"name": "Paneer Burger", "price": 90},
+      {"name": "Veg Burger", "price": 80},
+      {"name": "Veg Cheese Burger", "price": 90},
+      {"name": "Veg Cheese Maggi Burger", "price": 110},
+      {"name": "Chilli Garlic Potato Pops (10 pcs)", "price": 70},
+      {"name": "Potato Cheese Pops (5 pcs)", "price": 90},
+      {"name": "Chicken Fingers (5 pcs)", "price": 80},
+      {"name": "Veg Fingers (5 pcs)", "price": 70},
+      {"name": "Cheese Corn Nuggets (5 pcs)", "price": 80},
+      {"name": "Chicken Nuggets (5 pcs)", "price": 80},
+      {"name": "Veg Nuggets (5 pcs)", "price": 70},
+      {"name": "Veggie Kievs (5 pcs)", "price": 90},
+      {"name": "Smile (5 pcs)", "price": 80},
+      {"name": "French Fries (Medium)", "price": 50},
+      {"name": "Masala Fries", "price": 70},
+      {"name": "Spanish Fries", "price": 70},
+      {"name": "Peri Peri Fries", "price": 70},
+      {"name": "Cheese Fries", "price": 80}
+    ]
+  },
+  {
+    "category": "Maggi Special",
+    "items": [
+      {"name": "Veg Maggi", "price": 50},
+      {"name": "Chicken Maggi", "price": 80},
+      {"name": "Paneer Maggi", "price": 70},
+      {"name": "Egg Maggi", "price": 60},
+      {"name": "Cheese Maggi", "price": 80},
+      {"name": "Mix Maggi", "price": 90},
+      {"name": "Mushroom Maggi", "price": 70}
+    ]
+  },
+  {
+    "category": "Rolls",
+    "items": [
+      {"name": "Veg Corn Roll", "price": 60},
+      {"name": "Chicken Roll", "price": 80},
+      {"name": "Paneer Roll", "price": 70},
+      {"name": "Mushroom Roll", "price": 70},
+      {"name": "Egg Roll", "price": 70},
+      {"name": "Jumbo Roll", "price": 100}
+    ]
+  },
+  {
+    "category": "Bread Omelette Special",
+    "items": [
+      {"name": "Bread Omelette", "price": 40},
+      {"name": "Bread Omelette Cheese", "price": 50},
+      {"name": "Special Bread Omelette", "price": 60},
+      {"name": "Special Cheese Bread Omelette", "price": 70},
+      {"name": "Chicken Bread Omelette", "price": 80},
+      {"name": "Chicken Bread Omelette Cheese", "price": 90},
+      {"name": "Corn Bread Omelette", "price": 70},
+      {"name": "Maggi Bread Omelette", "price": 70},
+      {"name": "Maggi Cheese Bread Omelette", "price": 80},
+      {"name": "Maggi Chicken Bread Omelette", "price": 90},
+      {"name": "Maggi Corn Bread Omelette", "price": 70}
+    ]
+  },
+  {
+    "category": "Sandwich Special",
+    "items": [
+      {"name": "Sandwich Toast", "price": 40},
+      {"name": "Cheese Sandwich Toast", "price": 50},
+      {"name": "Chilli Cheese Sandwich", "price": 60},
+      {"name": "Egg Sandwich", "price": 60},
+      {"name": "Egg Cheese Sandwich", "price": 60},
+      {"name": "Mushroom Sandwich", "price": 70},
+      {"name": "Paneer Cheese Sandwich", "price": 70},
+      {"name": "Chicken Sandwich", "price": 70},
+      {"name": "Chicken Cheese Sandwich", "price": 90},
+      {"name": "Club Sandwich", "price": 150},
+      {"name": "Baby Corn Sandwich", "price": 60},
+      {"name": "Corn Cheese Sandwich", "price": 70},
+      {"name": "Maggi Corn Cheese Sandwich", "price": 80},
+      {"name": "Maggi Chicken Sandwich", "price": 90}
+    ]
+  },
+  {
+    "category": "Pasta Special",
+    "items": [
+      {"name": "Veg Pasta", "price": 60},
+      {"name": "Chicken Pasta", "price": 90},
+      {"name": "Chicken Cheese Pasta", "price": 100},
+      {"name": "Penne Mushroom", "price": 170},
+      {"name": "Penne Alfredo Veg", "price": 150},
+      {"name": "Penne Alfredo Chicken", "price": 180},
+      {"name": "Penne Arrabiata Veg", "price": 130},
+      {"name": "Penne Arrabiata Chicken", "price": 150}
+    ]
+  }
+]

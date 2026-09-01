@@ -5,12 +5,14 @@ import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 
 const BillModal: React.FC = () => {
   const { stores, orders, createBill, completeOrder } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const { billModal, closeBillModal } = useUIStore();
+  const taxSettings = useTaxSettings();
   const [isPrinting, setIsPrinting] = useState(false);
   const [printError, setPrintError] = useState('');
   const [printerConfirm, setPrinterConfirm] = useState<{
@@ -31,10 +33,10 @@ const BillModal: React.FC = () => {
 
   const calculateTotals = () => {
     const subtotal = order.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
-    const tax = order.items.reduce((sum: number, oi: any) => {
+    const tax = taxSettings.taxEnabled ? order.items.reduce((sum: number, oi: any) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
-    }, 0);
+    }, 0) : 0;
     const total = subtotal + tax;
     return { subtotal, tax, total };
   };
@@ -112,8 +114,8 @@ const BillModal: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const cgst = taxable * 0.025;
-      const sgst = taxable * 0.025;
+      const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+      const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
       try {
         await printerService.printInvoice({
@@ -247,10 +249,12 @@ const BillModal: React.FC = () => {
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
-              <div className="bill-total-row">
-                <span>Tax</span>
-                <span>{formatCurrency(tax)}</span>
-              </div>
+              {taxSettings.taxEnabled && (
+                <div className="bill-total-row">
+                  <span>Tax</span>
+                  <span>{formatCurrency(tax)}</span>
+                </div>
+              )}
               <div className="bill-total-row grand-total">
                 <span>TOTAL</span>
                 <span>{formatCurrency(total)}</span>

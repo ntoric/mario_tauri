@@ -4,6 +4,9 @@ import { useDataStore, useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
+import { usePagination } from '../hooks/usePagination';
+import TablePagination from './TablePagination';
+import { useToast } from '../contexts/ToastContext';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type SortField = 'item' | 'date' | 'count' | 'revenue';
@@ -26,6 +29,8 @@ const TopSellingItemsReport: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('count');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [showStats, setShowStats] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     fetchOrders();
@@ -35,6 +40,8 @@ const TopSellingItemsReport: React.FC = () => {
   useReportPageHeader({
     title: 'Top Selling Items',
     subtitle: 'Detailed item-wise sales report',
+    showStats,
+    onToggleStats: () => setShowStats(v => !v),
   });
 
   const getRangeStart = (range: DateRange): Date => {
@@ -121,6 +128,8 @@ const TopSellingItemsReport: React.FC = () => {
     return arr;
   }, [filtered, sortField, sortDir]);
 
+  const pagination = usePagination(sorted.length);
+
   const totals = useMemo(() => {
     return filtered.reduce(
       (acc, r) => ({ count: acc.count + r.count, revenue: acc.revenue + r.revenue }),
@@ -144,7 +153,7 @@ const TopSellingItemsReport: React.FC = () => {
 
   const handleExportCSV = async () => {
     if (sorted.length === 0) {
-      alert('No data to export');
+      toast.warning('No data to export');
       return;
     }
     
@@ -167,71 +176,13 @@ const TopSellingItemsReport: React.FC = () => {
       const success = await saveCSVWithDialog(csv, `top-selling-items-${dateRange}.csv`);
       
       if (success) {
-        // Show success notification
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #48bb78;
-          color: white;
-          padding: 1rem 1.5rem;
-          border-radius: 8px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-          z-index: 1000;
-          font-weight: 500;
-          animation: slideIn 0.3s ease-out;
-        `;
-        notification.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1.2rem;">✓</span>
-            <span>Export completed successfully!</span>
-          </div>
-        `;
-        document.body.appendChild(notification);
-        
-        // Remove notification after 3 seconds
-        setTimeout(() => {
-          notification.style.animation = 'slideOut 0.3s ease-in';
-          setTimeout(() => {
-            document.body.removeChild(notification);
-          }, 300);
-        }, 3000);
+        toast.success('Export completed successfully!');
       } else {
         throw new Error('Export failed');
       }
     } catch (error) {
       console.error('Export failed:', error);
-      // Show error notification
-      const notification = document.createElement('div');
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #f56565;
-        color: white;
-        padding: 1rem 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        z-index: 1000;
-        font-weight: 500;
-        animation: slideIn 0.3s ease-out;
-      `;
-      notification.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="font-size: 1.2rem;">✗</span>
-          <span>Export failed. Please try again.</span>
-        </div>
-      `;
-      document.body.appendChild(notification);
-      
-      // Remove notification after 3 seconds
-      setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 300);
-      }, 3000);
+      toast.error('Export failed. Please try again.');
     } finally {
       // Restore button state
       if (exportButton && originalContent) {
@@ -281,6 +232,7 @@ const TopSellingItemsReport: React.FC = () => {
       </div>
 
       {/* Summary Cards */}
+      {showStats && (
       <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
         <div className="stat-card">
           <div className="stat-icon primary"><BarChart2 size={24} /></div>
@@ -304,6 +256,7 @@ const TopSellingItemsReport: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Table */}
       <div className="card">
@@ -322,50 +275,47 @@ const TopSellingItemsReport: React.FC = () => {
               <p style={{ fontSize: '0.9rem' }}>No item sales data for this period</p>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--gray-200)' }}>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('item')}>
-                      Item <SortIcon field="item" />
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      Category
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('date')}>
-                      Date <SortIcon field="date" />
-                    </th>
-                    <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('count')}>
-                      Count <SortIcon field="count" />
-                    </th>
-                    <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('revenue')}>
-                      Revenue <SortIcon field="revenue" />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((row, idx) => (
-                    <tr key={`${row.itemId}-${row.date}`} style={{ borderBottom: '1px solid var(--gray-200)', background: idx % 2 === 0 ? undefined : 'var(--gray-50, rgba(0,0,0,0.02))' }}>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-800)', fontWeight: 500 }}>{row.item}</td>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-600)' }}>{row.category}</td>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-700)' }}>{row.date}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--gray-700)', fontWeight: 500 }}>{row.count}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(row.revenue)}</td>
+            <div className="zoho-table-wrap">
+              <div className="zoho-table-scroll">
+                <table className="zoho-table">
+                  <thead>
+                    <tr>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('item')}>
+                        Item <SortIcon field="item" />
+                      </th>
+                      <th>Category</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date')}>
+                        Date <SortIcon field="date" />
+                      </th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('count')}>
+                        Count <SortIcon field="count" />
+                      </th>
+                      <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('revenue')}>
+                        Revenue <SortIcon field="revenue" />
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid var(--gray-300)', background: 'var(--gray-100, rgba(0,0,0,0.04))' }}>
-                    <td colSpan={3} style={{ padding: '0.75rem', fontWeight: 700, color: 'var(--gray-800)' }}>Total</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--gray-800)' }}>{totals.count}</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(totals.revenue)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {pagination.paginatedItems(sorted).map((row, idx) => (
+                      <tr key={`${row.itemId}-${row.date}`} style={{ background: idx % 2 === 0 ? undefined : 'var(--gray-50)' }}>
+                        <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{row.item}</td>
+                        <td style={{ color: 'var(--gray-500)' }}>{row.category}</td>
+                        <td>{row.date}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{row.count}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>{formatCurrency(row.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gray-300)', background: 'var(--gray-100)' }}>
+                      <td colSpan={3} style={{ padding: '10px 14px', fontWeight: 800, color: 'var(--dark)' }}>Total</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: 'var(--dark)' }}>{totals.count}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(totals.revenue)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <TablePagination pagination={pagination} />
             </div>
           )}
         </div>

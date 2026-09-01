@@ -1,23 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { usePagination } from '../hooks/usePagination';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
+import TablePagination from './TablePagination';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
-  const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue } = useDataStore();
+  const { stores, tables, getActiveOrderByTable, createTable, updateTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxSettings = useTaxSettings();
   const { setHeaderContent } = usePageHeader();
   const [viewMode, setViewMode] = useState<'layout' | 'list'>('layout');
 
@@ -133,8 +137,8 @@ const Tables: React.FC = () => {
             });
 
             const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-            const cgst = taxable * 0.025;
-            const sgst = taxable * 0.025;
+            const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+            const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
             await printerService.printInvoice({
               type: 'invoice',
@@ -201,6 +205,7 @@ const Tables: React.FC = () => {
   }, [currentStoreId, currentStore?.remoteBillingEnabled, currentStore, fetchBillQueue, fetchOrders]);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTable, setEditingTable] = useState<Table | null>(null);
   const [newTable, setNewTable] = useState({ number: '', seats: 4 });
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
@@ -268,10 +273,10 @@ const Tables: React.FC = () => {
             <button
               className={`btn ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
               onClick={() => setDeleteMode(!deleteMode)}
-              title="Toggle delete mode"
+              title="Toggle edit mode"
             >
-              <Trash2 size={18} />
-              {deleteMode ? 'Done' : 'Delete Tables'}
+              <Pencil size={18} />
+              {deleteMode ? 'Done' : 'Edit Tables'}
             </button>
           )}
         </>
@@ -371,8 +376,8 @@ const Tables: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const cgst = taxable * 0.025;
-      const sgst = taxable * 0.025;
+      const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+      const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
       try {
         await printerService.printInvoice({
@@ -479,16 +484,30 @@ const Tables: React.FC = () => {
 
     setIsAddingTable(true);
     try {
-      await createTable({
-        number: parseInt(newTable.number),
-        seats: newTable.seats,
-        position: { x: 0, y: 0 },
-      });
+      if (editingTable) {
+        await updateTable(editingTable.id, {
+          number: parseInt(newTable.number),
+          seats: newTable.seats,
+        });
+        setEditingTable(null);
+      } else {
+        await createTable({
+          number: parseInt(newTable.number),
+          seats: newTable.seats,
+          position: { x: 0, y: 0 },
+        });
+      }
       setShowAddModal(false);
       setNewTable({ number: '', seats: 4 });
     } finally {
       setIsAddingTable(false);
     }
+  };
+
+  const handleEditTable = (table: Table) => {
+    setEditingTable(table);
+    setNewTable({ number: String(table.number), seats: table.seats });
+    setShowAddModal(true);
   };
 
   const handleDeleteTable = (table: Table) => {
@@ -508,10 +527,13 @@ const Tables: React.FC = () => {
   };
 
   const billDialogOrder = billDialogTable ? getActiveOrderByTable(billDialogTable.id) : null;
-  const billDialogTotal = billDialogOrder ? 
+  const billDialogTotal = billDialogOrder ?
     billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) +
     billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0)
     : 0;
+
+  const sortedTables = useMemo(() => [...tables].sort((a, b) => a.number - b.number), [tables]);
+  const tableListPagination = usePagination(sortedTables.length);
 
   return (
     <>
@@ -537,67 +559,60 @@ const Tables: React.FC = () => {
                       key={table.id}
                       className={`table-layout-card compact ${activeOrder ? 'occupied' : ''}`}
                       onClick={() => handleTableClick(table)}
-                      style={{ position: 'relative' }}
                     >
                       {checkingTableId === table.id && (
-                        <div className="table-checking-overlay" style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          background: 'rgba(255, 255, 255, 0.7)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 'inherit',
-                          zIndex: 10
-                        }}>
+                        <div className="table-checking-overlay">
                           <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
                         </div>
                       )}
-                      {isAdmin && deleteMode && (
-                        <button
-                          className="table-delete-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTable(table);
-                          }}
-                          disabled={loadingTableId === table.id}
-                        >
-                          {loadingTableId === table.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={12} />
-                          )}
-                        </button>
-                      )}
-                      {activeOrder && (
-                        <>
-                          <button
-                            className="table-bill-btn new-design"
-                            onClick={(e) => handleBillClick(e, table)}
-                            title="Print Bill"
-                          >
-                            <Printer size={16} />
-                          </button>
-                          <button
-                            className="table-change-btn"
-                            onClick={(e) => handleChangeTableClick(e, table)}
-                            title="Change Table"
-                          >
-                            <ArrowRightLeft size={14} />
-                          </button>
-                        </>
-                      )}
-                      <div className="table-layout-number">{table.number}</div>
-                      <div className="table-layout-seats">{table.seats}s</div>
-                      <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
-                        {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
+                      <div className="table-layout-content">
+                        <div className="table-layout-number">{table.number}</div>
+                        <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
+                          {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : `${table.seats} seats`}
+                        </div>
+                        {activeOrder && (
+                          <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
+                        )}
                       </div>
-                      {activeOrder && (
-                        <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
-                      )}
+                      <div className="table-actions-col" onClick={(e) => e.stopPropagation()}>
+                        {activeOrder && !deleteMode && (
+                          <>
+                            <button
+                              className="table-action-icon-btn bill"
+                              onClick={(e) => handleBillClick(e, table)}
+                              title="Print Bill"
+                            >
+                              <Printer size={14} />
+                            </button>
+                            <button
+                              className="table-action-icon-btn change"
+                              onClick={(e) => handleChangeTableClick(e, table)}
+                              title="Change Table"
+                            >
+                              <ArrowRightLeft size={13} />
+                            </button>
+                          </>
+                        )}
+                        {isAdmin && deleteMode && !activeOrder && (
+                          <>
+                            <button
+                              className="table-action-icon-btn edit"
+                              onClick={(e) => { e.stopPropagation(); handleEditTable(table); }}
+                              title="Edit Table"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              className="table-action-icon-btn delete"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteTable(table); }}
+                              disabled={loadingTableId === table.id}
+                              title="Delete Table"
+                            >
+                              {loadingTableId === table.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -607,100 +622,108 @@ const Tables: React.FC = () => {
         ) : (
           <div className="card">
             <div className="card-body" style={{ padding: 0 }}>
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>Table #</th>
-                    <th>Seats</th>
-                    <th>Status</th>
-                    <th>Current Order</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tables.sort((a, b) => a.number - b.number).map(table => {
-                    const activeOrder = getActiveOrderByTable(table.id);
-                    return (
-                      <tr
-                        key={table.id}
-                        className="clickable-row"
-                        onClick={() => handleTableClick(table)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <strong>Table {table.number}</strong>
-                            {checkingTableId === table.id && (
-                              <Loader2 size={14} className="animate-spin" style={{ color: 'var(--primary)' }} />
-                            )}
-                          </div>
-                        </td>
-                        <td>{table.seats} seats</td>
-                        <td>
-                          <span className={`badge ${activeOrder ? 'badge-warning' : 'badge-success'}`}>
-                            {activeOrder ? 'Occupied' : 'Available'}
-                          </span>
-                        </td>
-                        <td>
-                          {activeOrder ? (
-                            <div>
-                              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                                {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
-                              </span>
-                              <div style={{ marginTop: '0.25rem' }}>
-                                <OrderTimer createdAt={activeOrder.createdAt} className="list-timer" />
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--gray-500)' }}>-</span>
-                          )}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="action-btns">
-                            {activeOrder && (
-                              <>
-                                <button
-                                  className="action-btn"
-                                  style={{ background: 'rgba(255, 107, 53, 0.1)', color: 'var(--primary)' }}
-                                  onClick={(e) => handleBillClick(e as any, table)}
-                                  title="Print Bill"
-                                >
-                                  <Printer size={14} />
-                                </button>
-                                <button 
-                                  className="action-btn" 
-                                  style={{ background: 'rgba(66, 153, 225, 0.1)', color: 'var(--info)' }}
-                                  onClick={(e) => handleChangeTableClick(e as any, table)}
-                                  title="Change Table"
-                                >
-                                  <ArrowRightLeft size={14} />
-                                </button>
-                              </>
-                            )}
-                            {isAdmin && deleteMode && (
-                              <button 
-                                className="action-btn delete" 
-                                onClick={() => handleDeleteTable(table)}
-                                disabled={loadingTableId === table.id}
-                                style={{
-                                  opacity: loadingTableId === table.id ? 0.5 : 1,
-                                  cursor: loadingTableId === table.id ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                {loadingTableId === table.id ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={14} />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </td>
+              <div className="zoho-table-wrap">
+                <div className="zoho-table-scroll">
+                  <table className="zoho-table">
+                    <thead>
+                      <tr>
+                        <th>Table #</th>
+                        <th>Seats</th>
+                        <th>Status</th>
+                        <th>Current Order</th>
+                        <th>Actions</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {tableListPagination.paginatedItems(sortedTables).map(table => {
+                        const activeOrder = getActiveOrderByTable(table.id);
+                        return (
+                          <tr
+                            key={table.id}
+                            className="clickable-row"
+                            onClick={() => handleTableClick(table)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <strong>Table {table.number}</strong>
+                                {checkingTableId === table.id && (
+                                  <Loader2 size={14} className="animate-spin" style={{ color: 'var(--primary)' }} />
+                                )}
+                              </div>
+                            </td>
+                            <td>{table.seats} seats</td>
+                            <td>
+                              <span className={`badge ${activeOrder ? 'badge-warning' : 'badge-success'}`}>
+                                {activeOrder ? 'Occupied' : 'Available'}
+                              </span>
+                            </td>
+                            <td>
+                              {activeOrder ? (
+                                <div>
+                                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                    {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
+                                  </span>
+                                  <div style={{ marginTop: '0.25rem' }}>
+                                    <OrderTimer createdAt={activeOrder.createdAt} className="list-timer" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--gray-500)' }}>-</span>
+                              )}
+                            </td>
+                            <td onClick={(e) => e.stopPropagation()}>
+                              <div className="action-btns">
+                                {activeOrder && !deleteMode && (
+                                  <>
+                                    <button
+                                      className="action-btn bill"
+                                      onClick={(e) => handleBillClick(e as any, table)}
+                                      title="Print Bill"
+                                    >
+                                      <Printer size={14} />
+                                    </button>
+                                    <button
+                                      className="action-btn change"
+                                      onClick={(e) => handleChangeTableClick(e as any, table)}
+                                      title="Change Table"
+                                    >
+                                      <ArrowRightLeft size={14} />
+                                    </button>
+                                  </>
+                                )}
+                                {isAdmin && deleteMode && !activeOrder && (
+                                  <>
+                                    <button
+                                      className="action-btn edit"
+                                      onClick={() => handleEditTable(table)}
+                                      title="Edit Table"
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                    <button
+                                      className="action-btn delete"
+                                      onClick={() => handleDeleteTable(table)}
+                                      disabled={loadingTableId === table.id}
+                                    >
+                                      {loadingTableId === table.id ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <Trash2 size={14} />
+                                      )}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination pagination={tableListPagination} />
+              </div>
             </div>
           </div>
         )}
@@ -711,8 +734,8 @@ const Tables: React.FC = () => {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add New Table</h2>
-              <button className="close-btn" onClick={() => setShowAddModal(false)}>
+              <h2>{editingTable ? 'Edit Table' : 'Add New Table'}</h2>
+              <button className="close-btn" onClick={() => { setShowAddModal(false); setEditingTable(null); setNewTable({ number: '', seats: 4 }); }}>
                 <X size={20} />
               </button>
             </div>
@@ -748,14 +771,14 @@ const Tables: React.FC = () => {
                   type="submit"
                   variant="primary"
                   isLoading={isAddingTable}
-                  loadingText="Adding..."
+                  loadingText={editingTable ? 'Saving...' : 'Adding...'}
                 >
-                  Add Table
+                  {editingTable ? 'Save Changes' : 'Add Table'}
                 </Button>
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setEditingTable(null); setNewTable({ number: '', seats: 4 }); }}
                   disabled={isAddingTable}
                 >
                   Cancel

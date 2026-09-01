@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, BarChart2 } from 'lucide-react';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 
 interface ReportPageHeaderOptions {
@@ -9,6 +9,8 @@ interface ReportPageHeaderOptions {
   backTo?: string;
   backLabel?: string;
   extraActions?: ReactNode;
+  showStats?: boolean;
+  onToggleStats?: () => void;
 }
 
 export function useReportPageHeader({
@@ -17,6 +19,8 @@ export function useReportPageHeader({
   backTo = '/reports',
   backLabel = 'Back to Reports',
   extraActions,
+  showStats,
+  onToggleStats,
 }: ReportPageHeaderOptions) {
   const { setHeaderContent } = usePageHeader();
   const navigate = useNavigate();
@@ -31,9 +35,19 @@ export function useReportPageHeader({
             <ArrowLeft size={16} />
             {backLabel}
           </button>
+          {onToggleStats && (
+            <button
+              type="button"
+              className={`btn ${showStats ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={onToggleStats}
+            >
+              <BarChart2 size={14} />
+              {showStats ? 'Hide Stats' : 'Show Stats'}
+            </button>
+          )}
           {extraActions}
         </div>
       ),
     });
-  }, [title, subtitle, backTo, backLabel, extraActions, setHeaderContent, navigate]);
+  }, [title, subtitle, backTo, backLabel, extraActions, showStats, onToggleStats, setHeaderContent, navigate]);
 }

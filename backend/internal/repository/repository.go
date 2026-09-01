@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
+	"github.com/google/uuid"
 )
 
 type CacheItem struct {
@@ -80,10 +82,14 @@ type Repository struct {
 	System             *SystemRepository
 	AppUpdate          *AppUpdateRepository
 	SupportConfig      *SupportConfigRepository
+	SmtpConfig         *SmtpConfigRepository
 	ExpenseCategory    *ExpenseCategoryRepository
 	Expense            *ExpenseRepository
 	ItemExpense        *ItemExpenseRepository
 	RevenueReport      *RevenueReportRepository
+	Inventory          *InventoryRepository
+	Recipe             *RecipeRepository
+	Purchase           *PurchaseRepository
 	Cache              *MemoryCache
 }
 
@@ -100,10 +106,14 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		System:          &SystemRepository{db: db},
 		AppUpdate:       &AppUpdateRepository{db: db},
 		SupportConfig:   &SupportConfigRepository{db: db},
+		SmtpConfig:      &SmtpConfigRepository{db: db},
 		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
 		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
 		RevenueReport:   &RevenueReportRepository{db: db},
+		Inventory:       &InventoryRepository{db: db, redis: redisCache},
+		Recipe:          &RecipeRepository{db: db, redis: redisCache},
+		Purchase:        &PurchaseRepository{db: db, redis: redisCache},
 		Cache:           cache,
 	}
 }
@@ -121,13 +131,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, kitchen_window_enabled, logo_url, theme_color, is_active, created_at FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, kitchen_window_enabled, logo_url, theme_color, is_active, created_at
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, kitchen_window_enabled, logo_url, theme_color, is_active, created_at
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -144,7 +154,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
-			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
+			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled, &s.KitchenWindowEnabled,
 			&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 		)
 		if err != nil {
@@ -166,14 +176,14 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, kitchen_window_enabled, logo_url, theme_color, is_active, created_at FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
 	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor sql.NullString
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
-		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
+		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled, &s.KitchenWindowEnabled,
 		&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
 	)
 	if err != nil {
@@ -270,7 +280,7 @@ type UserRepository struct {
 
 func (r *UserRepository) GetAll(ctx context.Context, role, userID, storeID string) ([]models.User, error) {
 	sqlStr := `
-		SELECT u.id, u.username, u.name, u.email, u.role, u.store_id, u.is_active, u.created_at,
+		SELECT u.id, u.username, u.name, u.email, u.phone, u.role, u.store_id, u.is_active, u.created_at,
 		       s.name as store_name,
 		       COALESCE(array_agg(us.store_id) FILTER (WHERE us.store_id IS NOT NULL), '{}') as store_ids
 		FROM users u
@@ -302,16 +312,17 @@ func (r *UserRepository) GetAll(ctx context.Context, role, userID, storeID strin
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		var email, storeIDNull, storeNameNull sql.NullString
+		var email, phone, storeIDNull, storeNameNull sql.NullString
 		var storeIDs pq.StringArray
 		err := rows.Scan(
-			&u.ID, &u.Username, &u.Name, &email, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
+			&u.ID, &u.Username, &u.Name, &email, &phone, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
 			&storeNameNull, &storeIDs,
 		)
 		if err != nil {
 			return nil, err
 		}
 		u.Email = email.String
+		u.Phone = phone.String
 		u.StoreID = storeIDNull.String
 		u.StoreName = storeNameNull.String
 		u.StoreIDs = []string(storeIDs)
@@ -322,7 +333,7 @@ func (r *UserRepository) GetAll(ctx context.Context, role, userID, storeID strin
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	sqlStr := `
-		SELECT u.id, u.username, u.password, u.name, u.email, u.role, u.store_id, u.is_active, u.created_at,
+		SELECT u.id, u.username, u.password, u.name, u.email, u.phone, u.role, u.store_id, u.is_active, u.created_at,
 		       s.name as store_name
 		FROM users u
 		LEFT JOIN stores s ON u.store_id = s.id
@@ -331,9 +342,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var u models.User
-	var email, storeIDNull, storeNameNull sql.NullString
+	var email, phone, storeIDNull, storeNameNull sql.NullString
 	err := row.Scan(
-		&u.ID, &u.Username, &u.Password, &u.Name, &email, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
+		&u.ID, &u.Username, &u.Password, &u.Name, &email, &phone, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
 		&storeNameNull,
 	)
 	if err != nil {
@@ -343,6 +354,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 		return nil, err
 	}
 	u.Email = email.String
+	u.Phone = phone.String
 	u.StoreID = storeIDNull.String
 	u.StoreName = storeNameNull.String
 	return &u, nil
@@ -350,7 +362,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	sqlStr := `
-		SELECT u.id, u.username, u.password, u.name, u.email, u.role, u.store_id, u.is_active, u.created_at,
+		SELECT u.id, u.username, u.password, u.name, u.email, u.phone, u.role, u.store_id, u.is_active, u.created_at,
 		       s.name as store_name
 		FROM users u
 		LEFT JOIN stores s ON u.store_id = s.id
@@ -359,9 +371,9 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 	row := r.db.QueryRowContext(ctx, sqlStr, username)
 
 	var u models.User
-	var email, storeIDNull, storeNameNull sql.NullString
+	var email, phone, storeIDNull, storeNameNull sql.NullString
 	err := row.Scan(
-		&u.ID, &u.Username, &u.Password, &u.Name, &email, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
+		&u.ID, &u.Username, &u.Password, &u.Name, &email, &phone, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
 		&storeNameNull,
 	)
 	if err != nil {
@@ -371,6 +383,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 		return nil, err
 	}
 	u.Email = email.String
+	u.Phone = phone.String
 	u.StoreID = storeIDNull.String
 	u.StoreName = storeNameNull.String
 	return &u, nil
@@ -409,14 +422,14 @@ func (r *UserRepository) Create(ctx context.Context, u models.User, storeIDs []s
 	}
 	defer tx.Rollback()
 
-	sqlStr := `INSERT INTO users (id, username, password, name, email, role, store_id, is_active)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, true)`
+	sqlStr := `INSERT INTO users (id, username, password, name, email, phone, role, store_id, is_active)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`
 	var finalStoreID interface{}
 	if u.StoreID != "" {
 		finalStoreID = u.StoreID
 	}
 
-	_, err = tx.ExecContext(ctx, sqlStr, u.ID, u.Username, u.Password, u.Name, u.Email, u.Role, finalStoreID)
+	_, err = tx.ExecContext(ctx, sqlStr, u.ID, u.Username, u.Password, u.Name, u.Email, u.Phone, u.Role, finalStoreID)
 	if err != nil {
 		return err
 	}
@@ -980,9 +993,9 @@ type OrderRepository struct {
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
 		sqlStr := `
-		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
+		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.kitchen_status, o.order_type, o.customer_name, o.customer_mobile, o.special_note,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at, o.kot_reissued_at, o.kot_items,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -1030,13 +1043,13 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
-		var cancelledAt sql.NullTime
-		var itemsBytes []byte
+		var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile, kitchenStatus, specialNote sql.NullString
+		var cancelledAt, kotReissuedAt sql.NullTime
+		var itemsBytes, kotItemsBytes []byte
 		err := rows.Scan(
-			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
+			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &kitchenStatus, &orderType, &customerName, &customerMobile, &specialNote,
 			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
+			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt, &kotReissuedAt, &kotItemsBytes,
 			&itemsBytes,
 		)
 		if err != nil {
@@ -1049,8 +1062,16 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 		o.OrderType = orderType.String
 		o.CustomerName = customerName.String
 		o.CustomerMobile = customerMobile.String
+		o.KitchenStatus = kitchenStatus.String
+		if o.KitchenStatus == "" {
+			o.KitchenStatus = "pending"
+		}
+		o.SpecialNote = specialNote.String
 		if cancelledAt.Valid {
 			o.CancelledAt = &cancelledAt.Time
+		}
+		if kotReissuedAt.Valid {
+			o.KotReissuedAt = &kotReissuedAt.Time
 		}
 
 		if len(itemsBytes) > 0 {
@@ -1062,6 +1083,12 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 		if o.Items == nil {
 			o.Items = []models.OrderItem{}
 		}
+		if len(kotItemsBytes) > 0 {
+			var kotItems []models.OrderItem
+			if err := json.Unmarshal(kotItemsBytes, &kotItems); err == nil {
+				o.KotItems = kotItems
+			}
+		}
 
 		orders = append(orders, o)
 	}
@@ -1070,9 +1097,9 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 
 func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.Order, error) {
 	sqlStr := `
-		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
+		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.kitchen_status, o.order_type, o.customer_name, o.customer_mobile, o.special_note,
 		       o.total_amount, o.tax_amount, o.discount_amount,
-		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
+		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at, o.kot_reissued_at, o.kot_items,
 		       COALESCE(
 		         json_agg(
 		           json_build_object(
@@ -1100,13 +1127,13 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	row := r.db.QueryRowContext(ctx, sqlStr, orderID)
 
 	var o models.Order
-	var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
-	var cancelledAt sql.NullTime
-	var itemsBytes []byte
+	var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile, kitchenStatus, specialNote sql.NullString
+	var cancelledAt, kotReissuedAt sql.NullTime
+	var itemsBytes, kotItemsBytes []byte
 	err := row.Scan(
-		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
+		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &kitchenStatus, &orderType, &customerName, &customerMobile, &specialNote,
 		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
-		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
+		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt, &kotReissuedAt, &kotItemsBytes,
 		&itemsBytes,
 	)
 	if err != nil {
@@ -1122,8 +1149,16 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	o.OrderType = orderType.String
 	o.CustomerName = customerName.String
 	o.CustomerMobile = customerMobile.String
+	o.KitchenStatus = kitchenStatus.String
+	if o.KitchenStatus == "" {
+		o.KitchenStatus = "pending"
+	}
+	o.SpecialNote = specialNote.String
 	if cancelledAt.Valid {
 		o.CancelledAt = &cancelledAt.Time
+	}
+	if kotReissuedAt.Valid {
+		o.KotReissuedAt = &kotReissuedAt.Time
 	}
 
 	if len(itemsBytes) > 0 {
@@ -1134,6 +1169,12 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	}
 	if o.Items == nil {
 		o.Items = []models.OrderItem{}
+	}
+	if len(kotItemsBytes) > 0 {
+		var kotItems []models.OrderItem
+		if err := json.Unmarshal(kotItemsBytes, &kotItems); err == nil {
+			o.KotItems = kotItems
+		}
 	}
 
 	return &o, nil
@@ -1146,9 +1187,9 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	}
 	defer tx.Rollback()
 
-	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, status, order_type, customer_name, customer_mobile, total_amount, tax_amount, discount_amount, payment_method, created_by)
-	           VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, $12)`
-	var payMethod, orderType, customerName, customerMobile, tableID interface{}
+	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, status, order_type, customer_name, customer_mobile, special_note, kot_items, total_amount, tax_amount, discount_amount, payment_method, created_by)
+	           VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+	var payMethod, orderType, customerName, customerMobile, specialNote, tableID interface{}
 	if o.PaymentMethod != "" {
 		payMethod = o.PaymentMethod
 	}
@@ -1161,12 +1202,19 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	if o.CustomerMobile != "" {
 		customerMobile = o.CustomerMobile
 	}
+	if o.SpecialNote != "" {
+		specialNote = o.SpecialNote
+	}
 	if o.TableID != "" {
 		tableID = o.TableID
 	}
 
+	// kot_items = all items for a new order (the initial KOT)
+	kotItemsJSON, _ := json.Marshal(o.Items)
+	kotItemsStr := string(kotItemsJSON)
+
 	_, err = tx.ExecContext(ctx, sqlStr,
-		o.ID, o.StoreID, tableID, o.TableNumber, orderType, customerName, customerMobile, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy,
+		o.ID, o.StoreID, tableID, o.TableNumber, orderType, customerName, customerMobile, specialNote, kotItemsStr, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy,
 	)
 	if err != nil {
 		return err
@@ -1283,6 +1331,74 @@ func (r *OrderRepository) Cancel(ctx context.Context, id string) error {
 	}
 
 	return tx.Commit()
+}
+
+// UpdateKitchenStatus updates only the kitchen_status column of an order.
+// Valid values: 'pending', 'preparing', 'ready', 'served'.
+func (r *OrderRepository) UpdateKitchenStatus(ctx context.Context, id, status string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE orders SET kitchen_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+	`, status, id)
+	return err
+}
+
+// RecordKitchenTransition records a kitchen status change in the history table.
+// It closes the previous open history row (sets exited_at) and opens a new row
+// for the incoming status. If the new status already has an open row for this
+// order (e.g. re-entering 'pending' after an add-on), it reuses that row.
+func (r *OrderRepository) RecordKitchenTransition(ctx context.Context, orderID, storeID, newStatus string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Close any currently-open history row for this order
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE kitchen_status_history SET exited_at = CURRENT_TIMESTAMP
+		WHERE order_id = $1 AND exited_at IS NULL
+	`, orderID); err != nil {
+		return err
+	}
+
+	// Insert a new history row for the incoming status
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO kitchen_status_history (order_id, store_id, status, entered_at)
+		VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+	`, orderID, storeID, newStatus); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// GetKitchenHistory returns the full kitchen status history for an order,
+// ordered by entry time (oldest first).
+func (r *OrderRepository) GetKitchenHistory(ctx context.Context, orderID string) ([]models.KitchenStatusHistory, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, order_id, store_id, status, entered_at, exited_at
+		FROM kitchen_status_history
+		WHERE order_id = $1
+		ORDER BY entered_at ASC
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []models.KitchenStatusHistory
+	for rows.Next() {
+		var h models.KitchenStatusHistory
+		var exitedAt sql.NullTime
+		if err := rows.Scan(&h.ID, &h.OrderID, &h.StoreID, &h.Status, &h.EnteredAt, &exitedAt); err != nil {
+			return nil, err
+		}
+		if exitedAt.Valid {
+			h.ExitedAt = &exitedAt.Time
+		}
+		history = append(history, h)
+	}
+	return history, nil
 }
 
 // ==========================================
@@ -2467,4 +2583,733 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	}
 
 	return report, nil
+}
+
+// ==========================================
+// SMTP CONFIG REPOSITORY
+// ==========================================
+
+type SmtpConfigRepository struct {
+	db *sql.DB
+}
+
+func (r *SmtpConfigRepository) Get(ctx context.Context) (*models.SMTPConfig, error) {
+	sqlStr := `
+		SELECT key, value
+		FROM global_settings
+		WHERE key IN ('smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'smtp_from_name', 'smtp_use_tls')
+	`
+	rows, err := r.db.QueryContext(ctx, sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	config := &models.SMTPConfig{}
+	for rows.Next() {
+		var key, val string
+		if err := rows.Scan(&key, &val); err != nil {
+			return nil, err
+		}
+		switch key {
+		case "smtp_host":
+			config.Host = val
+		case "smtp_port":
+			config.Port, _ = strconv.Atoi(val)
+		case "smtp_username":
+			config.Username = val
+		case "smtp_password":
+			config.Password = val
+		case "smtp_from":
+			config.From = val
+		case "smtp_from_name":
+			config.FromName = val
+		case "smtp_use_tls":
+			config.UseTLS = val == "true"
+		}
+	}
+	return config, nil
+}
+
+func (r *SmtpConfigRepository) Save(ctx context.Context, req models.SMTPConfigRequest) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	settings := map[string]string{
+		"smtp_host":      req.Host,
+		"smtp_port":      strconv.Itoa(req.Port),
+		"smtp_username":  req.Username,
+		"smtp_password":  req.Password,
+		"smtp_from":      req.From,
+		"smtp_from_name": req.FromName,
+	}
+	if req.UseTLS {
+		settings["smtp_use_tls"] = "true"
+	} else {
+		settings["smtp_use_tls"] = "false"
+	}
+
+	for key, value := range settings {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO global_settings (key, value) VALUES ($1, $2)
+			ON CONFLICT (key) DO UPDATE SET value = $2
+		`, key, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// SetPasswordResetToken stores a reset token for a user (replaces any existing one)
+func (r *UserRepository) SetPasswordResetToken(ctx context.Context, userID, token string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO password_reset_tokens (user_id, token, expires_at)
+		VALUES ($1, $2, NOW() + INTERVAL '1 hour')
+	`, userID, token)
+	return err
+}
+
+// GetUserIDByResetToken validates a reset token and returns the user ID if valid (also deletes the token)
+func (r *UserRepository) GetUserIDByResetToken(ctx context.Context, token string) (string, error) {
+	var userID string
+	err := r.db.QueryRowContext(ctx, `
+		DELETE FROM password_reset_tokens
+		WHERE token = $1 AND expires_at > NOW()
+		RETURNING user_id
+	`, token).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return userID, nil
+}
+
+// GetUserByEmail finds a user by email address
+func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	sqlStr := `
+		SELECT u.id, u.username, u.password, u.name, u.email, u.role, u.store_id, u.is_active, u.created_at,
+		       s.name as store_name
+		FROM users u
+		LEFT JOIN stores s ON u.store_id = s.id
+		WHERE u.email = $1 AND u.is_active = true
+	`
+	row := r.db.QueryRowContext(ctx, sqlStr, email)
+
+	var u models.User
+	var emailNull, storeIDNull, storeNameNull sql.NullString
+	err := row.Scan(
+		&u.ID, &u.Username, &u.Password, &u.Name, &emailNull, &u.Role, &storeIDNull, &u.IsActive, &u.CreatedAt,
+		&storeNameNull,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	u.Email = emailNull.String
+	u.StoreID = storeIDNull.String
+	u.StoreName = storeNameNull.String
+	return &u, nil
+}
+
+// ==========================================
+// INVENTORY ITEM REPOSITORY
+// ==========================================
+
+type InventoryRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+const inventoryCacheKeyPrefix = "inventory_items:"
+
+func (r *InventoryRepository) invalidateCache(ctx context.Context, storeID string) {
+	if r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, inventoryCacheKeyPrefix)
+	}
+}
+
+func (r *InventoryRepository) GetAll(ctx context.Context, storeID string) ([]models.InventoryItem, error) {
+	cacheKey := inventoryCacheKeyPrefix + storeID
+	if r.redis != nil {
+		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
+			var cached []models.InventoryItem
+			if err := json.Unmarshal(raw, &cached); err == nil {
+				return cached, nil
+			}
+		}
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, store_id, name, description, unit, quantity, reorder_level, unit_cost, is_active, created_at, updated_at
+		FROM inventory_items
+		WHERE store_id = $1 AND is_active = true
+		ORDER BY name
+	`, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.InventoryItem
+	for rows.Next() {
+		var i models.InventoryItem
+		var desc sql.NullString
+		if err := rows.Scan(
+			&i.ID, &i.StoreID, &i.Name, &desc, &i.Unit, &i.Quantity, &i.ReorderLevel, &i.UnitCost, &i.IsActive, &i.CreatedAt, &i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		i.Description = desc.String
+		items = append(items, i)
+	}
+
+	if r.redis != nil {
+		if raw, err := json.Marshal(items); err == nil {
+			r.redis.Set(ctx, cacheKey, raw, 30*time.Minute)
+		}
+	}
+	return items, nil
+}
+
+func (r *InventoryRepository) GetByID(ctx context.Context, id string) (*models.InventoryItem, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, store_id, name, description, unit, quantity, reorder_level, unit_cost, is_active, created_at, updated_at
+		FROM inventory_items
+		WHERE id = $1
+	`, id)
+
+	var i models.InventoryItem
+	var desc sql.NullString
+	err := row.Scan(
+		&i.ID, &i.StoreID, &i.Name, &desc, &i.Unit, &i.Quantity, &i.ReorderLevel, &i.UnitCost, &i.IsActive, &i.CreatedAt, &i.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	i.Description = desc.String
+	return &i, nil
+}
+
+func (r *InventoryRepository) Create(ctx context.Context, i models.InventoryItem) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO inventory_items (id, store_id, name, description, unit, quantity, reorder_level, unit_cost)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, i.ID, i.StoreID, i.Name, i.Description, i.Unit, i.Quantity, i.ReorderLevel, i.UnitCost)
+	if err == nil {
+		r.invalidateCache(ctx, i.StoreID)
+	}
+	return err
+}
+
+func (r *InventoryRepository) Update(ctx context.Context, i models.InventoryItem) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE inventory_items
+		SET name = $1, description = $2, unit = $3, quantity = $4, reorder_level = $5, unit_cost = $6, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $7
+	`, i.Name, i.Description, i.Unit, i.Quantity, i.ReorderLevel, i.UnitCost, i.ID)
+	if err == nil {
+		r.invalidateCache(ctx, i.StoreID)
+	}
+	return err
+}
+
+func (r *InventoryRepository) Delete(ctx context.Context, id, storeID string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE inventory_items SET is_active = false WHERE id = $1", id)
+	if err == nil {
+		r.invalidateCache(ctx, storeID)
+	}
+	return err
+}
+
+// AdjustQuantity atomically adds delta (can be negative) to an inventory item's stock.
+func (r *InventoryRepository) AdjustQuantity(ctx context.Context, tx *sql.Tx, id string, delta float64) error {
+	_, err := tx.ExecContext(ctx, `
+		UPDATE inventory_items SET quantity = quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+	`, delta, id)
+	return err
+}
+
+// UpdateUnitCost updates the unit cost of an inventory item (used when restocking).
+func (r *InventoryRepository) UpdateUnitCost(ctx context.Context, tx *sql.Tx, id string, unitCost float64) error {
+	_, err := tx.ExecContext(ctx, `
+		UPDATE inventory_items SET unit_cost = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+	`, unitCost, id)
+	return err
+}
+
+// ==========================================
+// RECIPE REPOSITORY
+// ==========================================
+
+type RecipeRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+const recipeCacheKeyPrefix = "recipes:"
+
+func (r *RecipeRepository) invalidateCache(ctx context.Context, storeID string) {
+	if r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, recipeCacheKeyPrefix)
+	}
+}
+
+// GetByItem returns the recipe (with ingredients) for a menu item, or nil if none exists.
+func (r *RecipeRepository) GetByItem(ctx context.Context, itemID string) (*models.Recipe, error) {
+	var rec models.Recipe
+	var itemName sql.NullString
+	err := r.db.QueryRowContext(ctx, `
+		SELECT r.id, r.store_id, r.item_id, r.is_active, r.created_at, i.name
+		FROM recipes r
+		LEFT JOIN items i ON r.item_id = i.id
+		WHERE r.item_id = $1 AND r.is_active = true
+	`, itemID).Scan(&rec.ID, &rec.StoreID, &rec.ItemID, &rec.IsActive, &rec.CreatedAt, &itemName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	rec.ItemName = itemName.String
+
+	ingredients, err := r.getIngredients(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+	rec.Ingredients = ingredients
+	return &rec, nil
+}
+
+func (r *RecipeRepository) getIngredients(ctx context.Context, recipeID string) ([]models.RecipeIngredient, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT ri.id, ri.store_id, ri.recipe_id, ri.inventory_item_id, inv.name, ri.quantity, ri.unit
+		FROM recipe_ingredients ri
+		LEFT JOIN inventory_items inv ON ri.inventory_item_id = inv.id
+		WHERE ri.recipe_id = $1 AND ri.is_active = true
+		ORDER BY inv.name
+	`, recipeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ingredients []models.RecipeIngredient
+	for rows.Next() {
+		var ri models.RecipeIngredient
+		var invName sql.NullString
+		if err := rows.Scan(&ri.ID, &ri.StoreID, &ri.RecipeID, &ri.InventoryItemID, &invName, &ri.Quantity, &ri.Unit); err != nil {
+			return nil, err
+		}
+		ri.InventoryName = invName.String
+		ingredients = append(ingredients, ri)
+	}
+	if ingredients == nil {
+		ingredients = []models.RecipeIngredient{}
+	}
+	return ingredients, nil
+}
+
+// GetAllForStore returns all recipes (with ingredients) for a store.
+func (r *RecipeRepository) GetAllForStore(ctx context.Context, storeID string) ([]models.Recipe, error) {
+	cacheKey := recipeCacheKeyPrefix + storeID
+	if r.redis != nil {
+		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
+			var cached []models.Recipe
+			if err := json.Unmarshal(raw, &cached); err == nil {
+				return cached, nil
+			}
+		}
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT r.id, r.store_id, r.item_id, r.is_active, r.created_at, i.name
+		FROM recipes r
+		LEFT JOIN items i ON r.item_id = i.id
+		WHERE r.store_id = $1 AND r.is_active = true
+		ORDER BY i.name
+	`, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var recipes []models.Recipe
+	for rows.Next() {
+		var rec models.Recipe
+		var itemName sql.NullString
+		if err := rows.Scan(&rec.ID, &rec.StoreID, &rec.ItemID, &rec.IsActive, &rec.CreatedAt, &itemName); err != nil {
+			return nil, err
+		}
+		rec.ItemName = itemName.String
+		ingredients, err := r.getIngredients(ctx, rec.ID)
+		if err != nil {
+			return nil, err
+		}
+		rec.Ingredients = ingredients
+		recipes = append(recipes, rec)
+	}
+
+	if r.redis != nil {
+		if raw, err := json.Marshal(recipes); err == nil {
+			r.redis.Set(ctx, cacheKey, raw, 30*time.Minute)
+		}
+	}
+	return recipes, nil
+}
+
+// Upsert creates or replaces the recipe (and its ingredients) for a menu item within a transaction.
+func (r *RecipeRepository) Upsert(ctx context.Context, storeID, itemID string, ingredients []models.RecipeIngredient) (*models.Recipe, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Find existing active recipe for this item
+	var recipeID string
+	err = tx.QueryRowContext(ctx, `
+		SELECT id FROM recipes WHERE item_id = $1 AND is_active = true
+	`, itemID).Scan(&recipeID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	if recipeID == "" {
+		recipeID = uuid.New().String()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO recipes (id, store_id, item_id) VALUES ($1, $2, $3)
+		`, recipeID, storeID, itemID); err != nil {
+			return nil, err
+		}
+	} else {
+		// Soft-delete existing ingredients, then we re-insert fresh ones
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE recipe_ingredients SET is_active = false WHERE recipe_id = $1
+		`, recipeID); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, ing := range ingredients {
+		ingID := uuid.New().String()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO recipe_ingredients (id, store_id, recipe_id, inventory_item_id, quantity, unit)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, ingID, storeID, recipeID, ing.InventoryItemID, ing.Quantity, ing.Unit); err != nil {
+			return nil, err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	r.invalidateCache(ctx, storeID)
+	return r.GetByItem(ctx, itemID)
+}
+
+// Delete soft-deletes a recipe and its ingredients.
+func (r *RecipeRepository) Delete(ctx context.Context, id, storeID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(ctx, "UPDATE recipe_ingredients SET is_active = false WHERE recipe_id = $1", id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE recipes SET is_active = false WHERE id = $1", id); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	r.invalidateCache(ctx, storeID)
+	return nil
+}
+
+// ==========================================
+// PURCHASE REPOSITORY
+// ==========================================
+
+type PurchaseRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+const purchaseCacheKeyPrefix = "purchases:"
+
+func (r *PurchaseRepository) invalidateCache(ctx context.Context, storeID string) {
+	if r.redis != nil {
+		r.redis.DeleteByPrefix(ctx, purchaseCacheKeyPrefix)
+		r.redis.DeleteByPrefix(ctx, inventoryCacheKeyPrefix)
+	}
+}
+
+func (r *PurchaseRepository) GetAll(ctx context.Context, storeID string) ([]models.Purchase, error) {
+	cacheKey := purchaseCacheKeyPrefix + storeID
+	if r.redis != nil {
+		if raw, ok := r.redis.Get(ctx, cacheKey); ok {
+			var cached []models.Purchase
+			if err := json.Unmarshal(raw, &cached); err == nil {
+				return cached, nil
+			}
+		}
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, store_id, vendor, purchase_date, total_amount, payment_method, receipt_number, notes,
+		       is_active, created_at, created_by
+		FROM purchases
+		WHERE store_id = $1 AND is_active = true
+		ORDER BY purchase_date DESC, created_at DESC
+	`, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var purchases []models.Purchase
+	for rows.Next() {
+		var p models.Purchase
+		var vendor, paymentMethod, receiptNumber, notes, createdBy sql.NullString
+		if err := rows.Scan(
+			&p.ID, &p.StoreID, &vendor, &p.PurchaseDate, &p.TotalAmount, &paymentMethod, &receiptNumber, &notes,
+			&p.IsActive, &p.CreatedAt, &createdBy,
+		); err != nil {
+			return nil, err
+		}
+		p.Vendor = vendor.String
+		p.PaymentMethod = paymentMethod.String
+		p.ReceiptNumber = receiptNumber.String
+		p.Notes = notes.String
+		p.CreatedBy = createdBy.String
+
+		items, err := r.getItems(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Items = items
+		purchases = append(purchases, p)
+	}
+
+	if r.redis != nil {
+		if raw, err := json.Marshal(purchases); err == nil {
+			r.redis.Set(ctx, cacheKey, raw, 30*time.Minute)
+		}
+	}
+	return purchases, nil
+}
+
+func (r *PurchaseRepository) GetByID(ctx context.Context, id string) (*models.Purchase, error) {
+	var p models.Purchase
+	var vendor, paymentMethod, receiptNumber, notes, createdBy sql.NullString
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, store_id, vendor, purchase_date, total_amount, payment_method, receipt_number, notes,
+		       is_active, created_at, created_by
+		FROM purchases
+		WHERE id = $1
+	`, id).Scan(
+		&p.ID, &p.StoreID, &vendor, &p.PurchaseDate, &p.TotalAmount, &paymentMethod, &receiptNumber, &notes,
+		&p.IsActive, &p.CreatedAt, &createdBy,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	p.Vendor = vendor.String
+	p.PaymentMethod = paymentMethod.String
+	p.ReceiptNumber = receiptNumber.String
+	p.Notes = notes.String
+	p.CreatedBy = createdBy.String
+
+	items, err := r.getItems(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	p.Items = items
+	return &p, nil
+}
+
+func (r *PurchaseRepository) getItems(ctx context.Context, purchaseID string) ([]models.PurchaseItem, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT pi.id, pi.store_id, pi.purchase_id, pi.inventory_item_id, inv.name, pi.quantity, pi.unit_price, pi.total
+		FROM purchase_items pi
+		LEFT JOIN inventory_items inv ON pi.inventory_item_id = inv.id
+		WHERE pi.purchase_id = $1 AND pi.is_active = true
+		ORDER BY inv.name
+	`, purchaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.PurchaseItem
+	for rows.Next() {
+		var pi models.PurchaseItem
+		var invName sql.NullString
+		if err := rows.Scan(&pi.ID, &pi.StoreID, &pi.PurchaseID, &pi.InventoryItemID, &invName, &pi.Quantity, &pi.UnitPrice, &pi.Total); err != nil {
+			return nil, err
+		}
+		pi.InventoryName = invName.String
+		items = append(items, pi)
+	}
+	if items == nil {
+		items = []models.PurchaseItem{}
+	}
+	return items, nil
+}
+
+// Create inserts a purchase with its line items and adjusts inventory stock + unit cost in a transaction.
+func (r *PurchaseRepository) Create(ctx context.Context, p models.Purchase) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO purchases (id, store_id, vendor, purchase_date, total_amount, payment_method, receipt_number, notes, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, p.ID, p.StoreID, p.Vendor, p.PurchaseDate, p.TotalAmount, p.PaymentMethod, p.ReceiptNumber, p.Notes, nullableString(p.CreatedBy)); err != nil {
+		return err
+	}
+
+	for _, item := range p.Items {
+		itemID := uuid.New().String()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO purchase_items (id, store_id, purchase_id, inventory_item_id, quantity, unit_price, total)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, itemID, p.StoreID, p.ID, item.InventoryItemID, item.Quantity, item.UnitPrice, item.Total); err != nil {
+			return err
+		}
+		// Increase stock
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE inventory_items SET quantity = quantity + $1, unit_cost = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3
+		`, item.Quantity, item.UnitPrice, item.InventoryItemID); err != nil {
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	r.invalidateCache(ctx, p.StoreID)
+	return nil
+}
+
+// Update replaces a purchase's line items. To keep stock accounting correct, it reverses the
+// previous stock changes and applies the new ones.
+func (r *PurchaseRepository) Update(ctx context.Context, id string, p models.Purchase) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Reverse previous line items' stock additions
+	prevItems, err := r.getItems(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, item := range prevItems {
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE inventory_items SET quantity = quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+		`, item.Quantity, item.InventoryItemID); err != nil {
+			return err
+		}
+	}
+
+	// Soft-delete previous line items
+	if _, err = tx.ExecContext(ctx, "UPDATE purchase_items SET is_active = false WHERE purchase_id = $1", id); err != nil {
+		return err
+	}
+
+	// Update purchase header
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE purchases SET vendor = $1, purchase_date = $2, total_amount = $3, payment_method = $4,
+		                     receipt_number = $5, notes = $6
+		WHERE id = $7
+	`, p.Vendor, p.PurchaseDate, p.TotalAmount, p.PaymentMethod, p.ReceiptNumber, p.Notes, id); err != nil {
+		return err
+	}
+
+	// Insert new line items and apply stock additions
+	for _, item := range p.Items {
+		itemID := uuid.New().String()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO purchase_items (id, store_id, purchase_id, inventory_item_id, quantity, unit_price, total)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, itemID, p.StoreID, id, item.InventoryItemID, item.Quantity, item.UnitPrice, item.Total); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE inventory_items SET quantity = quantity + $1, unit_cost = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3
+		`, item.Quantity, item.UnitPrice, item.InventoryItemID); err != nil {
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	r.invalidateCache(ctx, p.StoreID)
+	return nil
+}
+
+// Delete soft-deletes a purchase and reverses its stock additions.
+func (r *PurchaseRepository) Delete(ctx context.Context, id, storeID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	items, err := r.getItems(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE inventory_items SET quantity = quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+		`, item.Quantity, item.InventoryItemID); err != nil {
+			return err
+		}
+	}
+
+	if _, err = tx.ExecContext(ctx, "UPDATE purchase_items SET is_active = false WHERE purchase_id = $1", id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE purchases SET is_active = false WHERE id = $1", id); err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	r.invalidateCache(ctx, storeID)
+	return nil
+}
+
+// nullableString returns a driver.Value that is nil for empty strings.
+func nullableString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }

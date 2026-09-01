@@ -8,6 +8,7 @@
     "opener:default",
     "updater:default",
     "updater:allow-download-and-install",
-    "process:allow-restart"
+    "process:allow-restart",
+    "dialog:default"
   ]
 }

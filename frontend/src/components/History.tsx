@@ -1,18 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays, Ban } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays, Ban, BarChart2 } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useToast } from '../contexts/ToastContext';
+import { usePagination } from '../hooks/usePagination';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { ConfirmDialog } from './ConfirmDialog';
+import TablePagination from './TablePagination';
 import type { Order } from '../types';
 
 const History: React.FC = () => {
   const { orders, bills, stores, fetchOrders, fetchBills, cancelOrder } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId) || stores[0];
+  const taxSettings = useTaxSettings();
   const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [viewingBill, setViewingBill] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,10 +30,11 @@ const History: React.FC = () => {
   const [customDateTo, setCustomDateTo] = useState<string>('');
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
-      alert('No printer is configured in settings. Please configure a printer first.');
+      toast.warning('No printer is configured in settings. Please configure a printer first.');
       return;
     }
 
@@ -51,10 +58,10 @@ const History: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const cgst = taxable * 0.025; // Assuming 5% total tax split as 2.5% CGST + 2.5% SGST
-      const sgst = taxable * 0.025;
+      const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+      const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
       const subtotal = associatedBill?.subtotal || taxable;
-      const taxTotal = associatedBill?.taxTotal || (cgst + sgst);
+      const taxTotal = taxSettings.taxEnabled ? (associatedBill?.taxTotal || (cgst + sgst)) : 0;
       const total = associatedBill?.total || (subtotal + taxTotal);
       const paymentMethod = associatedBill?.paymentMethod || order.paymentMethod || 'cash';
 
@@ -105,7 +112,7 @@ const History: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to print bill:', error);
-      alert('Failed to print bill. Please check your connection and printer settings.');
+      toast.error('Failed to print bill. Please check your connection and printer settings.');
     } finally {
       setIsPrinting(null);
     }
@@ -157,7 +164,7 @@ const History: React.FC = () => {
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = useMemo(() => orders.filter(order => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
       order.tableNumber.toString().includes(searchTerm) ||
@@ -172,16 +179,26 @@ const History: React.FC = () => {
     const matchesDate = (!from || orderDate >= from) && (!to || orderDate <= to);
 
     return matchesSearch && matchesStatus && matchesDate;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [orders, searchTerm, statusFilter, periodFilter]);
+
+  const orderPagination = usePagination(filteredOrders.length);
 
   // Set page header
   useEffect(() => {
     setHeaderContent({
       title: 'Order History',
       subtitle: 'View and manage all orders',
-      actions: null,
+      actions: (
+        <button
+          className={`btn ${showStats ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setShowStats(v => !v)}
+        >
+          <BarChart2 size={14} />
+          {showStats ? 'Hide Stats' : 'Show Stats'}
+        </button>
+      ),
     });
-  }, [setHeaderContent]);
+  }, [setHeaderContent, showStats]);
 
   const completedCount = filteredOrders.filter(o => o.status === 'completed').length;
   const activeCount = filteredOrders.filter(o => o.status === 'active').length;
@@ -197,7 +214,7 @@ const History: React.FC = () => {
       setCancelTarget(null);
     } catch (error) {
       console.error('Failed to cancel order:', error);
-      alert('Failed to cancel order. Please try again.');
+      toast.error('Failed to cancel order. Please try again.');
     } finally {
       setIsCancelling(false);
     }
@@ -225,186 +242,246 @@ const History: React.FC = () => {
 
   return (
     <div className="history-page">
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon success">
-            <Receipt size={24} />
+      {showStats && (
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon success">
+              <Receipt size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{completedCount}</div>
+              <div className="stat-label">Completed Orders</div>
+            </div>
           </div>
-          <div className="stat-content">
-            <div className="stat-value">{completedCount}</div>
-            <div className="stat-label">Completed Orders</div>
+          <div className="stat-card">
+            <div className="stat-icon warning">
+              <Calendar size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{activeCount}</div>
+              <div className="stat-label">Active Orders</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon primary">
+              <Receipt size={24} />
+            </div>
+            <div className="stat-content">
+              <div className="stat-value">{formatCurrency(totalRevenue)}</div>
+              <div className="stat-label">Total Revenue</div>
+            </div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon warning">
-            <Calendar size={24} />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{activeCount}</div>
-            <div className="stat-label">Active Orders</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon primary">
-            <Receipt size={24} />
-          </div>
-          <div className="stat-content">
-            <div className="stat-value">{formatCurrency(totalRevenue)}</div>
-            <div className="stat-label">Total Revenue</div>
-          </div>
-        </div>
-      </div>
+      )}
 
+      {/* Toolbar */}
       <div className="history-toolbar">
         <div className="history-search">
-          <Search size={18} color="var(--gray-500)" />
+          <Search size={16} color="var(--gray-400)" />
           <input
             type="text"
-            placeholder="Search by table or item..."
+            placeholder="Search by table, item, or customer..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <select className="history-filter-select" value={periodFilter} onChange={e => setPeriodFilter(e.target.value)}>
-          <option value="all">All Time</option>
-          <option value="today">Today</option>
-          <option value="yesterday">Yesterday</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="custom">Custom Range</option>
-        </select>
-        {periodFilter === 'custom' && (
-          <div className="history-date-range">
-            <input
-              type="date"
-              className="history-date-input"
-              value={customDateFrom}
-              onChange={e => setCustomDateFrom(e.target.value)}
-              placeholder="From"
-            />
-            <span className="history-date-sep">to</span>
-            <input
-              type="date"
-              className="history-date-input"
-              value={customDateTo}
-              onChange={e => setCustomDateTo(e.target.value)}
-              placeholder="To"
-            />
-          </div>
-        )}
-        <select className="history-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="active">Active</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+        <div className="history-toolbar-filters">
+          <select className="history-filter-select" value={periodFilter} onChange={e => setPeriodFilter(e.target.value)}>
+            <option value="all">All Time</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom">Custom Range</option>
+          </select>
+          {periodFilter === 'custom' && (
+            <div className="history-date-range">
+              <input
+                type="date"
+                className="history-date-input"
+                value={customDateFrom}
+                onChange={e => setCustomDateFrom(e.target.value)}
+              />
+              <span className="history-date-sep">–</span>
+              <input
+                type="date"
+                className="history-date-input"
+                value={customDateTo}
+                onChange={e => setCustomDateTo(e.target.value)}
+              />
+            </div>
+          )}
+          <select className="history-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="all">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="active">Active</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
       </div>
 
+      {/* Orders Table */}
       {filteredOrders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
-          <Calendar size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
-          <p style={{ fontSize: '1.125rem' }}>No orders found</p>
-          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Try adjusting your search or filters</p>
+        <div className="history-empty">
+          <CalendarDays size={48} />
+          <p className="history-empty-title">No orders found</p>
+          <p className="history-empty-sub">Try adjusting your search or filters</p>
         </div>
       ) : (
-        <div className="order-list">
-          {filteredOrders.map(order => (
-            <div key={order.id} className={`order-panel ${order.status} ${expandedOrderId === order.id ? 'expanded' : ''}`}>
-              <div
-                className="order-panel-top"
-                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="order-panel-info">
-                  {isParcel(order) ? (
-                    <span className="order-panel-title">
-                      <Package size={16} />
-                      Parcel
-                      {order.customerName && (
-                        <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem', fontWeight: 400 }}>
-                          ({order.customerName})
+        <div className="zoho-table-wrap">
+          <div className="zoho-table-scroll">
+            <table className="zoho-table history-table">
+            <thead>
+              <tr>
+                <th className="col-id">Order ID</th>
+                <th className="col-type">Type</th>
+                <th className="col-customer">Customer / Table</th>
+                <th className="col-items">Items</th>
+                <th className="col-date">Date &amp; Time</th>
+                <th className="col-status">Status</th>
+                <th className="col-total">Total</th>
+                <th className="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderPagination.paginatedItems(filteredOrders).map(order => (
+                <React.Fragment key={order.id}>
+                  <tr
+                    className={`history-row ${order.status} ${expandedOrderId === order.id ? 'expanded' : ''}`}
+                    onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                  >
+                    <td className="col-id">
+                      <span className="history-order-id">#{order.id.slice(-6).toUpperCase()}</span>
+                    </td>
+                    <td className="col-type">
+                      {isParcel(order) ? (
+                        <span className="history-type-tag parcel">
+                          <Package size={13} /> Parcel
+                        </span>
+                      ) : (
+                        <span className="history-type-tag dinein">
+                          <Receipt size={13} /> Dine-in
                         </span>
                       )}
-                    </span>
-                  ) : (
-                    <span className="order-panel-title">Table {order.tableNumber}</span>
-                  )}
-                  <span className={getStatusBadgeClass(order.status)}>
-                    {order.status}
-                  </span>
-                  <span className="order-panel-item-count">
-                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="order-panel-meta">
-                  <span>#{order.id.slice(-6).toUpperCase()}</span>
-                  <span>{formatDate(order.createdAt)}</span>
-                  <span className="order-panel-total-inline">
-                    {formatCurrency(order.totalAmount)}
-                  </span>
-                  <ChevronDown
-                    size={18}
-                    className="order-panel-chevron"
-                  />
-                </div>
-              </div>
-
-              {expandedOrderId === order.id && (
-                <>
-                  <div className="order-panel-body">
-                    {order.items.map((oi, idx) => (
-                      <div key={idx} className="order-panel-item">
-                        <span>
-                          <span className="order-panel-item-qty">{oi.quantity}x</span>
-                          {oi.item.name}
-                        </span>
-                        <span className="order-panel-item-price">{formatCurrency(oi.quantity * oi.item.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="order-panel-footer">
-                    <div className="order-panel-total">
-                      <span className="order-panel-total-label">Total</span>
-                      <span className="order-panel-total-value">{formatCurrency(order.totalAmount)}</span>
-                    </div>
-                    <div className="order-panel-actions">
-                      <button className="btn btn-primary btn-sm" onClick={() => setViewingOrder(order)}>
-                        <Eye size={16} />
-                        View Details
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setViewingBill(order)}
-                      >
-                        <Receipt size={14} />
-                        View Bill
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => handlePrintBill(order)}
-                        disabled={isPrinting === order.id}
-                        title="Print Bill"
-                      >
-                        <Printer size={14} />
-                        {isPrinting === order.id ? 'Printing...' : 'Print Bill'}
-                      </button>
-                      {order.status === 'completed' && (
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setCancelTarget(order)}
-                          title="Cancel Order"
-                        >
-                          <Ban size={14} />
-                          Cancel Order
+                    </td>
+                    <td className="col-customer">
+                      {isParcel(order)
+                        ? (order.customerName || 'Walk-in')
+                        : `Table ${order.tableNumber}`}
+                    </td>
+                    <td className="col-items">
+                      {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                    </td>
+                    <td className="col-date">{formatDate(order.createdAt)}</td>
+                    <td className="col-status">
+                      <span className={`status-pill pill-${order.status === 'completed' ? 'emerald' : order.status === 'active' ? 'amber' : 'rose'}`}>
+                        <span className="pill-dot" />
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="col-total">
+                      <span className="history-total-value">{formatCurrency(order.totalAmount)}</span>
+                    </td>
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
+                      <div className="history-row-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={() => setViewingOrder(order)} title="View Details">
+                          <Eye size={15} />
                         </button>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                        <button className="btn btn-ghost btn-sm" onClick={() => setViewingBill(order)} title="View Bill">
+                          <Receipt size={15} />
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => handlePrintBill(order)}
+                          disabled={isPrinting === order.id}
+                          title="Print Bill"
+                        >
+                          <Printer size={15} />
+                        </button>
+                        {order.status === 'completed' && (
+                          <button
+                            className="btn btn-ghost btn-sm danger"
+                            onClick={() => setCancelTarget(order)}
+                            title="Cancel Order"
+                          >
+                            <Ban size={15} />
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-ghost btn-sm history-expand-btn"
+                          onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                          title={expandedOrderId === order.id ? 'Collapse' : 'Expand'}
+                        >
+                          <ChevronDown size={16} className={expandedOrderId === order.id ? 'rotated' : ''} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedOrderId === order.id && (
+                    <tr className="history-detail-row">
+                      <td colSpan={8}>
+                        <div className="history-detail-content">
+                          <div className="history-detail-items">
+                            <div className="history-detail-section-label">
+                              <span>Order Items</span>
+                              <span>{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="history-detail-items-list">
+                              {order.items.map((oi, idx) => (
+                                <div key={idx} className="history-detail-item">
+                                  <span className="history-detail-item-qty">{oi.quantity}×</span>
+                                  <span className="history-detail-item-name">{oi.item.name}</span>
+                                  <span className="history-detail-item-price">@ {formatCurrency(oi.item.price)}</span>
+                                  <span className="history-detail-item-total">{formatCurrency(oi.quantity * oi.item.price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="history-detail-summary">
+                            <div className="history-detail-section-label">Summary</div>
+                            <div className="history-detail-summary-row">
+                              <span>Subtotal</span>
+                              <span>{formatCurrency(order.totalAmount)}</span>
+                            </div>
+                            {taxSettings.taxEnabled && (
+                            <div className="history-detail-summary-row">
+                              <span>Tax</span>
+                              <span>{formatCurrency(order.taxAmount || 0)}</span>
+                            </div>
+                            )}
+                            <div className="history-detail-summary-row grand">
+                              <span>Total</span>
+                              <span>{formatCurrency((order.totalAmount || 0) + (order.taxAmount || 0))}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="history-detail-actions">
+                          <button className="btn btn-secondary btn-sm" onClick={() => setViewingBill(order)}>
+                            <Receipt size={14} /> Bill
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handlePrintBill(order)}
+                            disabled={isPrinting === order.id}
+                          >
+                            <Printer size={14} />
+                            {isPrinting === order.id ? 'Printing...' : 'Print'}
+                          </button>
+                          {order.status === 'completed' && (
+                            <button className="btn btn-danger btn-sm" onClick={() => setCancelTarget(order)}>
+                              <Ban size={14} /> Cancel
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+            </table>
+          </div>
+          <TablePagination pagination={orderPagination} />
         </div>
       )}
 
@@ -444,10 +521,12 @@ const History: React.FC = () => {
                     <span>Subtotal</span>
                     <span>{formatCurrency(viewingOrder.totalAmount)}</span>
                   </div>
+                  {taxSettings.taxEnabled && (
                   <div className="total-row">
                     <span>Tax</span>
                     <span>{formatCurrency(viewingOrder.taxAmount || 0)}</span>
                   </div>
+                  )}
                   <div className="total-row final">
                     <span>Total</span>
                     <span>{formatCurrency((viewingOrder.totalAmount || 0) + (viewingOrder.taxAmount || 0))}</span>
@@ -455,25 +534,25 @@ const History: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="modal-footer">
+              <div className="modal-footer-left">
                 <button
-                  className="btn btn-secondary"
+                  className="btn btn-secondary btn-sm"
                   onClick={() => { setViewingOrder(null); setViewingBill(viewingOrder); }}
                 >
-                  <Receipt size={16} />
+                  <Receipt size={14} />
                   View Bill
                 </button>
-                <button 
-                  className="btn btn-primary" 
+                <button
+                  className="btn btn-primary btn-sm"
                   onClick={() => handlePrintBill(viewingOrder)}
                   disabled={isPrinting === viewingOrder.id}
                 >
-                  <Printer size={16} />
+                  <Printer size={14} />
                   {isPrinting === viewingOrder.id ? 'Printing...' : 'Print Bill'}
                 </button>
               </div>
-              <button className="btn btn-secondary" onClick={() => setViewingOrder(null)}>Close</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setViewingOrder(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -535,10 +614,12 @@ const History: React.FC = () => {
                     <span>Subtotal</span>
                     <span>{formatCurrency(viewingBill.totalAmount)}</span>
                   </div>
+                  {taxSettings.taxEnabled && (
                   <div className="bill-total-row">
                     <span>Tax</span>
                     <span>{formatCurrency(viewingBill.taxAmount || 0)}</span>
                   </div>
+                  )}
                   <div className="bill-total-row grand-total">
                     <span>TOTAL</span>
                     <span>{formatCurrency((viewingBill.totalAmount || 0) + (viewingBill.taxAmount || 0))}</span>
@@ -560,16 +641,16 @@ const History: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+            <div className="modal-footer">
               <button
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm"
                 onClick={() => handlePrintBill(viewingBill)}
                 disabled={isPrinting === viewingBill.id}
               >
-                <Printer size={16} />
+                <Printer size={14} />
                 {isPrinting === viewingBill.id ? 'Printing...' : 'Print Bill'}
               </button>
-              <button className="btn btn-secondary" onClick={() => setViewingBill(null)}>Close</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setViewingBill(null)}>Close</button>
             </div>
           </div>
         </div>

@@ -176,6 +176,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 		"invoiceSize":       "invoice_size",
 		"kotPrintEnabled":   "kot_print_enabled",
 		"remoteBillingEnabled": "remote_billing_enabled",
+		"kitchenWindowEnabled": "kitchen_window_enabled",
 		"isActive":          "is_active",
 		"themeColor":        "theme_color",
 	}

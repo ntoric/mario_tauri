@@ -6,6 +6,9 @@ import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import type { ExpenseReport, ExpenseSummary } from '../types';
 import { Button } from './ui/Button';
+import { usePagination } from '../hooks/usePagination';
+import TablePagination from './TablePagination';
+import { useToast } from '../contexts/ToastContext';
 
 const ExpenseReports: React.FC = () => {
   const { currentStoreId } = useAuthStore();
@@ -15,6 +18,10 @@ const ExpenseReports: React.FC = () => {
   const [categoryReports, setCategoryReports] = useState<ExpenseReport[]>([]);
   const [dateSummaries, setDateSummaries] = useState<ExpenseSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const toast = useToast();
+
+  const categoryPagination = usePagination(categoryReports.length);
+  const datePagination = usePagination(dateSummaries.length);
 
   useReportPageHeader({
     title: 'Expense Reports',
@@ -35,6 +42,7 @@ const ExpenseReports: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch expense reports:', error);
+      toast.error('Failed to fetch expense reports');
       if (activeTab === 'category') {
         setCategoryReports([]);
       } else {
@@ -95,6 +103,7 @@ const ExpenseReports: React.FC = () => {
     a.download = `expense-report-${activeTab}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+    toast.success('Report exported successfully');
   };
 
   return (
@@ -175,87 +184,90 @@ const ExpenseReports: React.FC = () => {
       </div>
 
       {/* Reports Table */}
-      <div className="reports-table-container">
-        {isLoading ? (
-          <div className="loading-state">
-            <Loader2 className="animate-spin" size={32} />
-            <p>Loading reports...</p>
-          </div>
-        ) : (
-          <table className="reports-table">
-            <thead>
-              <tr>
-                <th>{activeTab === 'category' ? 'Category' : 'Date'}</th>
-                <th>Total Amount</th>
-                <th>Expense Count</th>
-                <th>Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeTab === 'category' ? (
-                categoryReports.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="empty-cell">
-                      No expense data available for the selected period
-                    </td>
-                  </tr>
+      <div className="zoho-table-wrap">
+        <div className="zoho-table-scroll">
+          {isLoading ? (
+            <div className="loading-state">
+              <Loader2 className="animate-spin" size={32} />
+              <p>Loading reports...</p>
+            </div>
+          ) : (
+            <table className="zoho-table">
+              <thead>
+                <tr>
+                  <th>{activeTab === 'category' ? 'Category' : 'Date'}</th>
+                  <th>Total Amount</th>
+                  <th>Expense Count</th>
+                  <th>Percentage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeTab === 'category' ? (
+                  categoryReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '3rem 1rem' }}>
+                        No expense data available for the selected period
+                      </td>
+                    </tr>
+                  ) : (
+                    categoryPagination.paginatedItems(categoryReports).map((report) => {
+                      const percentage = calculateTotal() > 0
+                        ? (report.totalAmount / calculateTotal() * 100).toFixed(1)
+                        : '0.0';
+                      return (
+                        <tr key={report.categoryId}>
+                          <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{report.categoryName}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(report.totalAmount)}</td>
+                          <td>{report.expenseCount}</td>
+                          <td>
+                            <div className="percentage-bar">
+                              <div
+                                className="percentage-fill"
+                                style={{ width: `${percentage}%` }}
+                              />
+                              <span>{percentage}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )
                 ) : (
-                  categoryReports.map((report) => {
-                    const percentage = calculateTotal() > 0 
-                      ? (report.totalAmount / calculateTotal() * 100).toFixed(1)
-                      : '0.0';
-                    return (
-                      <tr key={report.categoryId}>
-                        <td>{report.categoryName}</td>
-                        <td className="amount">{formatCurrency(report.totalAmount)}</td>
-                        <td>{report.expenseCount}</td>
-                        <td>
-                          <div className="percentage-bar">
-                            <div 
-                              className="percentage-fill" 
-                              style={{ width: `${percentage}%` }}
-                            />
-                            <span>{percentage}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )
-              ) : (
-                dateSummaries.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="empty-cell">
-                      No expense data available for the selected period
-                    </td>
-                  </tr>
-                ) : (
-                  dateSummaries.map((summary) => {
-                    const percentage = calculateTotal() > 0 
-                      ? (summary.totalAmount / calculateTotal() * 100).toFixed(1)
-                      : '0.0';
-                    return (
-                      <tr key={summary.date}>
-                        <td>{new Date(summary.date).toLocaleDateString()}</td>
-                        <td className="amount">{formatCurrency(summary.totalAmount)}</td>
-                        <td>{summary.expenseCount}</td>
-                        <td>
-                          <div className="percentage-bar">
-                            <div 
-                              className="percentage-fill" 
-                              style={{ width: `${percentage}%` }}
-                            />
-                            <span>{percentage}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )
-              )}
-            </tbody>
-          </table>
-        )}
+                  dateSummaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '3rem 1rem' }}>
+                        No expense data available for the selected period
+                      </td>
+                    </tr>
+                  ) : (
+                    datePagination.paginatedItems(dateSummaries).map((summary) => {
+                      const percentage = calculateTotal() > 0
+                        ? (summary.totalAmount / calculateTotal() * 100).toFixed(1)
+                        : '0.0';
+                      return (
+                        <tr key={summary.date}>
+                          <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{new Date(summary.date).toLocaleDateString()}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(summary.totalAmount)}</td>
+                          <td>{summary.expenseCount}</td>
+                          <td>
+                            <div className="percentage-bar">
+                              <div
+                                className="percentage-fill"
+                                style={{ width: `${percentage}%` }}
+                              />
+                              <span>{percentage}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {activeTab === 'category' ? <TablePagination pagination={categoryPagination} /> : <TablePagination pagination={datePagination} />}
       </div>
     </div>
   );

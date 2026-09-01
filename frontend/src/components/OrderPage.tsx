@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, PlusCircle } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 import { formatCurrency } from '../utils/currency';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
 import { printerService } from '../services/printer';
-import type { OrderItem, Item } from '../types';
+import type { OrderItem, Item, KitchenStatus } from '../types';
 
 const OrderPage: React.FC = () => {
   const { tableId } = useParams<{ tableId: string }>();
@@ -23,6 +24,7 @@ const OrderPage: React.FC = () => {
   } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxSettings = useTaxSettings();
 
   const table = tables.find(t => t.id === tableId);
   const existingOrder = table ? getActiveOrderByTable(table.id) : undefined;
@@ -37,6 +39,7 @@ const OrderPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionType, setActionType] = useState<string>('');
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [specialNote, setSpecialNote] = useState('');
   const [printerConfirm, setPrinterConfirm] = useState<{
     show: boolean;
     title: string;
@@ -48,9 +51,9 @@ const OrderPage: React.FC = () => {
     message: string;
   }>({ show: false, message: '' });
 
-  // Prevent outer .page-content from scrolling; keep bottom bar fixed
+  // Prevent outer .zoho-page-content from scrolling; keep bottom bar fixed
   useEffect(() => {
-    const pageContent = document.querySelector('.page-content');
+    const pageContent = document.querySelector('.zoho-page-content');
     if (pageContent) {
       pageContent.classList.add('order-page-active');
     }
@@ -89,9 +92,11 @@ const OrderPage: React.FC = () => {
     if (existingOrder) {
       setOrderItems(existingOrder.items || []);
       setPaymentMethod(existingOrder.paymentMethod || 'upi');
+      setSpecialNote(existingOrder.specialNote || '');
     } else {
       setOrderItems([]);
       setPaymentMethod('upi');
+      setSpecialNote('');
     }
     setShowBillDialog(false);
     setIsPrinting(false);
@@ -175,6 +180,7 @@ const OrderPage: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxSettings.taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -197,8 +203,10 @@ const OrderPage: React.FC = () => {
     });
   };
 
-  const printKOT = async (orderId: string) => {
+  const printKOT = async (orderId: string, itemsToPrint?: OrderItem[], isAddon = false) => {
     if (!currentStore?.printerName) return;
+    const items = itemsToPrint || orderItems;
+    if (items.length === 0) return;
     try {
       await printerService.printKOT({
         type: 'kot',
@@ -211,10 +219,10 @@ const OrderPage: React.FC = () => {
         },
         kot: {
           order_id: parseInt(orderId.slice(-6), 36) || 0,
-          table_number: String(table?.number ?? ''),
+          table_number: `${isAddon ? 'ADD-ON | ' : ''}${table?.number ?? ''}`,
           waiter_name: '',
           date: new Date().toLocaleString('en-IN'),
-          items: orderItems.map(oi => ({
+          items: items.map(oi => ({
             name: oi.item.name,
             qty: oi.quantity,
             unit: 'PCS',
@@ -222,7 +230,7 @@ const OrderPage: React.FC = () => {
             tax_percent: oi.item.taxPercent || 0,
             amount: oi.item.price * oi.quantity,
           })),
-          notes: '',
+          notes: specialNote || '',
           order_type: 'DINE_IN',
           customer_name: 'Guest',
           customer_mobile: '',
@@ -237,8 +245,8 @@ const OrderPage: React.FC = () => {
   const printInvoiceBill = async (invoiceNo: string, total: number) => {
     const printItems = buildPrintItems();
     const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-    const cgst = taxable * 0.025;
-    const sgst = taxable * 0.025;
+    const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+    const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
     await printerService.printInvoice({
       type: 'invoice',
@@ -301,6 +309,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
+          specialNote,
         });
       } else {
         await createOrder({
@@ -311,6 +320,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
+          specialNote,
         });
       }
 
@@ -360,12 +370,34 @@ const OrderPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       let orderId = existingOrder?.id;
+      let addonItems: OrderItem[] | undefined;
+      let isAddon = false;
+
       if (existingOrder) {
         console.log('[KOT] Updating existing order', existingOrder.id);
+
+        // Compute which items are new or have increased quantity (add-on diff)
+        const oldQtyMap = new Map<string, number>();
+        for (const oi of existingOrder.items) {
+          oldQtyMap.set(oi.itemId, (oldQtyMap.get(oi.itemId) || 0) + oi.quantity);
+        }
+        const newItems: OrderItem[] = [];
+        for (const oi of orderItems) {
+          const oldQty = oldQtyMap.get(oi.itemId) || 0;
+          if (oldQty < oi.quantity) {
+            newItems.push({ ...oi, quantity: oi.quantity - oldQty });
+          }
+        }
+        if (newItems.length > 0) {
+          isAddon = true;
+          addonItems = newItems;
+        }
+
         await updateOrder(existingOrder.id, {
           items: orderItems,
           totalAmount,
           taxAmount,
+          specialNote,
         });
         console.log('[KOT] Order updated successfully');
       } else {
@@ -378,6 +410,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
+          specialNote,
         });
         console.log('[KOT] New order created', newOrder);
         orderId = newOrder.id;
@@ -390,7 +423,11 @@ const OrderPage: React.FC = () => {
 
       if (withPrint && orderId) {
         try {
-          await printKOT(orderId);
+          if (isAddon && addonItems && addonItems.length > 0) {
+            await printKOT(orderId, addonItems, true);
+          } else {
+            await printKOT(orderId);
+          }
         } catch (error) {
           console.error('Failed to print KOT:', error);
           // Don't block the order save if KOT printing fails
@@ -433,6 +470,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
+          specialNote,
         });
         await savePrint(existingOrder.id, {
           orderId: existingOrder.id,
@@ -454,6 +492,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
+          specialNote,
         });
       }
       navigate('/');
@@ -504,6 +543,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
+          specialNote,
         });
         orderId = existingOrder.id;
       } else {
@@ -515,6 +555,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
+          specialNote,
         });
         orderId = newOrder.id;
       }
@@ -591,16 +632,39 @@ const OrderPage: React.FC = () => {
 
   const total = calculateTotal() + calculateTax();
 
+  const kitchenStatusLabel = (status: KitchenStatus): string => {
+    switch (status) {
+      case 'preparing': return 'Preparing';
+      case 'ready': return 'Ready';
+      case 'served': return 'Served';
+      default: return 'New';
+    }
+  };
+
   return (
     <div className="order-page">
       <div className="order-page-layout">
         {/* Left Sidebar - Order Items */}
         <div className="order-page-left">
-          <div className="order-page-left-header">
-            <h3>Order Items ({orderItems.length})</h3>
-            {existingOrder && (
-              <OrderTimer createdAt={existingOrder.createdAt} className="detail-timer" />
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h3 style={{ margin: 0 }}>Order Items ({orderItems.length})</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {existingOrder && currentStore?.kitchenWindowEnabled && (
+                <span className={`kitchen-status-badge kitchen-status-${(existingOrder.kitchenStatus as KitchenStatus) || 'pending'}`}>
+                  <ChefHat size={12} />
+                  {kitchenStatusLabel((existingOrder.kitchenStatus as KitchenStatus) || 'pending')}
+                </span>
+              )}
+              {existingOrder?.kotReissuedAt && (
+                <span className="kitchen-status-badge kitchen-status-addon">
+                  <PlusCircle size={12} />
+                  Add-on
+                </span>
+              )}
+              {existingOrder && (
+                <OrderTimer createdAt={existingOrder.createdAt} className="detail-timer" />
+              )}
+            </div>
           </div>
 
           {orderItems.length === 0 ? (
@@ -650,6 +714,18 @@ const OrderPage: React.FC = () => {
             </>
           )}
 
+          <div className="order-special-note">
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--gray-600)', marginBottom: '0.25rem', display: 'block' }}>
+              Special Note (for Kitchen & KOT)
+            </label>
+            <textarea
+              value={specialNote}
+              onChange={e => setSpecialNote(e.target.value)}
+              placeholder="e.g. Less spicy, no onions, extra cheese..."
+              rows={2}
+              style={{ width: '100%', fontSize: '0.8rem', resize: 'vertical' }}
+            />
+          </div>
 
         </div>
 
@@ -728,10 +804,12 @@ const OrderPage: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(calculateTotal())}</span>
                 </div>
+                {taxSettings.taxEnabled && (
                 <div className="breakdown-row">
                   <span>Tax</span>
                   <span>{formatCurrency(calculateTax())}</span>
                 </div>
+                )}
                 <div className="breakdown-row final">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>

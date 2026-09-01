@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
+import type { Category, Item, Table, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense, InventoryItem, Recipe, RecipeIngredient, Purchase, PurchaseItem } from '../types';
 
 interface DataState {
   // Data
@@ -16,7 +16,10 @@ interface DataState {
   users: any[];
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
-  
+  inventoryItems: InventoryItem[];
+  recipes: Recipe[];
+  purchases: Purchase[];
+
   // Loading states
   isLoading: boolean;
   isInitialized: boolean;
@@ -60,6 +63,7 @@ interface DataState {
   saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
   savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
+  updateOrderKitchenStatus: (id: string, kitchenStatus: 'pending' | 'preparing' | 'ready' | 'served') => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
   cancelOrder: (id: string, reason?: string) => Promise<void>;
   getActiveOrderByTable: (tableId: string) => Order | undefined;
@@ -90,6 +94,23 @@ interface DataState {
   createExpense: (expense: Omit<Expense, 'id' | 'storeId' | 'isActive' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<void>;
   updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
+
+  // Inventory Items
+  fetchInventoryItems: () => Promise<void>;
+  createInventoryItem: (item: Omit<InventoryItem, 'id' | 'storeId' | 'isActive' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateInventoryItem: (id: string, item: Partial<InventoryItem>) => Promise<void>;
+  deleteInventoryItem: (id: string) => Promise<void>;
+
+  // Recipes
+  fetchRecipes: () => Promise<void>;
+  upsertRecipe: (itemId: string, ingredients: RecipeIngredient[]) => Promise<Recipe>;
+  deleteRecipe: (id: string) => Promise<void>;
+
+  // Purchases
+  fetchPurchases: () => Promise<void>;
+  createPurchase: (purchase: { vendor?: string; purchaseDate?: string; paymentMethod?: string; receiptNumber?: string; notes?: string; items: PurchaseItem[] }) => Promise<Purchase>;
+  updatePurchase: (id: string, purchase: { vendor?: string; purchaseDate?: string; paymentMethod?: string; receiptNumber?: string; notes?: string; items: PurchaseItem[] }) => Promise<void>;
+  deletePurchase: (id: string) => Promise<void>;
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
@@ -103,6 +124,9 @@ export const useDataStore = create<DataState>((set, get) => ({
   users: [],
   expenseCategories: [],
   expenses: [],
+  inventoryItems: [],
+  recipes: [],
+  purchases: [],
   isLoading: false,
   isInitialized: false,
 
@@ -437,6 +461,15 @@ export const useDataStore = create<DataState>((set, get) => ({
     await get().fetchOrders();
   },
 
+  updateOrderKitchenStatus: async (id, kitchenStatus) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.updateOrderKitchenStatus(id, kitchenStatus);
+    await get().fetchOrders();
+  },
+
   completeOrder: async (id, paymentMethod) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
@@ -654,5 +687,97 @@ export const useDataStore = create<DataState>((set, get) => ({
   deleteExpense: async (id) => {
     await api.deleteExpense(id);
     await get().fetchExpenses();
+  },
+
+  // Inventory Items
+  fetchInventoryItems: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const items = await api.getInventoryItems(currentStoreId);
+      set({ inventoryItems: items || [] });
+    } catch (error) {
+      console.error('Failed to fetch inventory items:', error);
+    }
+  },
+
+  createInventoryItem: async (item) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.createInventoryItem({ ...item, storeId: currentStoreId });
+    await get().fetchInventoryItems();
+  },
+
+  updateInventoryItem: async (id, item) => {
+    await api.updateInventoryItem(id, item);
+    await get().fetchInventoryItems();
+  },
+
+  deleteInventoryItem: async (id) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    await api.deleteInventoryItem(id, currentStoreId);
+    await get().fetchInventoryItems();
+  },
+
+  // Recipes
+  fetchRecipes: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const recipes = await api.getRecipes(currentStoreId);
+      set({ recipes: recipes || [] });
+    } catch (error) {
+      console.error('Failed to fetch recipes:', error);
+    }
+  },
+
+  upsertRecipe: async (itemId, ingredients) => {
+    const recipe = await api.upsertRecipe(itemId, ingredients) as Recipe;
+    await get().fetchRecipes();
+    return recipe;
+  },
+
+  deleteRecipe: async (id) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    await api.deleteRecipe(id, currentStoreId);
+    await get().fetchRecipes();
+  },
+
+  // Purchases
+  fetchPurchases: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const purchases = await api.getPurchases(currentStoreId);
+      set({ purchases: purchases || [] });
+    } catch (error) {
+      console.error('Failed to fetch purchases:', error);
+    }
+  },
+
+  createPurchase: async (purchase) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    const created = await api.createPurchase({ ...purchase, storeId: currentStoreId }) as Purchase;
+    await get().fetchPurchases();
+    await get().fetchInventoryItems();
+    return created;
+  },
+
+  updatePurchase: async (id, purchase) => {
+    await api.updatePurchase(id, purchase);
+    await get().fetchPurchases();
+    await get().fetchInventoryItems();
+  },
+
+  deletePurchase: async (id) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    await api.deletePurchase(id, currentStoreId);
+    await get().fetchPurchases();
+    await get().fetchInventoryItems();
   },
 }));

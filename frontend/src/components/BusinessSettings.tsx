@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette } from 'lucide-react';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, Check, Upload, Trash2, Image, Palette, Download } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useToast } from '../contexts/ToastContext';
+import DesktopUpdatesCard from './DesktopUpdatesCard';
 import { api } from '../services/api';
 import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
+import Toggle from './ui/Toggle';
 
 interface PrinterDevice {
   name: string;
@@ -18,6 +21,7 @@ const BusinessSettings: React.FC = () => {
   const { currentStoreId, user, ensureStoreSelected } = useAuthStore();
   const { stores, updateStore, fetchStores } = useDataStore();
   const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   
   // Ensure store is selected on mount (for business_admin and staff)
   useEffect(() => {
@@ -31,14 +35,12 @@ const BusinessSettings: React.FC = () => {
   
   const currentStore = stores.find(s => s.id === currentStoreId);
   
-  const [activeTab, setActiveTab] = useState<'general' | 'printer' | 'appearance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'printer' | 'tax' | 'appearance' | 'updates'>('general');
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   // Available printers from printer service
   const [availablePrinters, setAvailablePrinters] = useState<PrinterDevice[]>([]);
   const [isLoadingPrinters, setIsLoadingPrinters] = useState(false);
-  const [printerError, setPrinterError] = useState('');
   const [selectedPrinterName, setSelectedPrinterName] = useState('');
 
   const [generalSettings, setGeneralSettings] = useState({
@@ -68,6 +70,11 @@ const BusinessSettings: React.FC = () => {
     themeColor: '',
   });
 
+  const [taxSettings, setTaxSettings] = useState({
+    taxEnabled: true,
+    defaultTaxPercent: 0,
+  });
+
   useEffect(() => {
     if (currentStore) {
       setGeneralSettings({
@@ -91,6 +98,10 @@ const BusinessSettings: React.FC = () => {
       setAppearanceSettings({
         themeColor: currentStore.themeColor || '',
       });
+      setTaxSettings({
+        taxEnabled: currentStore.taxEnabled !== false,
+        defaultTaxPercent: currentStore.defaultTaxPercent || 0,
+      });
     }
   }, [currentStore]);
 
@@ -103,7 +114,6 @@ const BusinessSettings: React.FC = () => {
 
   const fetchPrinters = async () => {
     setIsLoadingPrinters(true);
-    setPrinterError('');
     try {
       const printers = await printerService.getPrinters();
       if (Array.isArray(printers)) {
@@ -112,7 +122,7 @@ const BusinessSettings: React.FC = () => {
         setAvailablePrinters([]);
       }
     } catch (error: any) {
-      setPrinterError('Cannot connect to printer service: ' + (error?.message || error));
+      toast.error('Cannot connect to printer service: ' + (error?.message || error));
       setAvailablePrinters([]);
     } finally {
       setIsLoadingPrinters(false);
@@ -146,10 +156,9 @@ const BusinessSettings: React.FC = () => {
     setIsSaving(true);
     try {
       await updateStore(currentStore.id, generalSettings);
-      setSaveMessage('Settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.success('Settings saved successfully!');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      toast.error('Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -169,10 +178,9 @@ const BusinessSettings: React.FC = () => {
         kotPrintEnabled: printerSettings.kotPrintEnabled,
         remoteBillingEnabled: printerSettings.remoteBillingEnabled,
       });
-      setSaveMessage('Printer settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.success('Printer settings saved successfully!');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      toast.error('Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -187,10 +195,27 @@ const BusinessSettings: React.FC = () => {
       await updateStore(currentStore.id, {
         themeColor: appearanceSettings.themeColor || '',
       });
-      setSaveMessage('Appearance settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.success('Appearance settings saved successfully!');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      toast.error('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveTax = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentStore) return;
+
+    setIsSaving(true);
+    try {
+      await updateStore(currentStore.id, {
+        taxEnabled: taxSettings.taxEnabled,
+        defaultTaxPercent: taxSettings.defaultTaxPercent,
+      });
+      toast.success('Tax settings saved successfully!');
+    } catch (error) {
+      toast.error('Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -203,15 +228,13 @@ const BusinessSettings: React.FC = () => {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      setSaveMessage('Please select an image file');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.warning('Please select an image file');
       return;
     }
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      setSaveMessage('Image size should be less than 2MB');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.warning('Image size should be less than 2MB');
       return;
     }
 
@@ -228,13 +251,11 @@ const BusinessSettings: React.FC = () => {
     setIsUploadingLogo(true);
     try {
       await api.uploadStoreLogo(currentStore.id, logoPreview);
-      setSaveMessage('Logo uploaded successfully!');
+      toast.success('Logo uploaded successfully!');
       // Refresh stores to get updated logo URL
       await fetchStores();
-      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      setSaveMessage('Failed to upload logo');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.error('Failed to upload logo');
     } finally {
       setIsUploadingLogo(false);
     }
@@ -249,13 +270,11 @@ const BusinessSettings: React.FC = () => {
     try {
       await api.deleteStoreLogo(currentStore.id);
       setLogoPreview(null);
-      setSaveMessage('Logo removed successfully!');
+      toast.success('Logo removed successfully!');
       // Refresh stores to get updated logo URL
       await fetchStores();
-      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      setSaveMessage('Failed to remove logo');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.error('Failed to remove logo');
     } finally {
       setIsUploadingLogo(false);
     }
@@ -305,25 +324,27 @@ const BusinessSettings: React.FC = () => {
           Printer & Invoice
         </button>
         <button
+          className={`tab ${activeTab === 'tax' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tax')}
+        >
+          <Receipt size={18} />
+          Tax
+        </button>
+        <button
           className={`tab ${activeTab === 'appearance' ? 'active' : ''}`}
           onClick={() => setActiveTab('appearance')}
         >
           <Palette size={18} />
           Appearance
         </button>
+        <button
+          className={`tab ${activeTab === 'updates' ? 'active' : ''}`}
+          onClick={() => setActiveTab('updates')}
+        >
+          <Download size={18} />
+          App Updates
+        </button>
       </div>
-
-      {saveMessage && (
-        <div style={{ 
-          padding: '1rem', 
-          background: saveMessage.includes('success') ? 'rgba(72, 187, 120, 0.1)' : 'rgba(245, 101, 101, 0.1)',
-          color: saveMessage.includes('success') ? 'var(--success)' : 'var(--danger)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem'
-        }}>
-          {saveMessage}
-        </div>
-      )}
 
       {activeTab === 'general' && (
         <div className="card">
@@ -482,6 +503,51 @@ const BusinessSettings: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'tax' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Tax Configuration</span>
+          </div>
+          <form onSubmit={handleSaveTax}>
+            <div className="card-body">
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <Toggle
+                  checked={taxSettings.taxEnabled}
+                  onChange={checked => setTaxSettings({ ...taxSettings, taxEnabled: checked })}
+                  label="Enable Tax"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
+                  When enabled, tax will be calculated and displayed on orders, bills, and reports. When disabled, all tax-related fields will be hidden.
+                </p>
+              </div>
+
+              {taxSettings.taxEnabled && (
+                <div className="form-group">
+                  <label>Default Tax Percentage (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={taxSettings.defaultTaxPercent}
+                    onChange={e => setTaxSettings({ ...taxSettings, defaultTaxPercent: parseFloat(e.target.value) || 0 })}
+                    placeholder="e.g., 5"
+                  />
+                  <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem' }}>
+                    This is the default tax rate applied to new items. Individual items can override this with their own tax percentage.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+                <Save size={16} /> {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {activeTab === 'appearance' && (
         <div className="card">
           <div className="card-header">
@@ -506,7 +572,7 @@ const BusinessSettings: React.FC = () => {
                     border: '2px solid',
                     borderColor: !appearanceSettings.themeColor ? 'var(--primary)' : 'var(--gray-200)',
                     borderRadius: 'var(--radius)',
-                    background: !appearanceSettings.themeColor ? 'rgba(255,107,53,0.05)' : 'white',
+                    background: !appearanceSettings.themeColor ? 'rgba(245,36,36,0.05)' : 'white',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -525,8 +591,8 @@ const BusinessSettings: React.FC = () => {
                     width: '40px',
                     height: '40px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #ff8c61 0%, #ff6b35 50%, #e55a2b 100%)',
-                    boxShadow: '0 2px 8px rgba(255,107,53,0.3)',
+                    background: 'linear-gradient(135deg, #ff4d4d 0%, #f52424 50%, #d61f1f 100%)',
+                    boxShadow: '0 2px 8px rgba(245,36,36,0.3)',
                   }} />
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Default (Orange)</span>
                 </label>
@@ -585,7 +651,7 @@ const BusinessSettings: React.FC = () => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
                   <input
                     type="color"
-                    value={appearanceSettings.themeColor || '#ff6b35'}
+                    value={appearanceSettings.themeColor || '#f52424'}
                     onChange={(e) => {
                       setAppearanceSettings({ themeColor: e.target.value });
                       applyThemeColor(e.target.value);
@@ -622,7 +688,7 @@ const BusinessSettings: React.FC = () => {
                     borderRadius: '20px',
                     fontSize: '0.8rem',
                     fontWeight: 600,
-                    background: 'rgba(255,107,53,0.1)',
+                    background: 'rgba(245,36,36,0.1)',
                     color: 'var(--primary)',
                   }}>
                     Active Badge
@@ -659,21 +725,6 @@ const BusinessSettings: React.FC = () => {
               {/* Printer Selection */}
               <div className="form-group">
                 <label>Select Printer</label>
-                {printerError && (
-                  <div style={{ 
-                    padding: '0.75rem', 
-                    background: 'rgba(245, 101, 101, 0.1)', 
-                    color: 'var(--danger)',
-                    borderRadius: 'var(--radius)',
-                    marginBottom: '0.75rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <AlertCircle size={16} />
-                    <span style={{ fontSize: '0.85rem' }}>{printerError}</span>
-                  </div>
-                )}
                 <select
                   value={selectedPrinterName}
                   onChange={handlePrinterSelect}
@@ -809,32 +860,23 @@ const BusinessSettings: React.FC = () => {
               </div>
 
               <div className="form-group" style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={printerSettings.kotPrintEnabled}
-                    onChange={e => setPrinterSettings({ ...printerSettings, kotPrintEnabled: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>Enable KOT (Kitchen Order Ticket) Printing</span>
-                </label>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
+                <Toggle
+                  checked={printerSettings.kotPrintEnabled}
+                  onChange={checked => setPrinterSettings({ ...printerSettings, kotPrintEnabled: checked })}
+                  label="Enable KOT (Kitchen Order Ticket) Printing"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
                   When enabled, KOT tickets will be printed automatically when orders are placed.
                 </p>
               </div>
 
               <div className="form-group" style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    id="remote-billing-toggle"
-                    checked={printerSettings.remoteBillingEnabled}
-                    onChange={e => setPrinterSettings({ ...printerSettings, remoteBillingEnabled: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>Remote Billing</span>
-                </label>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
+                <Toggle
+                  checked={printerSettings.remoteBillingEnabled}
+                  onChange={checked => setPrinterSettings({ ...printerSettings, remoteBillingEnabled: checked })}
+                  label="Remote Billing"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
                   When enabled, queue-based bill generation and printing will be active.
                 </p>
               </div>
@@ -864,6 +906,10 @@ const BusinessSettings: React.FC = () => {
             </div>
           </form>
         </div>
+      )}
+
+      {activeTab === 'updates' && (
+        <DesktopUpdatesCard />
       )}
     </div>
   );

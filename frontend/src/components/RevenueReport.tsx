@@ -6,9 +6,14 @@ import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import type { RevenueReport, Bill, Expense } from '../types';
 import { Button } from './ui/Button';
+import { usePagination } from '../hooks/usePagination';
+import { useTaxSettings } from '../hooks/useTaxSettings';
+import TablePagination from './TablePagination';
+import { useToast } from '../contexts/ToastContext';
 
 const RevenueReport: React.FC = () => {
   const { currentStoreId } = useAuthStore();
+  const taxSettings = useTaxSettings();
   const [periodFilter, setPeriodFilter] = useState<string>('today');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
@@ -16,6 +21,8 @@ const RevenueReport: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const toast = useToast();
 
   const getDateRange = (period: string): { startDate: string; endDate: string } => {
     const now = new Date();
@@ -66,6 +73,8 @@ const RevenueReport: React.FC = () => {
   useReportPageHeader({
     title: 'Profit Report',
     subtitle: 'Combined sales, revenue, and expense analysis',
+    showStats,
+    onToggleStats: () => setShowStats(v => !v),
   });
 
   const fetchReport = async () => {
@@ -78,6 +87,7 @@ const RevenueReport: React.FC = () => {
       setReport(data);
     } catch (error) {
       console.error('Failed to fetch profit report:', error);
+      toast.error('Failed to fetch profit report');
     } finally {
       setIsLoading(false);
     }
@@ -112,11 +122,15 @@ const RevenueReport: React.FC = () => {
     a.download = `revenue-report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+    toast.success('Report exported successfully');
   };
 
   const getProfitColor = (value: number) => {
     return value >= 0 ? 'var(--success)' : 'var(--danger)';
   };
+
+  const billsPagination = usePagination(report?.bills?.length || 0);
+  const expensesPagination = usePagination(report?.expenses?.length || 0);
 
   return (
     <div className="revenue-report-page">
@@ -224,6 +238,7 @@ const RevenueReport: React.FC = () => {
           </div>
 
           {/* Additional Metrics */}
+          {showStats && (
           <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
             <div className="stat-card">
               <div className="stat-icon" style={{ background: 'rgba(99, 179, 237, 0.15)', color: '#63b3ed' }}>
@@ -253,73 +268,80 @@ const RevenueReport: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
 
           {/* Revenue and Expenses - Two Columns */}
           <div className="reports-two-column" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
             {/* Revenue (Bills) Column */}
-            <div className="reports-table-container">
-              <h3 style={{ padding: '1rem 1.5rem', margin: 0, borderBottom: '1px solid var(--gray-200)' }}>
+            <div className="zoho-table-wrap">
+              <div style={{ padding: '10px 14px', fontWeight: 800, fontSize: '13px', color: 'var(--dark)', borderBottom: '1px solid var(--gray-200)', background: 'var(--gray-100)' }}>
                 Revenue Entries ({report.bills?.length || 0})
-              </h3>
-              {report.bills && report.bills.length > 0 ? (
-                <table className="reports-table">
-                  <thead>
-                    <tr>
-                      <th>Invoice No</th>
-                      <th>Date</th>
-                      <th>Customer</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.bills.map((bill) => (
-                      <tr key={bill.id} onClick={() => setSelectedBill(bill)} style={{ cursor: 'pointer' }}>
-                        <td>{bill.invoiceNo || '-'}</td>
-                        <td>{bill.generatedAt ? new Date(bill.generatedAt).toLocaleDateString() : '-'}</td>
-                        <td>{bill.customerName || '-'}</td>
-                        <td className="amount">{formatCurrency(bill.total)}</td>
+              </div>
+              <div className="zoho-table-scroll">
+                {report.bills && report.bills.length > 0 ? (
+                  <table className="zoho-table">
+                    <thead>
+                      <tr>
+                        <th>Invoice No</th>
+                        <th>Date</th>
+                        <th>Customer</th>
+                        <th>Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="empty-state" style={{ padding: '2rem' }}>
-                  <p>No revenue entries for the selected period</p>
-                </div>
-              )}
+                    </thead>
+                    <tbody>
+                      {billsPagination.paginatedItems(report.bills).map((bill) => (
+                        <tr key={bill.id} onClick={() => setSelectedBill(bill)} style={{ cursor: 'pointer' }}>
+                          <td>{bill.invoiceNo || '-'}</td>
+                          <td>{bill.generatedAt ? new Date(bill.generatedAt).toLocaleDateString() : '-'}</td>
+                          <td>{bill.customerName || '-'}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(bill.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="empty-state" style={{ padding: '2rem' }}>
+                    <p>No revenue entries for the selected period</p>
+                  </div>
+                )}
+              </div>
+              <TablePagination pagination={billsPagination} />
             </div>
 
             {/* Expenses Column */}
-            <div className="reports-table-container">
-              <h3 style={{ padding: '1rem 1.5rem', margin: 0, borderBottom: '1px solid var(--gray-200)' }}>
+            <div className="zoho-table-wrap">
+              <div style={{ padding: '10px 14px', fontWeight: 800, fontSize: '13px', color: 'var(--dark)', borderBottom: '1px solid var(--gray-200)', background: 'var(--gray-100)' }}>
                 Expense Entries ({report.expenses?.length || 0})
-              </h3>
-              {report.expenses && report.expenses.length > 0 ? (
-                <table className="reports-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Title</th>
-                      <th>Category</th>
-                      <th>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.expenses.map((expense) => (
-                      <tr key={expense.id} onClick={() => setSelectedExpense(expense)} style={{ cursor: 'pointer' }}>
-                        <td>{expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '-'}</td>
-                        <td>{expense.title}</td>
-                        <td>{expense.categoryName || '-'}</td>
-                        <td className="amount" style={{ color: 'var(--danger)' }}>-{formatCurrency(expense.amount)}</td>
+              </div>
+              <div className="zoho-table-scroll">
+                {report.expenses && report.expenses.length > 0 ? (
+                  <table className="zoho-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>Amount</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="empty-state" style={{ padding: '2rem' }}>
-                  <p>No expense entries for the selected period</p>
-                </div>
-              )}
+                    </thead>
+                    <tbody>
+                      {expensesPagination.paginatedItems(report.expenses).map((expense) => (
+                        <tr key={expense.id} onClick={() => setSelectedExpense(expense)} style={{ cursor: 'pointer' }}>
+                          <td>{expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '-'}</td>
+                          <td>{expense.title}</td>
+                          <td>{expense.categoryName || '-'}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--danger)' }}>-{formatCurrency(expense.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="empty-state" style={{ padding: '2rem' }}>
+                    <p>No expense entries for the selected period</p>
+                  </div>
+                )}
+              </div>
+              <TablePagination pagination={expensesPagination} />
             </div>
           </div>
 
@@ -366,7 +388,7 @@ const RevenueReport: React.FC = () => {
                     <th>Item</th>
                     <th>Qty</th>
                     <th>Rate</th>
-                    <th>Tax</th>
+                    {taxSettings.taxEnabled && <th>Tax</th>}
                     <th className="amount">Amount</th>
                   </tr>
                 </thead>
@@ -377,13 +399,13 @@ const RevenueReport: React.FC = () => {
                         <td>{oi.item.name}</td>
                         <td>{oi.quantity}</td>
                         <td>{formatCurrency(oi.item.price)}</td>
-                        <td>{oi.item.taxPercent || 0}%</td>
+                        {taxSettings.taxEnabled && <td>{oi.item.taxPercent || 0}%</td>}
                         <td className="amount">{formatCurrency(oi.item.price * oi.quantity)}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>No items available</td>
+                      <td colSpan={taxSettings.taxEnabled ? 5 : 4} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>No items available</td>
                     </tr>
                   )}
                 </tbody>
@@ -394,10 +416,12 @@ const RevenueReport: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(selectedBill.subtotal)}</span>
                 </div>
+                {taxSettings.taxEnabled && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '240px', fontSize: '0.95rem', color: 'var(--gray-700)' }}>
                   <span>Tax</span>
                   <span>{formatCurrency(selectedBill.taxTotal)}</span>
                 </div>
+                )}
                 {selectedBill.discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', width: '240px', fontSize: '0.95rem', color: 'var(--danger)' }}>
                     <span>Discount</span>

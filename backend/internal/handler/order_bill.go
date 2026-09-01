@@ -132,6 +132,11 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 			updates["table_number"] = val
 		}
 	}
+	if val, exists := raw["specialNote"]; exists {
+		if strVal, ok := val.(string); ok {
+			updates["special_note"] = strVal
+		}
+	}
 
 	// Extract items if present
 	var items []models.OrderItem
@@ -175,6 +180,50 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 					}
 					items = append(items, item)
 				}
+			}
+		}
+	}
+
+	// Detect add-on items: if new items were added or quantities increased on an
+	// existing active order, reset kitchen_status to 'pending' and stamp kot_reissued_at
+	// so the order reappears in the Kitchen Display "New Orders" column as a new KOT.
+	// The kot_items column is set to only the new/increased items so the Kitchen
+	// Display shows just the add-on ticket, not the full order.
+	if hasItems {
+		existing, fetchErr := h.Repo.Order.GetByID(r.Context(), id)
+		if fetchErr == nil && existing != nil && existing.Status == "active" {
+			oldQty := make(map[string]int)
+			for _, oi := range existing.Items {
+				oldQty[oi.ItemID] += oi.Quantity
+			}
+			newQty := make(map[string]int)
+			for _, oi := range items {
+				newQty[oi.ItemID] += oi.Quantity
+			}
+			addonDetected := false
+			for itemID, qty := range newQty {
+				if oldQty[itemID] < qty {
+					addonDetected = true
+					break
+				}
+			}
+			if addonDetected {
+				updates["kitchen_status"] = "pending"
+				updates["kot_reissued_at"] = time.Now()
+
+				// Compute the diff: only new or increased-quantity items
+				addonItems := []models.OrderItem{}
+				for _, oi := range items {
+					oldQ := oldQty[oi.ItemID]
+					diff := oi.Quantity - oldQ
+					if diff > 0 {
+						addonItem := oi
+						addonItem.Quantity = diff
+						addonItems = append(addonItems, addonItem)
+					}
+				}
+				kotItemsJSON, _ := json.Marshal(addonItems)
+				updates["kot_items"] = string(kotItemsJSON)
 			}
 		}
 	}
@@ -256,6 +305,76 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 
 	h.broadcastTableStatusUpdate(order.StoreID, "order_cancelled")
 	h.writeJSON(w, http.StatusOK, order)
+}
+
+// UpdateOrderKitchenStatus handles PATCH /api/orders/:id/kitchen-status
+// Allows kitchen staff to advance an active order through pending -> preparing -> ready -> served.
+func (h *Handler) UpdateOrderKitchenStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req struct {
+		KitchenStatus string `json:"kitchenStatus"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	// Validate status value
+	validStatuses := map[string]bool{"pending": true, "preparing": true, "ready": true, "served": true}
+	if !validStatuses[req.KitchenStatus] {
+		h.writeError(w, http.StatusBadRequest, "kitchenStatus must be one of: pending, preparing, ready, served")
+		return
+	}
+
+	// Fetch order to ensure it exists and is still active
+	order, err := h.Repo.Order.GetByID(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if order == nil {
+		h.writeError(w, http.StatusNotFound, "Order not found")
+		return
+	}
+	if order.Status != "active" {
+		h.writeError(w, http.StatusBadRequest, "Kitchen status can only be updated for active orders")
+		return
+	}
+
+	if err := h.Repo.Order.UpdateKitchenStatus(r.Context(), id, req.KitchenStatus); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Record the transition in kitchen status history for step-time tracking
+	_ = h.Repo.Order.RecordKitchenTransition(r.Context(), id, order.StoreID, req.KitchenStatus)
+
+	updated, errFetch := h.Repo.Order.GetByID(r.Context(), id)
+	if errFetch != nil || updated == nil {
+		h.writeJSON(w, http.StatusOK, map[string]string{"message": "Kitchen status updated"})
+		return
+	}
+
+	h.broadcastTableStatusUpdate(updated.StoreID, "kitchen_status_updated")
+	h.writeJSON(w, http.StatusOK, updated)
+}
+
+// GetKitchenHistory handles GET /api/orders/:id/kitchen-history
+// Returns the full kitchen status transition history for an order, used to
+// track time spent in each step and identify delays.
+func (h *Handler) GetKitchenHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	history, err := h.Repo.Order.GetKitchenHistory(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if history == nil {
+		history = []models.KitchenStatusHistory{}
+	}
+	h.writeJSON(w, http.StatusOK, history)
 }
 
 // SaveEBill handles POST /api/orders/save-ebill

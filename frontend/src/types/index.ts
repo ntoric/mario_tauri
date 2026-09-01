@@ -5,6 +5,7 @@ export interface User {
   username: string;
   name: string;
   email?: string;
+  phone?: string;
   role: UserRole;
   storeId?: string;
   storeName?: string;
@@ -27,8 +28,11 @@ export interface Store {
   invoiceSize?: '2inch' | '3inch';
   kotPrintEnabled?: boolean;
   remoteBillingEnabled?: boolean;
+  kitchenWindowEnabled?: boolean;
   logoUrl?: string;
   themeColor?: string;
+  taxEnabled?: boolean;
+  defaultTaxPercent?: number;
   isActive: boolean;
   createdAt?: string;
 }
@@ -106,6 +110,16 @@ export interface OrderItem {
 
 export type OrderStatus = 'active' | 'completed' | 'cancelled';
 export type OrderType = 'dine_in' | 'parcel';
+export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'served';
+
+export interface KitchenStatusHistoryEntry {
+  id: number;
+  orderId: string;
+  storeId: string;
+  status: KitchenStatus;
+  enteredAt: string;
+  exitedAt?: string;
+}
 
 export interface Order {
   id: string;
@@ -114,9 +128,11 @@ export interface Order {
   tableNumber: number;
   items: OrderItem[];
   status: OrderStatus;
+  kitchenStatus?: KitchenStatus;
   orderType?: OrderType;
   customerName?: string;
   customerMobile?: string;
+  specialNote?: string;
   totalAmount: number;
   taxAmount: number;
   discountAmount: number;
@@ -125,6 +141,8 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   cancelledAt?: string;
+  kotReissuedAt?: string;
+  kotItems?: OrderItem[];
   createdBy: string;
 }
 
@@ -212,4 +230,66 @@ export interface RevenueReport {
   averageOrderValue: number;
   bills: Bill[];
   expenses: Expense[];
+}
+
+// ===== Inventory, Recipes & Purchases =====
+
+export interface InventoryItem {
+  id: string;
+  storeId: string;
+  name: string;
+  description?: string;
+  unit: string;
+  quantity: number;
+  reorderLevel: number;
+  unitCost: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RecipeIngredient {
+  id?: string;
+  storeId?: string;
+  recipeId?: string;
+  inventoryItemId: string;
+  inventoryName?: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface Recipe {
+  id: string;
+  storeId: string;
+  itemId: string;
+  itemName?: string;
+  isActive: boolean;
+  createdAt?: string;
+  ingredients: RecipeIngredient[];
+}
+
+export interface PurchaseItem {
+  id?: string;
+  storeId?: string;
+  purchaseId?: string;
+  inventoryItemId: string;
+  inventoryName?: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Purchase {
+  id: string;
+  storeId: string;
+  vendor?: string;
+  purchaseDate: string;
+  totalAmount: number;
+  paymentMethod?: string;
+  receiptNumber?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt?: string;
+  createdBy?: string;
+  items: PurchaseItem[];
 }

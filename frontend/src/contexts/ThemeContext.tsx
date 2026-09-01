@@ -11,11 +11,11 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'default', name: 'Orange (Default)', primary: '#ff6b35', primaryDark: '#e55a2b', primaryLight: '#ff8c61' },
+  { id: 'default', name: 'Red (Default)', primary: '#f52424', primaryDark: '#d61f1f', primaryLight: '#ff4d4d' },
   { id: 'blue', name: 'Blue', primary: '#3b82f6', primaryDark: '#2563eb', primaryLight: '#60a5fa' },
   { id: 'green', name: 'Green', primary: '#10b981', primaryDark: '#059669', primaryLight: '#34d399' },
   { id: 'purple', name: 'Purple', primary: '#8b5cf6', primaryDark: '#7c3aed', primaryLight: '#a78bfa' },
-  { id: 'red', name: 'Red', primary: '#ef4444', primaryDark: '#dc2626', primaryLight: '#f87171' },
+  { id: 'orange', name: 'Orange', primary: '#ff6b35', primaryDark: '#e55a2b', primaryLight: '#ff8c61' },
   { id: 'teal', name: 'Teal', primary: '#14b8a6', primaryDark: '#0d9488', primaryLight: '#2dd4bf' },
   { id: 'pink', name: 'Pink', primary: '#ec4899', primaryDark: '#db2777', primaryLight: '#f472b6' },
   { id: 'indigo', name: 'Indigo', primary: '#6366f1', primaryDark: '#4f46e5', primaryLight: '#818cf8' },

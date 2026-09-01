@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import toast from 'react-hot-toast';
 import {
   PieChart, Download, Loader2, Search, ChevronDown, ChevronRight,
   Package, TrendingUp, ShoppingBag, DollarSign, Receipt, BarChart3, Percent, Layers,
 } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
+import { usePagination } from '../hooks/usePagination';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 import type { ItemProfitReport, ItemProfitEntry, OrderItem } from '../types';
 import { Button } from './ui/Button';
+import TablePagination from './TablePagination';
+import { useToast } from '../contexts/ToastContext';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type MenuSortField = 'name' | 'category' | 'price' | 'cost' | 'profit' | 'profitPercent';
@@ -49,10 +51,14 @@ const ItemProfitReportPage: React.FC = () => {
   const [menuSortDir, setMenuSortDir] = useState<SortDir>('desc');
   const [salesSortDir, setSalesSortDir] = useState<SortDir>('desc');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [showStats, setShowStats] = useState(false);
+  const toast = useToast();
 
   useReportPageHeader({
     title: 'Item Profit Report',
     subtitle: 'Menu margins and sales-based profit from preparation costs',
+    showStats,
+    onToggleStats: () => setShowStats(v => !v),
   });
 
   const fetchReport = async () => {
@@ -63,6 +69,7 @@ const ItemProfitReportPage: React.FC = () => {
       setReport(data);
     } catch (error) {
       console.error('Failed to fetch item profit report:', error);
+      toast.error('Failed to fetch item profit report');
     } finally {
       setIsLoading(false);
     }
@@ -236,6 +243,9 @@ const ItemProfitReportPage: React.FC = () => {
     return rows;
   }, [salesRows, salesSearchQuery, salesSortField, salesSortDir]);
 
+  const salesPagination = usePagination(filteredSalesRows.length);
+  const menuPagination = usePagination(filteredMenuRows.length);
+
   const getProfitColor = (value: number, hasData = true) => {
     if (!hasData) return 'var(--gray-500)';
     if (value > 0) return 'var(--success)';
@@ -256,16 +266,15 @@ const ItemProfitReportPage: React.FC = () => {
     rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
 
   const exportCsvWithToast = async (content: string, filename: string, label: string) => {
-    const toastId = toast.loading(`Exporting ${label}...`);
     try {
       const ok = await saveCSVWithDialog(content, filename);
       if (ok) {
-        toast.success(`${label} exported successfully`, { id: toastId });
+        toast.success(`${label} exported successfully`);
       } else {
-        toast.error(`Failed to export ${label}`, { id: toastId });
+        toast.error(`Failed to export ${label}`);
       }
     } catch {
-      toast.error(`Failed to export ${label}`, { id: toastId });
+      toast.error(`Failed to export ${label}`);
     }
   };
 
@@ -441,6 +450,8 @@ const ItemProfitReportPage: React.FC = () => {
           </div>
 
           {/* Menu KPIs */}
+          {showStats && (
+          <>
           <div className="kpi-section-label">
             <Package size={18} />
             Menu Profit Potential
@@ -506,6 +517,8 @@ const ItemProfitReportPage: React.FC = () => {
               </div>
             </div>
           </div>
+          </>
+          )}
         </>
       )}
 
@@ -533,18 +546,20 @@ const ItemProfitReportPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="reports-table">
-            <thead>
-              <tr>
-                <th onClick={() => toggleSalesSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', salesSortField, salesSortDir)}</th>
-                <th>Category</th>
-                <th onClick={() => toggleSalesSort('qtySold')} style={{ cursor: 'pointer' }}>Qty Sold{sortIcon('qtySold', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('revenue')} style={{ cursor: 'pointer' }}>Revenue{sortIcon('revenue', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('prepCost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('prepCost', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('profit')} style={{ cursor: 'pointer' }}>Profit{sortIcon('profit', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', salesSortField, salesSortDir)}</th>
-              </tr>
+        <div className="card-body" style={{ padding: 0 }}>
+          <div className="zoho-table-wrap">
+            <div className="zoho-table-scroll">
+              <table className="zoho-table">
+                <thead>
+                  <tr>
+                    <th onClick={() => toggleSalesSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', salesSortField, salesSortDir)}</th>
+                    <th>Category</th>
+                    <th onClick={() => toggleSalesSort('qtySold')} style={{ cursor: 'pointer' }}>Qty Sold{sortIcon('qtySold', salesSortField, salesSortDir)}</th>
+                    <th onClick={() => toggleSalesSort('revenue')} style={{ cursor: 'pointer' }}>Revenue{sortIcon('revenue', salesSortField, salesSortDir)}</th>
+                    <th onClick={() => toggleSalesSort('prepCost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('prepCost', salesSortField, salesSortDir)}</th>
+                    <th onClick={() => toggleSalesSort('profit')} style={{ cursor: 'pointer' }}>Profit{sortIcon('profit', salesSortField, salesSortDir)}</th>
+                    <th onClick={() => toggleSalesSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', salesSortField, salesSortDir)}</th>
+                  </tr>
             </thead>
             <tbody>
               {filteredSalesRows.length === 0 ? (
@@ -554,7 +569,7 @@ const ItemProfitReportPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSalesRows.map(row => (
+                salesPagination.paginatedItems(filteredSalesRows).map(row => (
                   <tr key={row.itemId}>
                     <td><strong>{row.name}</strong></td>
                     <td><span className="badge badge-primary">{row.category}</span></td>
@@ -572,8 +587,11 @@ const ItemProfitReportPage: React.FC = () => {
                   </tr>
                 ))
               )}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+            <TablePagination pagination={salesPagination} />
+          </div>
         </div>
       </div>
 
@@ -601,10 +619,12 @@ const ItemProfitReportPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="reports-table">
-            <thead>
-              <tr>
+        <div className="card-body" style={{ padding: 0 }}>
+          <div className="zoho-table-wrap">
+            <div className="zoho-table-scroll">
+              <table className="zoho-table">
+                <thead>
+                  <tr>
                 <th style={{ width: '32px' }}></th>
                 <th onClick={() => toggleMenuSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', menuSortField, menuSortDir)}</th>
                 <th onClick={() => toggleMenuSort('category')} style={{ cursor: 'pointer' }}>Category{sortIcon('category', menuSortField, menuSortDir)}</th>
@@ -622,7 +642,7 @@ const ItemProfitReportPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredMenuRows.map(entry => {
+                menuPagination.paginatedItems(filteredMenuRows).map(entry => {
                   const isExpanded = expandedItems.has(entry.item.id);
                   return (
                     <React.Fragment key={entry.item.id}>
@@ -674,8 +694,11 @@ const ItemProfitReportPage: React.FC = () => {
                   );
                 })
               )}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+            <TablePagination pagination={menuPagination} />
+          </div>
         </div>
       </div>
 

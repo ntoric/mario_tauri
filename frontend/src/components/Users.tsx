@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Lock, Eye, EyeOff, Power, Loader2 } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
+import { usePagination } from '../hooks/usePagination';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
+import Toggle from '../components/ui/Toggle';
+import TablePagination from './TablePagination';
 
 const ROLES = [
   { value: 'superadmin', label: 'Super Admin', description: 'Full system access' },
@@ -23,6 +27,7 @@ const Users: React.FC = () => {
   const { users, stores, createUser, updateUser, deleteUser, resetPassword, fetchUsers, fetchStores } = useDataStore();
   const { user: currentUser, currentStoreId } = useAuthStore();
   const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
   const [showModal, setShowModal] = useState(false);
 
@@ -35,8 +40,6 @@ const Users: React.FC = () => {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [passwordUser, setPasswordUser] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
   
   // Loading states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,11 +94,8 @@ const Users: React.FC = () => {
     setShowModal(true);
   };
 
-  const [error, setError] = useState('');
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsSubmitting(true);
     
     // For business_admin, don't send storeId - backend will auto-assign to their store
@@ -126,7 +126,7 @@ const Users: React.FC = () => {
       setForm({ username: '', password: '', name: '', email: '', role: 'staff', storeId: '', storeIds: [] });
     } catch (err: any) {
       console.error('Failed to create user:', err);
-      setError(err.message || 'Failed to save user');
+      toast.error(err.message || 'Failed to save user');
     } finally {
       setIsSubmitting(false);
     }
@@ -135,37 +135,33 @@ const Users: React.FC = () => {
   const openPasswordModal = (user: any) => {
     setPasswordUser(user);
     setPasswordForm({ password: '', confirmPassword: '' });
-    setPasswordError('');
-    setPasswordSuccess('');
     setShowPassword(false);
     setShowPasswordModal(true);
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
 
     if (passwordForm.password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
     if (passwordForm.password !== passwordForm.confirmPassword) {
-      setPasswordError('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     setIsPasswordSubmitting(true);
     try {
       await resetPassword(passwordUser.id, passwordForm.password);
-      setPasswordSuccess(`Password for ${passwordUser.name} has been reset successfully`);
+      toast.success(`Password for ${passwordUser.name} has been reset successfully`);
       setPasswordForm({ password: '', confirmPassword: '' });
       setTimeout(() => {
         setShowPasswordModal(false);
       }, 2000);
     } catch (err: any) {
-      setPasswordError(err.message || 'Failed to reset password');
+      toast.error(err.message || 'Failed to reset password');
     } finally {
       setIsPasswordSubmitting(false);
     }
@@ -240,95 +236,102 @@ const Users: React.FC = () => {
     });
   }, [setHeaderContent]);
 
+  const userPagination = usePagination(users.length);
+
   return (
     <div>
       <div className="card">
         <div className="card-body" style={{ padding: 0 }}>
-          <table className="items-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Store</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user: any) => (
-                <tr key={user.id}>
-                  <td>
-                    <strong>{user.name}</strong>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--gray-600)' }}>{user.email}</div>
-                  </td>
-                  <td>{user.username}</td>
-                  <td><span className="badge badge-primary">{getRoleLabel(user.role)}</span></td>
-                  <td>{user.storeName || user.storeIds?.length > 0 ? `${user.storeIds?.length || 1} store(s)` : '-'}</td>
-                  <td>
-                    <span className={`badge ${user.isActive ? 'badge-success' : 'badge-danger'}`}>
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-btns">
-                      <button className="action-btn edit" onClick={() => openModal(user)} title="Edit User">
-                        <Edit2 size={14} />
-                      </button>
-                      {(currentUser?.role === 'superadmin' || currentUser?.role === 'business_owner') && (
-                        <button 
-                          className="action-btn" 
-                          style={{ background: 'rgba(255, 193, 7, 0.1)', color: 'var(--warning)' }} 
-                          onClick={() => openPasswordModal(user)} 
-                          title="Reset Password"
-                        >
-                          <Lock size={14} />
-                        </button>
-                      )}
-                      {canManageRole(user.role) && user.id !== currentUser?.id && (
-                        <>
-                          <button 
-                            className="action-btn" 
-                            style={{ 
-                              background: user.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', 
-                              color: user.isActive ? 'var(--danger)' : 'var(--success)',
-                              opacity: loadingUserId === user.id ? 0.5 : 1,
-                              cursor: loadingUserId === user.id ? 'not-allowed' : 'pointer'
-                            }} 
-                            onClick={() => handleToggleActive(user)}
-                            title={user.isActive ? 'Disable User' : 'Enable User'}
-                            disabled={loadingUserId === user.id}
-                          >
-                            {loadingUserId === user.id ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Power size={14} />
-                            )}
+          <div className="zoho-table-wrap">
+            <div className="zoho-table-scroll">
+              <table className="zoho-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Store</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userPagination.paginatedItems(users).map((user: any) => (
+                    <tr key={user.id}>
+                      <td>
+                        <strong>{user.name}</strong>
+                        <div style={{ fontSize: '0.875rem', color: 'var(--gray-600)' }}>{user.email}</div>
+                      </td>
+                      <td>{user.username}</td>
+                      <td><span className="badge badge-primary">{getRoleLabel(user.role)}</span></td>
+                      <td>{user.storeName || user.storeIds?.length > 0 ? `${user.storeIds?.length || 1} store(s)` : '-'}</td>
+                      <td>
+                        <span className={`badge ${user.isActive ? 'badge-success' : 'badge-danger'}`}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="action-btns">
+                          <button className="action-btn edit" onClick={() => openModal(user)} title="Edit User">
+                            <Edit2 size={14} />
                           </button>
-                          <button 
-                            className="action-btn delete" 
-                            onClick={() => handleDeleteUser(user)}
-                            title="Delete User"
-                            style={{
-                              opacity: loadingUserId === user.id ? 0.5 : 1,
-                              cursor: loadingUserId === user.id ? 'not-allowed' : 'pointer'
-                            }}
-                            disabled={loadingUserId === user.id}
-                          >
-                            {loadingUserId === user.id ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={14} />
-                            )}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          {(currentUser?.role === 'superadmin' || currentUser?.role === 'business_owner') && (
+                            <button
+                              className="action-btn"
+                              style={{ background: 'rgba(255, 193, 7, 0.1)', color: 'var(--warning)' }}
+                              onClick={() => openPasswordModal(user)}
+                              title="Reset Password"
+                            >
+                              <Lock size={14} />
+                            </button>
+                          )}
+                          {canManageRole(user.role) && user.id !== currentUser?.id && (
+                            <>
+                              <button
+                                className="action-btn"
+                                style={{
+                                  background: user.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                                  color: user.isActive ? 'var(--danger)' : 'var(--success)',
+                                  opacity: loadingUserId === user.id ? 0.5 : 1,
+                                  cursor: loadingUserId === user.id ? 'not-allowed' : 'pointer'
+                                }}
+                                onClick={() => handleToggleActive(user)}
+                                title={user.isActive ? 'Disable User' : 'Enable User'}
+                                disabled={loadingUserId === user.id}
+                              >
+                                {loadingUserId === user.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Power size={14} />
+                                )}
+                              </button>
+                              <button
+                                className="action-btn delete"
+                                onClick={() => handleDeleteUser(user)}
+                                title="Delete User"
+                                style={{
+                                  opacity: loadingUserId === user.id ? 0.5 : 1,
+                                  cursor: loadingUserId === user.id ? 'not-allowed' : 'pointer'
+                                }}
+                                disabled={loadingUserId === user.id}
+                              >
+                                {loadingUserId === user.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination pagination={userPagination} />
+          </div>
         </div>
       </div>
 
@@ -443,12 +446,6 @@ const Users: React.FC = () => {
                   </div>
                 )}
               </div>
-              {error && (
-                <div className="modal-error">
-                  <X size={16} style={{ marginRight: '0.5rem' }} />
-                  {error}
-                </div>
-              )}
               <div className="modal-footer">
                 <Button
                   type="button"
@@ -516,32 +513,6 @@ const Users: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-                {passwordError && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(245, 101, 101, 0.1)',
-                    color: 'var(--danger)',
-                    borderRadius: 'var(--radius)',
-                    marginBottom: '1rem',
-                    fontSize: '0.9rem'
-                  }}>
-                    {passwordError}
-                  </div>
-                )}
-
-                {passwordSuccess && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(72, 187, 120, 0.1)',
-                    color: 'var(--success)',
-                    borderRadius: 'var(--radius)',
-                    marginBottom: '1rem',
-                    fontSize: '0.9rem'
-                  }}>
-                    {passwordSuccess}
-                  </div>
-                )}
 
                 <div className="form-group">
                   <label>New Password</label>

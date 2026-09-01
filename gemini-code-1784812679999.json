@@ -1,0 +1,245 @@
+[
+  {
+    "category": "FRIED ITEMS",
+    "items": [
+      {
+        "name": "Wings",
+        "price": 130
+      },
+      {
+        "name": "Korean BBQ Wings",
+        "price": 150
+      },
+      {
+        "name": "Lemon Pepper Wings",
+        "price": 150
+      },
+      {
+        "name": "Buffalo Wings",
+        "price": 150
+      },
+      {
+        "name": "Strips Plain",
+        "price": 130
+      },
+      {
+        "name": "Honey Chilli Strips",
+        "price": 150
+      },
+      {
+        "name": "Dynamite Strips",
+        "price": 150
+      },
+      {
+        "name": "Nashville Strip",
+        "price": 150
+      },
+      {
+        "name": "Chicken Popcorn",
+        "price": 100
+      },
+      {
+        "name": "Dynamite Pops",
+        "price": 130
+      },
+      {
+        "name": "Honey Chilli Pops",
+        "price": 130
+      }
+    ]
+  },
+  {
+    "category": "MOMOS SPECIAL - VEG",
+    "items": [
+      {
+        "name": "FRIED",
+        "price": 80
+      },
+      {
+        "name": "PERI PERI",
+        "price": 100
+      },
+      {
+        "name": "SCHEZWAN",
+        "price": 110
+      },
+      {
+        "name": "DYNAMITE",
+        "price": 110
+      },
+      {
+        "name": "LEMON PEPPER",
+        "price": 110
+      },
+      {
+        "name": "HONEY CHILLI",
+        "price": 110
+      },
+      {
+        "name": "MALAI MOMOS",
+        "price": 120
+      }
+    ]
+  },
+  {
+    "category": "MOMOS SPECIAL - CHICKEN",
+    "items": [
+      {
+        "name": "FRIED",
+        "price": 90
+      },
+      {
+        "name": "PERI PERI",
+        "price": 110
+      },
+      {
+        "name": "SCHEZWAN",
+        "price": 120
+      },
+      {
+        "name": "DYNAMITE",
+        "price": 120
+      },
+      {
+        "name": "LEMON PEPPER",
+        "price": 120
+      },
+      {
+        "name": "HONEY CHILLI",
+        "price": 120
+      },
+      {
+        "name": "MALAI MOMOS",
+        "price": 130
+      }
+    ]
+  },
+  {
+    "category": "MOMOS SPECIAL - PANEER",
+    "items": [
+      {
+        "name": "FRIED",
+        "price": 90
+      },
+      {
+        "name": "PERI PERI",
+        "price": 110
+      },
+      {
+        "name": "SCHEZWAN",
+        "price": 120
+      },
+      {
+        "name": "DYNAMITE",
+        "price": 120
+      },
+      {
+        "name": "LEMON PEPPER",
+        "price": 120
+      },
+      {
+        "name": "HONEY CHILLI",
+        "price": 120
+      },
+      {
+        "name": "MALAI MOMOS",
+        "price": 130
+      }
+    ]
+  },
+  {
+    "category": "SPECIAL THICK SHAKE",
+    "items": [
+      {
+        "name": "Biscoff Thick Shake",
+        "price": 120
+      },
+      {
+        "name": "Berry Blast",
+        "price": 120
+      },
+      {
+        "name": "Biscoff Brownie",
+        "price": 130
+      },
+      {
+        "name": "Roasted Cashew Dates",
+        "price": 100
+      },
+      {
+        "name": "Blue Ocean Latte",
+        "price": 120
+      },
+      {
+        "name": "Kannur Cocktail",
+        "price": 90
+      }
+    ]
+  },
+  {
+    "category": "AVIL MILK",
+    "items": [
+      {
+        "name": "Avil Milk Special",
+        "price": 70
+      },
+      {
+        "name": "Avil Milk Boost",
+        "price": 90
+      },
+      {
+        "name": "Avil Milk Fruit and Nut",
+        "price": 100
+      },
+      {
+        "name": "Avil Milk Chocolate",
+        "price": 90
+      },
+      {
+        "name": "Avil Milk Strawberry",
+        "price": 100
+      },
+      {
+        "name": "Avil Milk Royal",
+        "price": 100
+      },
+      {
+        "name": "Avil Milk Mango Nuts",
+        "price": 110
+      },
+      {
+        "name": "Avil Milk Dry Fruits",
+        "price": 110
+      },
+      {
+        "name": "Avil Milk Red Velvet",
+        "price": 120
+      },
+      {
+        "name": "Avil Milk Brownie",
+        "price": 120
+      }
+    ]
+  },
+  {
+    "category": "DIET PLAN",
+    "items": [
+      {
+        "name": "Avil Milk",
+        "price": 60
+      },
+      {
+        "name": "Fruit Avil",
+        "price": 70
+      },
+      {
+        "name": "Fruit Nut",
+        "price": 90
+      },
+      {
+        "name": "Dry Fruits",
+        "price": 90
+      }
+    ]
+  }
+]

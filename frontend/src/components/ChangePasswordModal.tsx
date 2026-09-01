@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Lock, Eye, EyeOff, Check } from 'lucide-react';
+import { X, Lock, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -14,50 +15,47 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const toast = useToast();
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError('All fields are required');
+      toast.error('All fields are required');
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
+      toast.error('New password must be at least 6 characters');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      toast.error('New passwords do not match');
       return;
     }
 
     if (currentPassword === newPassword) {
-      setError('New password must be different from current password');
+      toast.error('New password must be different from current password');
       return;
     }
 
     setIsLoading(true);
     try {
       await api.changePassword(currentPassword, newPassword);
-      setSuccess('Password changed successfully!');
+      toast.success('Password changed successfully!');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => {
         onClose();
-        setSuccess('');
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Failed to change password');
+      console.error('Failed to change password:', err);
+      toast.error(err.message || 'Failed to change password');
     } finally {
       setIsLoading(false);
     }
@@ -67,8 +65,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    setError('');
-    setSuccess('');
     onClose();
   };
 
@@ -84,36 +80,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
-            {error && (
-              <div style={{
-                padding: '0.75rem',
-                background: 'rgba(245, 101, 101, 0.1)',
-                color: 'var(--danger)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '1rem',
-                fontSize: '0.9rem'
-              }}>
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div style={{
-                padding: '0.75rem',
-                background: 'rgba(72, 187, 120, 0.1)',
-                color: 'var(--success)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '1rem',
-                fontSize: '0.9rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                <Check size={16} />
-                {success}
-              </div>
-            )}
-
             <div className="form-group">
               <label>Current Password</label>
               <div style={{ position: 'relative' }}>

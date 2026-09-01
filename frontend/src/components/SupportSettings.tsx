@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Mail, Phone, MessageCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Save, Mail, Phone, MessageCircle, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface SupportConfig {
   email: string;
@@ -12,8 +12,8 @@ interface SupportConfig {
 
 const SupportSettings: React.FC = () => {
   const { user } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
-  
+  const toast = useToast();
+
   const [config, setConfig] = useState<SupportConfig>({
     email: '',
     phone: '',
@@ -21,12 +21,10 @@ const SupportSettings: React.FC = () => {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [saveMessage, setSaveMessage] = useState('');
-  const [error, setError] = useState('');
 
   useEffect(() => {
     if (user?.role !== 'superadmin') {
-      setError('Access denied. Superadmin role required.');
+      toast.error('Access denied. Superadmin role required.');
       setIsLoading(false);
       return;
     }
@@ -46,7 +44,7 @@ const SupportSettings: React.FC = () => {
         });
       }
     } catch (err) {
-      setError('Failed to load support configuration');
+      toast.error('Failed to load support configuration');
     } finally {
       setIsLoading(false);
     }
@@ -55,8 +53,6 @@ const SupportSettings: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveMessage('');
-    setError('');
 
     try {
       const response = await fetch('/api/support-config', {
@@ -69,26 +65,17 @@ const SupportSettings: React.FC = () => {
       });
 
       if (response.ok) {
-        setSaveMessage('Support configuration saved successfully!');
-        setTimeout(() => setSaveMessage(''), 3000);
+        toast.success('Support configuration saved successfully!');
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to save configuration');
+        toast.error(data.error || 'Failed to save configuration');
       }
     } catch (err) {
-      setError('Failed to save configuration. Please try again.');
+      toast.error('Failed to save configuration. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
-
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Support Configuration',
-      subtitle: 'Configure support contact information for disabled stores',
-      actions: null,
-    });
-  }, [setHeaderContent]);
 
   if (isLoading) {
     return (
@@ -98,49 +85,8 @@ const SupportSettings: React.FC = () => {
     );
   }
 
-  if (error && !config.email && !config.phone && !config.whatsappLink) {
-    return (
-      <div style={{ textAlign: 'center', padding: '4rem' }}>
-        <AlertCircle size={64} style={{ color: 'var(--danger)', marginBottom: '1.5rem' }} />
-        <p style={{ fontSize: '1.125rem', color: 'var(--danger)' }}>{error}</p>
-      </div>
-    );
-  }
-
   return (
     <div>
-      {saveMessage && (
-        <div style={{ 
-          padding: '1rem', 
-          background: 'rgba(72, 187, 120, 0.1)',
-          color: 'var(--success)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}>
-          <AlertCircle size={18} />
-          {saveMessage}
-        </div>
-      )}
-
-      {error && config.email && (
-        <div style={{ 
-          padding: '1rem', 
-          background: 'rgba(245, 101, 101, 0.1)',
-          color: 'var(--danger)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}>
-          <AlertCircle size={18} />
-          {error}
-        </div>
-      )}
-
       <div className="card">
         <div className="card-header">
           <span className="card-title">Support Contact Information</span>

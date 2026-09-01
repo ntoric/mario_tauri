@@ -3,16 +3,18 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useDataStore } from './stores';
 import UpdateNotification from './components/UpdateNotification';
 import Login from './components/Login';
+import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Tables from './components/Tables';
 import Items from './components/Items';
+import ItemFormPage from './components/ItemFormPage';
 import History from './components/History';
 import Users from './components/Users';
+import Profile from './components/Profile';
 import Stores from './components/Stores';
 import BusinessSettings from './components/BusinessSettings';
-import SystemReset from './components/SystemReset';
+import DeveloperSettings from './components/DeveloperSettings';
 import UpdateManagement from './components/UpdateManagement';
-import SupportSettings from './components/SupportSettings';
 import SupportPage from './components/SupportPage';
 import Reports from './components/Reports';
 import ReportsIndex from './components/ReportsIndex';
@@ -20,11 +22,16 @@ import TopSellingItemsReport from './components/TopSellingItemsReport';
 import TopSellingCategoriesReport from './components/TopSellingCategoriesReport';
 import OrderPage from './components/OrderPage';
 import ParcelOrderPage from './components/ParcelOrderPage';
+import KitchenDisplay from './components/KitchenDisplay';
 import Expenses from './components/Expenses';
+import ExpenseFormPage from './components/ExpenseFormPage';
 import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
+import Inventory from './components/Inventory';
+import PurchaseFormPage from './components/PurchaseFormPage';
 import { api } from './services/api';
+import { ToastProvider } from './contexts/ToastContext';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -48,7 +55,9 @@ const AppRoutes: React.FC = () => {
   const currentStore = stores.find(store => store.id === currentStoreId);
   const [isStoreActive, setIsStoreActive] = useState(true);
 
-  // Validate token on app load to clear invalid persisted state
+  // Validate token on app load — runs in background, does NOT block UI.
+  // The user is let in immediately from persisted auth state.
+  // validateToken refreshes user data but never clears the session.
   useEffect(() => {
     if (api.getToken()) {
       validateToken();
@@ -101,6 +110,7 @@ const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/"
         element={
@@ -110,15 +120,18 @@ const AppRoutes: React.FC = () => {
         }
       >
         <Route index element={<Tables />} />
+        <Route path="kitchen" element={<KitchenDisplay />} />
         <Route path="order/:tableId" element={<OrderPage />} />
         <Route path="parcel-order" element={<ParcelOrderPage />} />
         <Route path="items" element={<Items />} />
+        <Route path="items/new" element={<ItemFormPage />} />
+        <Route path="items/edit/:itemId" element={<ItemFormPage />} />
         <Route path="history" element={<History />} />
         <Route path="users" element={<Users />} />
+        <Route path="profile" element={<Profile />} />
         <Route path="stores" element={<Stores />} />
         <Route path="business-settings" element={<BusinessSettings />} />
-        <Route path="support-settings" element={<SupportSettings />} />
-        <Route path="system-reset" element={<SystemReset />} />
+        <Route path="developer-settings" element={<DeveloperSettings />} />
         <Route path="update-management" element={<UpdateManagement />} />
         <Route path="reports" element={<ReportsIndex />} />
         <Route path="reports/sales-analytics" element={<Reports />} />
@@ -127,7 +140,12 @@ const AppRoutes: React.FC = () => {
         <Route path="reports/revenue" element={<RevenueReport />} />
         <Route path="reports/item-profit" element={<ItemProfitReport />} />
         <Route path="expenses" element={<Expenses />} />
+        <Route path="expenses/new" element={<ExpenseFormPage />} />
+        <Route path="expenses/edit/:expenseId" element={<ExpenseFormPage />} />
         <Route path="expense-reports" element={<ExpenseReports />} />
+        <Route path="inventory" element={<Inventory />} />
+        <Route path="purchases/new" element={<PurchaseFormPage />} />
+        <Route path="purchases/edit/:purchaseId" element={<PurchaseFormPage />} />
       </Route>
     </Routes>
   );
@@ -135,10 +153,12 @@ const AppRoutes: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <div className="app">
-      <UpdateNotification />
-      <AppRoutes />
-    </div>
+    <ToastProvider>
+      <div className="app">
+        <UpdateNotification />
+        <AppRoutes />
+      </div>
+    </ToastProvider>
   );
 };
 

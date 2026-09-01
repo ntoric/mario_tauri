@@ -89,6 +89,8 @@ func main() {
 	// Public Routes
 	r.Group(func(r chi.Router) {
 		r.Post("/api/auth/login", h.Login)
+		r.Post("/api/auth/forgot-password", h.ForgotPassword)
+		r.Post("/api/auth/reset-password", h.ResetPasswordWithToken)
 		r.Get("/api/stores/default", h.GetDefaultStore)
 		r.Get("/api/support-config", h.GetSupportConfig)
 		r.Get("/api/app-update", h.GetAppUpdate)
@@ -152,6 +154,8 @@ func main() {
 		r.Put("/api/orders/{id}", h.UpdateOrder)
 		r.Patch("/api/orders/{id}/complete", h.CompleteOrder)
 		r.Patch("/api/orders/{id}/cancel", h.CancelOrder)
+		r.Patch("/api/orders/{id}/kitchen-status", h.UpdateOrderKitchenStatus)
+		r.Get("/api/orders/{id}/kitchen-history", h.GetKitchenHistory)
 
 		// Bills
 		r.Get("/api/bills", h.GetBills)
@@ -171,6 +175,11 @@ func main() {
 
 		// Support Config (POST requires superadmin)
 		r.Post("/api/support-config", h.UpdateSupportConfig)
+
+		// SMTP Settings (requires superadmin)
+		r.Get("/api/smtp-settings", h.GetSmtpConfig)
+		r.Post("/api/smtp-settings", h.UpdateSmtpConfig)
+		r.Post("/api/smtp-settings/test", h.TestSmtpConfig)
 
 		// Expense Categories
 		r.Get("/api/expense-categories", h.GetExpenseCategories)
@@ -192,6 +201,26 @@ func main() {
 		// Revenue Report
 		r.Get("/api/reports/revenue", h.GetRevenueReport)
 		r.Get("/api/reports/item-profit", h.GetItemProfitReport)
+
+		// Inventory Items
+		r.Get("/api/inventory-items", h.GetInventoryItems)
+		r.Post("/api/inventory-items", h.CreateInventoryItem)
+		r.Put("/api/inventory-items/{id}", h.UpdateInventoryItem)
+		r.Delete("/api/inventory-items/{id}", h.DeleteInventoryItem)
+
+		// Recipes
+		r.Get("/api/recipes", h.GetRecipes)
+		r.Post("/api/recipes", h.UpsertRecipe)
+		r.Put("/api/recipes/{id}", h.UpsertRecipe)
+		r.Delete("/api/recipes/{id}", h.DeleteRecipe)
+		r.Get("/api/items/{itemId}/recipe", h.GetRecipe)
+
+		// Purchases
+		r.Get("/api/purchases", h.GetPurchases)
+		r.Get("/api/purchases/{id}", h.GetPurchase)
+		r.Post("/api/purchases", h.CreatePurchase)
+		r.Put("/api/purchases/{id}", h.UpdatePurchase)
+		r.Delete("/api/purchases/{id}", h.DeletePurchase)
 	})
 
 	// 6. Start HTTP Server with Graceful Shutdown

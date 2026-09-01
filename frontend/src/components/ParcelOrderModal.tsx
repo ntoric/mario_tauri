@@ -6,12 +6,14 @@ import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
 import type { OrderItem, Item } from '../types';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 
 const ParcelOrderModal: React.FC = () => {
   const { categories, items, stores, fetchCategories, fetchItems, fetchOrders } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const { parcelOrderModal, closeParcelOrderModal } = useUIStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxSettings = useTaxSettings();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -111,6 +113,7 @@ const ParcelOrderModal: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxSettings.taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -234,8 +237,8 @@ const ParcelOrderModal: React.FC = () => {
         });
 
         const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-        const cgst = taxable * 0.025;
-        const sgst = taxable * 0.025;
+        const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+        const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
         await printerService.printInvoice({
           type: 'invoice',
@@ -468,10 +471,12 @@ const ParcelOrderModal: React.FC = () => {
                       <span>Subtotal</span>
                       <span>{formatCurrency(calculateTotal())}</span>
                     </div>
-                    <div className="total-row">
-                      <span>Tax</span>
-                      <span>{formatCurrency(calculateTax())}</span>
-                    </div>
+                    {taxSettings.taxEnabled && (
+                      <div className="total-row">
+                        <span>Tax</span>
+                        <span>{formatCurrency(calculateTax())}</span>
+                      </div>
+                    )}
                     <div className="total-row final">
                       <span>Total</span>
                       <span>{formatCurrency(total)}</span>

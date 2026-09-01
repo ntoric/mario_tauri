@@ -3,7 +3,9 @@ import { BarChart2, TrendingUp, ShoppingBag, CreditCard, Package, Users, Calenda
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
+import { usePagination } from '../hooks/usePagination';
 import { formatCurrency } from '../utils/currency';
+import TablePagination from './TablePagination';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 
@@ -12,6 +14,7 @@ const Reports: React.FC = () => {
   const { currentStoreId } = useAuthStore();
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -21,6 +24,8 @@ const Reports: React.FC = () => {
   useReportPageHeader({
     title: 'Sales Analytics',
     subtitle: 'Sales analytics and business insights',
+    showStats,
+    onToggleStats: () => setShowStats(v => !v),
   });
 
   const now = new Date();
@@ -108,8 +113,10 @@ const Reports: React.FC = () => {
         });
       });
     }
-    return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 8);
+    return Object.values(map).sort((a, b) => b.qty - a.qty);
   }, [filteredBills, completedOrders]);
+
+  const itemSalesPagination = usePagination(itemSales.length);
 
   // Top selling categories
   const categorySales = useMemo(() => {
@@ -196,6 +203,7 @@ const Reports: React.FC = () => {
       </div>
 
       {/* Summary Stats */}
+      {showStats && (
       <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
         <div className="stat-card">
           <div className="stat-icon primary">
@@ -240,6 +248,7 @@ const Reports: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
         {/* Daily Revenue Trend */}
@@ -389,37 +398,41 @@ const Reports: React.FC = () => {
                 <p style={{ fontSize: '0.9rem' }}>No sales data for this period</p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--gray-200)' }}>
-                      <th style={{ textAlign: 'left', padding: '0.6rem 0.75rem', color: 'var(--gray-600)', fontWeight: 500 }}>#</th>
-                      <th style={{ textAlign: 'left', padding: '0.6rem 0.75rem', color: 'var(--gray-600)', fontWeight: 500 }}>Item</th>
-                      <th style={{ textAlign: 'right', padding: '0.6rem 0.75rem', color: 'var(--gray-600)', fontWeight: 500 }}>Qty Sold</th>
-                      <th style={{ textAlign: 'right', padding: '0.6rem 0.75rem', color: 'var(--gray-600)', fontWeight: 500 }}>Revenue</th>
-                      <th style={{ padding: '0.6rem 0.75rem' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itemSales.map((item, idx) => {
-                      const maxQty = itemSales[0].qty;
-                      const pct = maxQty > 0 ? (item.qty / maxQty) * 100 : 0;
-                      return (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--gray-200)' }}>
-                          <td style={{ padding: '0.75rem', color: 'var(--gray-500)', width: '32px' }}>{idx + 1}</td>
-                          <td style={{ padding: '0.75rem', color: 'var(--gray-800)', fontWeight: 500 }}>{item.name}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--gray-700)' }}>{item.qty}</td>
-                          <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(item.revenue)}</td>
-                          <td style={{ padding: '0.75rem', width: '120px' }}>
-                            <div style={{ background: 'var(--gray-200)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary)', borderRadius: '4px', transition: 'width 0.4s ease' }} />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="zoho-table-wrap">
+                <div className="zoho-table-scroll">
+                  <table className="zoho-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Item</th>
+                        <th style={{ textAlign: 'right' }}>Qty Sold</th>
+                        <th style={{ textAlign: 'right' }}>Revenue</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itemSalesPagination.paginatedItems(itemSales).map((item, idx) => {
+                        const maxQty = itemSales[0].qty;
+                        const pct = maxQty > 0 ? (item.qty / maxQty) * 100 : 0;
+                        const rowNum = (itemSalesPagination.currentPage - 1) * itemSalesPagination.pageSize + idx + 1;
+                        return (
+                          <tr key={idx}>
+                            <td style={{ color: 'var(--gray-400)', width: '32px' }}>{rowNum}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{item.name}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }}>{item.qty}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>{formatCurrency(item.revenue)}</td>
+                            <td style={{ width: '120px' }}>
+                              <div style={{ background: 'var(--gray-200)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary)', borderRadius: '4px', transition: 'width 0.4s ease' }} />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination pagination={itemSalesPagination} />
               </div>
             )}
           </div>

@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Minus, Trash2, Search, Printer, X, FileText } from 'lu
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useTaxSettings } from '../hooks/useTaxSettings';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -19,6 +20,7 @@ const ParcelOrderPage: React.FC = () => {
   } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxSettings = useTaxSettings();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -40,9 +42,9 @@ const ParcelOrderPage: React.FC = () => {
     message: string;
   }>({ show: false, message: '' });
 
-  // Prevent outer .page-content from scrolling; keep bottom bar fixed
+  // Prevent outer .zoho-page-content from scrolling; keep bottom bar fixed
   useEffect(() => {
-    const pageContent = document.querySelector('.page-content');
+    const pageContent = document.querySelector('.zoho-page-content');
     if (pageContent) {
       pageContent.classList.add('order-page-active');
     }
@@ -125,6 +127,7 @@ const ParcelOrderPage: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxSettings.taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -267,8 +270,8 @@ const ParcelOrderPage: React.FC = () => {
         });
 
         const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-        const cgst = taxable * 0.025;
-        const sgst = taxable * 0.025;
+        const cgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
+        const sgst = taxSettings.taxEnabled ? taxable * 0.025 : 0;
 
         await printerService.printInvoice({
           type: 'invoice',
@@ -343,24 +346,24 @@ const ParcelOrderPage: React.FC = () => {
         {/* Left Sidebar - Order Items + Customer Details */}
         <div className="order-page-left">
           <h3>Customer Details</h3>
-          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
+          <div className="form-group" style={{ marginBottom: '10px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--gray-500)', fontWeight: 600 }}>Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
             <input
               type="text"
+              className="form-input"
               value={customerName}
               onChange={e => setCustomerName(e.target.value)}
               placeholder="e.g. John Doe"
-              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
             />
           </div>
-          <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Mobile <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--gray-500)', fontWeight: 600 }}>Mobile <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
             <input
               type="text"
+              className="form-input"
               value={customerMobile}
               onChange={e => setCustomerMobile(e.target.value)}
               placeholder="e.g. 9876543210"
-              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
             />
           </div>
 
@@ -482,10 +485,12 @@ const ParcelOrderPage: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(calculateTotal())}</span>
                 </div>
+                {taxSettings.taxEnabled && (
                 <div className="breakdown-row">
                   <span>Tax</span>
                   <span>{formatCurrency(calculateTax())}</span>
                 </div>
+                )}
                 <div className="breakdown-row final">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>

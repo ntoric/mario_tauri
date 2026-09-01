@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Trash2, RefreshCw, Check, X, Database, Users, Store, Tag, Coffee, ShoppingCart, Grid3X3, Receipt, Settings, Clock, Smartphone, Monitor, Download, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface ResetOption {
   id: string;
@@ -36,42 +36,31 @@ interface AppUpdate {
 
 const SystemReset: React.FC = () => {
   const { user } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [isResetting, setIsResetting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [resetResult, setResetResult] = useState<any>(null);
-  const [error, setError] = useState('');
 
   // Periodic Cleanup Settings State
   const [cleanupEnabled, setCleanupEnabled] = useState(false);
   const [cleanupIntervalMins, setCleanupIntervalMins] = useState(60);
   const [cleanupLastRun, setCleanupLastRun] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [configMessage, setConfigMessage] = useState('');
-  const [configError, setConfigError] = useState('');
 
   // App Update Settings State
   const [appUpdates, setAppUpdates] = useState<Record<string, AppUpdate>>({});
   const [isLoadingAppUpdates, setIsLoadingAppUpdates] = useState(false);
   const [isSavingAppUpdate, setIsSavingAppUpdate] = useState(false);
-  const [appUpdateMessage, setAppUpdateMessage] = useState('');
-  const [appUpdateError, setAppUpdateError] = useState('');
   const [activePlatform, setActivePlatform] = useState<'mobile' | 'desktop'>('mobile');
 
   useEffect(() => {
-    setHeaderContent({
-      title: 'System Reset',
-      subtitle: 'Reset system data - Superadmin only',
-    });
     loadData();
-  }, [setHeaderContent]);
+  }, []);
 
   const loadData = async () => {
     setIsLoading(true);
-    setError('');
     try {
       const [statsData, configData] = await Promise.all([
         api.getSystemStats(),
@@ -95,11 +84,12 @@ const SystemReset: React.FC = () => {
         setAppUpdates(updatesMap);
       } catch (updateErr: any) {
         console.error('Failed to load app updates:', updateErr);
+        toast.error('Failed to load app updates');
         // Don't fail the entire load if app updates fail
         setAppUpdates({});
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load system data');
+      toast.error(err.message || 'Failed to load system data');
     } finally {
       setIsLoading(false);
     }
@@ -108,21 +98,19 @@ const SystemReset: React.FC = () => {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingConfig(true);
-    setConfigMessage('');
-    setConfigError('');
     try {
       const response = await api.updateSystemConfig({
         cleanupEnabled,
         cleanupIntervalMins
       });
-      setConfigMessage(response.message || 'Configuration updated successfully');
+      toast.success(response.message || 'Configuration updated successfully');
       // Refresh config to get latest last-run timestamp if any
       const configData = await api.getSystemConfig();
       setCleanupEnabled(configData.cleanupEnabled);
       setCleanupIntervalMins(configData.cleanupIntervalMins);
       setCleanupLastRun(configData.cleanupLastRun);
     } catch (err: any) {
-      setConfigError(err.message || 'Failed to save configuration');
+      toast.error(err.message || 'Failed to save configuration');
     } finally {
       setIsSavingConfig(false);
     }
@@ -131,8 +119,6 @@ const SystemReset: React.FC = () => {
   const handleSaveAppUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingAppUpdate(true);
-    setAppUpdateMessage('');
-    setAppUpdateError('');
     try {
       const currentUpdate = appUpdates[activePlatform] || {
         enabled: false,
@@ -148,10 +134,10 @@ const SystemReset: React.FC = () => {
         downloadUrl: currentUpdate.downloadUrl,
         releaseNotes: currentUpdate.releaseNotes || ''
       });
-      setAppUpdateMessage(response.message || 'App update configuration saved successfully');
+      toast.success(response.message || 'App update configuration saved successfully');
       await loadData();
     } catch (err: any) {
-      setAppUpdateError(err.message || 'Failed to save app update configuration');
+      toast.error(err.message || 'Failed to save app update configuration');
     } finally {
       setIsSavingAppUpdate(false);
     }
@@ -249,10 +235,9 @@ const SystemReset: React.FC = () => {
     if (selectedOptions.size === 0) return;
     
     setIsResetting(true);
-    setError('');
     
     try {
-      const result = await api.resetSystem({
+      await api.resetSystem({
         users: selectedOptions.has('users'),
         stores: selectedOptions.has('stores'),
         categories: selectedOptions.has('categories'),
@@ -262,12 +247,12 @@ const SystemReset: React.FC = () => {
         bills: selectedOptions.has('bills'),
       });
       
-      setResetResult(result);
+      toast.success('System reset completed successfully!');
       setShowConfirm(false);
       await loadData();
       setSelectedOptions(new Set());
     } catch (err: any) {
-      setError(err.message || 'Reset failed');
+      toast.error(err.message || 'Reset failed');
     } finally {
       setIsResetting(false);
     }
@@ -368,19 +353,6 @@ const SystemReset: React.FC = () => {
               </strong>
             </span>
           </div>
-
-          {configError && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              {configError}
-            </div>
-          )}
-
-          {configMessage && (
-            <div className="success-message" style={{ marginTop: '1rem' }}>
-              <Check size={16} />
-              <span>{configMessage}</span>
-            </div>
-          )}
 
           <div className="form-actions">
             <button
@@ -499,19 +471,6 @@ const SystemReset: React.FC = () => {
             />
           </div>
 
-          {appUpdateError && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              {appUpdateError}
-            </div>
-          )}
-
-          {appUpdateMessage && (
-            <div className="success-message" style={{ marginTop: '1rem' }}>
-              <Check size={16} />
-              <span>{appUpdateMessage}</span>
-            </div>
-          )}
-
           <div className="form-actions">
             <button
               type="submit"
@@ -531,26 +490,6 @@ const SystemReset: React.FC = () => {
         </form>
       </div>
 
-
-      {error && (
-        <div className="error-message" style={{ marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
-
-      {resetResult && (
-        <div className="success-message" style={{ marginBottom: '1rem' }}>
-          <Check size={16} />
-          <span>System reset completed successfully!</span>
-          <button 
-            className="btn btn-icon" 
-            onClick={() => setResetResult(null)}
-            style={{ marginLeft: 'auto' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
 
       <div className="reset-options-header">
         <h3>Select Data to Reset</h3>

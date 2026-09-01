@@ -25,6 +25,7 @@ type Store struct {
 	InvoiceSize          string    `json:"invoiceSize"`
 	KOTPrintEnabled      bool      `json:"kotPrintEnabled"`
 	RemoteBillingEnabled bool      `json:"remoteBillingEnabled"`
+	KitchenWindowEnabled bool      `json:"kitchenWindowEnabled"`
 	LogoURL              string    `json:"logoUrl"`
 	ThemeColor           string    `json:"themeColor"`
 	IsActive             bool      `json:"isActive"`
@@ -38,6 +39,7 @@ type User struct {
 	Password  string    `json:"-"` // Never output password hash in json
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
 	Role      string    `json:"role"`
 	StoreID   string    `json:"storeId"`
 	StoreName string    `json:"storeName,omitempty"`
@@ -144,9 +146,11 @@ type Order struct {
 	TableID        string      `json:"tableId"`
 	TableNumber    int         `json:"tableNumber"`
 	Status         string      `json:"status"`
+	KitchenStatus  string      `json:"kitchenStatus"`
 	OrderType      string      `json:"orderType"`
 	CustomerName   string      `json:"customerName"`
 	CustomerMobile string      `json:"customerMobile"`
+	SpecialNote    string      `json:"specialNote"`
 	TotalAmount    float64     `json:"totalAmount"`
 	TaxAmount      float64     `json:"taxAmount"`
 	DiscountAmount float64     `json:"discountAmount"`
@@ -156,6 +160,8 @@ type Order struct {
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
 	CancelledAt    *time.Time  `json:"cancelledAt,omitempty"`
+	KotReissuedAt  *time.Time  `json:"kotReissuedAt,omitempty"`
+	KotItems       []OrderItem `json:"kotItems,omitempty"`
 	Items          []OrderItem `json:"items"`
 }
 
@@ -199,6 +205,16 @@ type Settings struct {
 	Value   string `json:"value"`
 }
 
+// KitchenStatusHistory records when an order entered and exited each kitchen step.
+type KitchenStatusHistory struct {
+	ID        int        `json:"id"`
+	OrderID   string     `json:"orderId"`
+	StoreID   string     `json:"storeId"`
+	Status    string     `json:"status"`
+	EnteredAt time.Time  `json:"enteredAt"`
+	ExitedAt  *time.Time `json:"exitedAt,omitempty"`
+}
+
 // Request and Response DTOs
 
 type LoginRequest struct {
@@ -211,6 +227,7 @@ type UserSummary struct {
 	Username  string  `json:"username"`
 	Name      string  `json:"name"`
 	Email     string  `json:"email"`
+	Phone     string  `json:"phone"`
 	Role      string  `json:"role"`
 	StoreID   string  `json:"storeId"`
 	StoreName string  `json:"storeName,omitempty"`
@@ -316,6 +333,39 @@ type SupportConfigRequest struct {
 	WhatsAppLink string `json:"whatsappLink"`
 }
 
+// SMTPConfig represents the SMTP server configuration stored in global_settings
+type SMTPConfig struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	From     string `json:"from"`
+	FromName string `json:"fromName"`
+	UseTLS   bool   `json:"useTLS"`
+}
+
+// SMTPConfigRequest is the payload for saving SMTP settings
+type SMTPConfigRequest struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	From     string `json:"from"`
+	FromName string `json:"fromName"`
+	UseTLS   bool   `json:"useTLS"`
+}
+
+// ForgotPasswordRequest is the payload for requesting a password reset email
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ResetPasswordWithTokenRequest is the payload for resetting a password using a token
+type ResetPasswordWithTokenRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 // ExpenseCategory represents expense category table schema and json dto
 type ExpenseCategory struct {
 	ID          string    `json:"id"`
@@ -359,6 +409,87 @@ type ExpenseSummary struct {
 	Date             string  `json:"date"`
 	TotalAmount      float64 `json:"totalAmount"`
 	ExpenseCount     int     `json:"expenseCount"`
+}
+
+// InventoryItem represents a raw material / ingredient kept in stock
+type InventoryItem struct {
+	ID           string    `json:"id"`
+	StoreID      string    `json:"storeId"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Unit         string    `json:"unit"`
+	Quantity     float64   `json:"quantity"`
+	ReorderLevel float64   `json:"reorderLevel"`
+	UnitCost     float64   `json:"unitCost"`
+	IsActive     bool      `json:"isActive"`
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt,omitempty"`
+}
+
+// RecipeIngredient represents a single component of a recipe
+type RecipeIngredient struct {
+	ID              string  `json:"id"`
+	StoreID         string  `json:"storeId"`
+	RecipeID        string  `json:"recipeId"`
+	InventoryItemID string  `json:"inventoryItemId"`
+	InventoryName   string  `json:"inventoryName,omitempty"`
+	Quantity        float64 `json:"quantity"`
+	Unit            string  `json:"unit"`
+}
+
+// Recipe represents the preparation recipe for a menu item
+type Recipe struct {
+	ID          string            `json:"id"`
+	StoreID     string            `json:"storeId"`
+	ItemID      string            `json:"itemId"`
+	ItemName    string            `json:"itemName,omitempty"`
+	IsActive    bool              `json:"isActive"`
+	CreatedAt   time.Time         `json:"createdAt,omitempty"`
+	Ingredients []RecipeIngredient `json:"ingredients"`
+}
+
+// RecipeRequest is the payload for creating/updating a recipe with its ingredients
+type RecipeRequest struct {
+	ItemID      string            `json:"itemId"`
+	Ingredients []RecipeIngredient `json:"ingredients"`
+}
+
+// PurchaseItem represents a single line item in a purchase
+type PurchaseItem struct {
+	ID              string  `json:"id"`
+	StoreID         string  `json:"storeId"`
+	PurchaseID      string  `json:"purchaseId"`
+	InventoryItemID string  `json:"inventoryItemId"`
+	InventoryName   string  `json:"inventoryName,omitempty"`
+	Quantity        float64 `json:"quantity"`
+	UnitPrice       float64 `json:"unitPrice"`
+	Total           float64 `json:"total"`
+}
+
+// Purchase represents a restocking purchase from a vendor
+type Purchase struct {
+	ID            string         `json:"id"`
+	StoreID       string         `json:"storeId"`
+	Vendor        string         `json:"vendor"`
+	PurchaseDate  time.Time      `json:"purchaseDate"`
+	TotalAmount   float64        `json:"totalAmount"`
+	PaymentMethod string         `json:"paymentMethod"`
+	ReceiptNumber string         `json:"receiptNumber"`
+	Notes         string         `json:"notes"`
+	IsActive      bool           `json:"isActive"`
+	CreatedAt     time.Time      `json:"createdAt,omitempty"`
+	CreatedBy     string         `json:"createdBy"`
+	Items         []PurchaseItem `json:"items"`
+}
+
+// PurchaseRequest is the payload for creating/updating a purchase with its items
+type PurchaseRequest struct {
+	Vendor        string         `json:"vendor"`
+	PurchaseDate  time.Time      `json:"purchaseDate"`
+	PaymentMethod string         `json:"paymentMethod"`
+	ReceiptNumber string         `json:"receiptNumber"`
+	Notes         string         `json:"notes"`
+	Items         []PurchaseItem `json:"items"`
 }
 
 // RevenueReport represents combined revenue, sales, and expense data

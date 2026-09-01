@@ -108,19 +108,24 @@ export const useAuthStore = create<AuthState>()(
       validateToken: async () => {
         const { token } = get();
         if (!token) {
-          get().clearAuth();
           return false;
         }
+        // Ensure the API service has the token from persisted state
+        if (!api.getToken()) {
+          api.setToken(token);
+        }
         try {
-          await api.getMe();
+          // Refresh user data in case roles/stores changed server-side
+          const data = await api.getMe();
+          set({ user: data });
           return true;
         } catch (error) {
-          // Only clear auth if the token was invalidated by a 401 response.
-          // For network errors or server errors (5xx), keep the session intact
-          // so role-based menus don't disappear on transient failures.
-          if (!api.getToken()) {
-            get().clearAuth();
-          }
+          // Do NOT clear auth on validation failure.
+          // The user stays logged in until they manually log out.
+          // Transient network errors, server restarts, or expired tokens
+          // should not kick the user out — they'll just see stale data
+          // until the backend is reachable again.
+          console.warn('Token validation failed, keeping session:', error);
           return false;
         }
       },

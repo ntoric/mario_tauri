@@ -1,126 +1,90 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, DollarSign, Eye } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, DollarSign, Eye, TrendingDown, FolderOpen, Receipt, BarChart3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useDataStore, useUIStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
+import { usePagination } from '../hooks/usePagination';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Button } from '../components/ui/Button';
+import { Button } from './ui/Button';
+import TablePagination from './TablePagination';
 import { formatCurrency } from '../utils/currency';
 import type { ExpenseCategory, Expense } from '../types';
 
 const Expenses: React.FC = () => {
-  const { expenseCategories, expenses, createExpenseCategory, updateExpenseCategory, deleteExpenseCategory, createExpense, updateExpense, deleteExpense, fetchExpenseCategories, fetchExpenses } = useDataStore();
+  const { expenseCategories, expenses, createExpenseCategory, updateExpenseCategory, deleteExpenseCategory, deleteExpense, fetchExpenseCategories, fetchExpenses } = useDataStore();
+  const navigate = useNavigate();
   const { setHeaderContent } = usePageHeader();
-  const { openExpenseModal, openExpenseCategoryModal, expenseModal, expenseCategoryModal, closeExpenseModal, closeExpenseCategoryModal } = useUIStore();
+  const { openExpenseCategoryModal, expenseCategoryModal, closeExpenseCategoryModal } = useUIStore();
   const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
   const [activeTab, setActiveTab] = useState<'expenses' | 'categories'>('expenses');
+  const [showStats, setShowStats] = useState(false);
   const [expenseSearchQuery, setExpenseSearchQuery] = useState('');
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
 
-  // Fetch data on mount
   useEffect(() => {
     fetchExpenseCategories();
     fetchExpenses();
   }, [fetchExpenseCategories, fetchExpenses]);
-
-  const [expenseForm, setExpenseForm] = useState({
-    title: '',
-    description: '',
-    amount: '',
-    categoryId: '',
-    expenseDate: new Date().toISOString().split('T')[0],
-    paymentMethod: '',
-    receiptNumber: '',
-    vendor: '',
-  });
 
   const [categoryForm, setCategoryForm] = useState({
     name: '',
     description: '',
   });
 
-  // Loading states
-  const [isExpenseSubmitting, setIsExpenseSubmitting] = useState(false);
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
   const [loadingExpenseId, setLoadingExpenseId] = useState<string | null>(null);
   const [loadingCategoryId, setLoadingCategoryId] = useState<string | null>(null);
 
-  const editingExpense = expenseModal.data;
   const editingCategory = expenseCategoryModal.data;
 
-  // Set page header
   useEffect(() => {
     setHeaderContent({
       title: 'Expense Management',
       subtitle: 'Track and manage business expenses',
-      actions: null,
+      actions: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="segmented-tabs">
+            <button
+              className={`segmented-tab ${activeTab === 'expenses' ? 'active' : ''}`}
+              onClick={() => setActiveTab('expenses')}
+            >
+              <DollarSign size={14} />
+              Expenses
+              <span className="segmented-tab-badge">{expenses.length}</span>
+            </button>
+            <button
+              className={`segmented-tab ${activeTab === 'categories' ? 'active' : ''}`}
+              onClick={() => setActiveTab('categories')}
+            >
+              <FolderOpen size={14} />
+              Categories
+              <span className="segmented-tab-badge">{expenseCategories.length}</span>
+            </button>
+          </div>
+          {activeTab === 'expenses' && (
+            <button
+              className={`btn btn-sm ${showStats ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setShowStats(s => !s)}
+              title={showStats ? 'Hide stats' : 'Show stats'}
+            >
+              <BarChart3 size={14} />
+              Stats
+            </button>
+          )}
+        </div>
+      ),
     });
-  }, [setHeaderContent]);
+  }, [setHeaderContent, activeTab, expenses.length, expenseCategories.length, showStats]);
 
   const openExpenseForm = (expense?: Expense) => {
     if (expense) {
-      setExpenseForm({
-        title: expense.title,
-        description: expense.description || '',
-        amount: expense.amount.toString(),
-        categoryId: expense.categoryId || '',
-        expenseDate: expense.expenseDate.split('T')[0],
-        paymentMethod: expense.paymentMethod || '',
-        receiptNumber: expense.receiptNumber || '',
-        vendor: expense.vendor || '',
-      });
+      navigate(`/expenses/edit/${expense.id}`);
     } else {
-      setExpenseForm({ 
-        title: '', 
-        description: '', 
-        amount: '', 
-        categoryId: expenseCategories[0]?.id || '', 
-        expenseDate: new Date().toISOString().split('T')[0],
-        paymentMethod: '',
-        receiptNumber: '',
-        vendor: '',
-      });
-    }
-    openExpenseModal(expense);
-  };
-
-  const handleExpenseSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsExpenseSubmitting(true);
-    
-    const expenseData = {
-      title: expenseForm.title,
-      description: expenseForm.description,
-      amount: parseFloat(expenseForm.amount),
-      categoryId: expenseForm.categoryId,
-      expenseDate: new Date(expenseForm.expenseDate).toISOString(),
-      paymentMethod: expenseForm.paymentMethod,
-      receiptNumber: expenseForm.receiptNumber,
-      vendor: expenseForm.vendor,
-    };
-
-    try {
-      if (editingExpense) {
-        await updateExpense(editingExpense.id, expenseData);
-      } else {
-        await createExpense(expenseData);
-      }
-      closeExpenseModal();
-      setExpenseForm({ 
-        title: '', 
-        description: '', 
-        amount: '', 
-        categoryId: '', 
-        expenseDate: new Date().toISOString().split('T')[0],
-        paymentMethod: '',
-        receiptNumber: '',
-        vendor: '',
-      });
-    } finally {
-      setIsExpenseSubmitting(false);
+      navigate('/expenses/new');
     }
   };
 
@@ -159,9 +123,9 @@ const Expenses: React.FC = () => {
   };
 
   const handleDeleteExpense = async (id: string) => {
-    const confirmed = await confirm({ 
-      title: 'Delete Expense', 
-      message: 'Are you sure you want to delete this expense?' 
+    const confirmed = await confirm({
+      title: 'Delete Expense',
+      message: 'Are you sure you want to delete this expense?'
     });
     if (confirmed) {
       setLoadingExpenseId(id);
@@ -174,9 +138,9 @@ const Expenses: React.FC = () => {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    const confirmed = await confirm({ 
-      title: 'Delete Category', 
-      message: 'Are you sure you want to delete this expense category?' 
+    const confirmed = await confirm({
+      title: 'Delete Category',
+      message: 'Are you sure you want to delete this expense category?'
     });
     if (confirmed) {
       setLoadingCategoryId(id);
@@ -199,16 +163,45 @@ const Expenses: React.FC = () => {
   };
 
   // Filter expenses
-  const filteredExpenses = expenses.filter(expense =>
+  const filteredExpenses = useMemo(() => expenses.filter(expense =>
     expense.title.toLowerCase().includes(expenseSearchQuery.toLowerCase()) ||
     expense.description?.toLowerCase().includes(expenseSearchQuery.toLowerCase()) ||
     expense.vendor?.toLowerCase().includes(expenseSearchQuery.toLowerCase())
-  );
+  ), [expenses, expenseSearchQuery]);
 
   // Filter categories
-  const filteredCategories = expenseCategories.filter(category =>
+  const filteredCategories = useMemo(() => expenseCategories.filter(category =>
     category.name.toLowerCase().includes(categorySearchQuery.toLowerCase())
-  );
+  ), [expenseCategories, categorySearchQuery]);
+
+  const expensePagination = usePagination(filteredExpenses.length);
+  const expenseCategoryPagination = usePagination(filteredCategories.length);
+
+  // Summary calculations
+  const totalAmount = useMemo(() => filteredExpenses.reduce((sum, e) => sum + e.amount, 0), [filteredExpenses]);
+
+  const thisMonthAmount = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return expenses
+      .filter(e => new Date(e.expenseDate) >= monthStart)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
+
+  const topCategory = useMemo(() => {
+    const byCategory: Record<string, number> = {};
+    filteredExpenses.forEach(e => {
+      const cat = e.categoryName || 'Uncategorized';
+      byCategory[cat] = (byCategory[cat] || 0) + e.amount;
+    });
+    const entries = Object.entries(byCategory);
+    if (entries.length === 0) return null;
+    return entries.sort((a, b) => b[1] - a[1])[0];
+  }, [filteredExpenses]);
+
+  const getCategoryName = (categoryId: string) => {
+    return expenseCategories.find(c => c.id === categoryId)?.name || 'Uncategorized';
+  };
 
   return (
     <div className="expenses-page">
@@ -266,302 +259,219 @@ const Expenses: React.FC = () => {
         </div>
       )}
 
-      {/* Expense Modal */}
-      {expenseModal.isOpen && (
-        <div className="modal-overlay" onClick={closeExpenseModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editingExpense ? 'Edit Expense' : 'Add Expense'}</h2>
-              <button onClick={closeExpenseModal} className="close-btn">
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleExpenseSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Title *</label>
-                  <input
-                    type="text"
-                    value={expenseForm.title}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
-                    required
-                    placeholder="e.g., Office Rent, Electricity Bill"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Description</label>
-                  <textarea
-                    value={expenseForm.description}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                    placeholder="Expense details"
-                    rows={2}
-                  />
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Amount *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={expenseForm.amount}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                      required
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Category</label>
-                    <select
-                      value={expenseForm.categoryId}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, categoryId: e.target.value })}
-                    >
-                      <option value="">Select category</option>
-                      {expenseCategories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Expense Date *</label>
-                    <input
-                      type="date"
-                      value={expenseForm.expenseDate}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Payment Method</label>
-                    <select
-                      value={expenseForm.paymentMethod}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })}
-                    >
-                      <option value="">Select payment method</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Card">Card</option>
-                      <option value="UPI">UPI</option>
-                      <option value="Net Banking">Net Banking</option>
-                      <option value="Credit">Credit</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Receipt Number</label>
-                    <input
-                      type="text"
-                      value={expenseForm.receiptNumber}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, receiptNumber: e.target.value })}
-                      placeholder="Receipt #"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Vendor</label>
-                    <input
-                      type="text"
-                      value={expenseForm.vendor}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, vendor: e.target.value })}
-                      placeholder="Vendor name"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <Button type="button" variant="secondary" onClick={closeExpenseModal}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isExpenseSubmitting}>
-                  {isExpenseSubmitting ? <Loader2 className="animate-spin" size={16} /> : null}
-                  {editingExpense ? 'Update' : 'Create'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'expenses' ? 'active' : ''}`}
-          onClick={() => setActiveTab('expenses')}
-        >
-          Expenses
-        </button>
-        <button
-          className={`tab ${activeTab === 'categories' ? 'active' : ''}`}
-          onClick={() => setActiveTab('categories')}
-        >
-          Categories
-        </button>
-      </div>
-
       {/* Expenses Tab */}
       {activeTab === 'expenses' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
-              <input
-                type="text"
-                placeholder="Search expenses..."
-                value={expenseSearchQuery}
-                onChange={(e) => setExpenseSearchQuery(e.target.value)}
-              />
+        <>
+          {/* Summary Cards */}
+          {showStats && (
+          <div className="expense-summary-cards">
+            <div className="expense-summary-card">
+              <div className="expense-summary-icon" style={{ background: 'rgba(245, 36, 36, 0.1)', color: 'var(--primary)' }}>
+                <TrendingDown size={20} />
+              </div>
+              <div className="expense-summary-info">
+                <span className="expense-summary-label">Total Expenses</span>
+                <span className="expense-summary-value">{formatCurrency(totalAmount)}</span>
+                <span className="expense-summary-sub">{filteredExpenses.length} entries</span>
+              </div>
             </div>
-            <div className="date-filters">
-              <div className="date-input">
-                <Calendar size={16} />
+            <div className="expense-summary-card">
+              <div className="expense-summary-icon" style={{ background: 'rgba(66, 153, 225, 0.1)', color: 'var(--info)' }}>
+                <Calendar size={20} />
+              </div>
+              <div className="expense-summary-info">
+                <span className="expense-summary-label">This Month</span>
+                <span className="expense-summary-value">{formatCurrency(thisMonthAmount)}</span>
+                <span className="expense-summary-sub">{new Date().toLocaleDateString('en', { month: 'long', year: 'numeric' })}</span>
+              </div>
+            </div>
+            <div className="expense-summary-card">
+              <div className="expense-summary-icon" style={{ background: 'rgba(72, 187, 120, 0.1)', color: '#48bb78' }}>
+                <Receipt size={20} />
+              </div>
+              <div className="expense-summary-info">
+                <span className="expense-summary-label">Top Category</span>
+                <span className="expense-summary-value" style={{ fontSize: '1.1rem' }}>{topCategory ? topCategory[0] : '—'}</span>
+                <span className="expense-summary-sub">{topCategory ? formatCurrency(topCategory[1]) : 'No data'}</span>
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* Table Card */}
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">All Expenses ({filteredExpenses.length})</span>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div className="search-input-wrapper">
+                  <Search size={16} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search expenses..."
+                    value={expenseSearchQuery}
+                    onChange={(e) => setExpenseSearchQuery(e.target.value)}
+                    className="search-input"
+                  />
+                </div>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  placeholder="Start date"
+                  className="expense-date-input"
                 />
-              </div>
-              <div className="date-input">
-                <Calendar size={16} />
+                <span style={{ color: 'var(--gray-400)' }}>—</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  placeholder="End date"
+                  className="expense-date-input"
                 />
-              </div>
-              <Button onClick={handleDateFilter} variant="secondary" size="sm">
-                Filter
-              </Button>
-              {(startDate || endDate) && (
-                <Button onClick={clearDateFilter} variant="ghost" size="sm">
-                  Clear
+                <Button onClick={handleDateFilter} variant="secondary" size="sm">
+                  <Calendar size={14} /> Filter
                 </Button>
-              )}
-            </div>
-            <Button onClick={() => openExpenseForm()}>
-              <Plus size={18} />
-              Add Expense
-            </Button>
-          </div>
-
-          <div className="expenses-table-container">
-            {filteredExpenses.length === 0 ? (
-              <div className="empty-state">
-                <DollarSign size={48} />
-                <p>No expenses found</p>
-                <Button onClick={() => openExpenseForm()}>Add your first expense</Button>
+                {(startDate || endDate) && (
+                  <Button onClick={clearDateFilter} variant="ghost" size="sm">
+                    Clear
+                  </Button>
+                )}
+                <button className="btn btn-primary" onClick={() => openExpenseForm()}>
+                  <Plus size={16} />
+                  Add Expense
+                </button>
               </div>
-            ) : (
-              <table className="expenses-table">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Amount</th>
-                    <th>Category</th>
-                    <th>Date</th>
-                    <th>Vendor</th>
-                    <th>Payment</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredExpenses.map((expense) => (
-                    <tr key={expense.id} onClick={() => setDetailExpense(expense)}>
-                      <td>{expense.title}</td>
-                      <td className="col-amount">{formatCurrency(expense.amount)}</td>
-                      <td>{expense.categoryName || 'Uncategorized'}</td>
-                      <td className="col-date">{new Date(expense.expenseDate).toLocaleDateString()}</td>
-                      <td>{expense.vendor || '—'}</td>
-                      <td className="col-payment">
-                        {expense.paymentMethod ? <span className="payment-badge">{expense.paymentMethod}</span> : '—'}
-                      </td>
-                      <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                        <button title="View" onClick={() => setDetailExpense(expense)}>
-                          <Eye size={14} />
-                        </button>
-                        <button title="Edit" onClick={() => openExpenseForm(expense)}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="delete" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
-                          {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              <div className="zoho-table-wrap">
+                <div className="zoho-table-scroll">
+                  {filteredExpenses.length === 0 ? (
+                    <div className="empty-state">
+                      <DollarSign size={48} />
+                      <p>No expenses found</p>
+                      <button className="btn btn-primary" onClick={() => openExpenseForm()}>
+                        <Plus size={16} /> Add your first expense
+                      </button>
+                    </div>
+                  ) : (
+                    <table className="zoho-table">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Amount</th>
+                          <th>Category</th>
+                          <th>Date</th>
+                          <th>Vendor</th>
+                          <th>Payment</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expensePagination.paginatedItems(filteredExpenses).map((expense) => (
+                          <tr key={expense.id} onClick={() => setDetailExpense(expense)}>
+                            <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{expense.title}</td>
+                            <td style={{ fontWeight: 700, color: 'var(--primary)', whiteSpace: 'nowrap' }}>{formatCurrency(expense.amount)}</td>
+                            <td>{expense.categoryName || getCategoryName(expense.categoryId) || 'Uncategorized'}</td>
+                            <td style={{ whiteSpace: 'nowrap', color: 'var(--gray-600)' }}>{new Date(expense.expenseDate).toLocaleDateString()}</td>
+                            <td>{expense.vendor || '—'}</td>
+                            <td>
+                              {expense.paymentMethod ? <span className="badge badge-primary">{expense.paymentMethod}</span> : '—'}
+                            </td>
+                            <td className="col-actions" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                              <div className="action-btns">
+                                <button className="action-btn" title="View" onClick={() => setDetailExpense(expense)}>
+                                  <Eye size={14} />
+                                </button>
+                                <button className="action-btn edit" title="Edit" onClick={() => openExpenseForm(expense)}>
+                                  <Edit2 size={14} />
+                                </button>
+                                <button className="action-btn delete" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
+                                  {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <TablePagination pagination={expensePagination} />
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Categories Tab */}
       {activeTab === 'categories' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
-              <input
-                type="text"
-                placeholder="Search categories..."
-                value={categorySearchQuery}
-                onChange={(e) => setCategorySearchQuery(e.target.value)}
-              />
-            </div>
-            <Button onClick={() => openCategoryForm()}>
-              <Plus size={18} />
-              Add Category
-            </Button>
-          </div>
-
-          <div className="data-grid compact-grid">
-            {filteredCategories.length === 0 ? (
-              <div className="empty-state">
-                <p>No expense categories found</p>
-                <Button onClick={() => openCategoryForm()}>Add your first category</Button>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">All Categories ({filteredCategories.length})</span>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div className="search-input-wrapper">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={categorySearchQuery}
+                  onChange={(e) => setCategorySearchQuery(e.target.value)}
+                  className="search-input"
+                />
               </div>
-            ) : (
-              filteredCategories.map((category) => (
-                <div key={category.id} className="data-card">
-                  <div className="card-header">
-                    <div className="card-title-section">
-                      <span className="card-title-label">Category</span>
-                      <h3>{category.name}</h3>
-                    </div>
+              <button className="btn btn-primary" onClick={() => openCategoryForm()}>
+                <Plus size={16} />
+                Add Category
+              </button>
+            </div>
+          </div>
+          <div className="card-body" style={{ padding: 0 }}>
+            <div className="zoho-table-wrap">
+              <div className="zoho-table-scroll">
+                {filteredCategories.length === 0 ? (
+                  <div className="empty-state">
+                    <FolderOpen size={48} />
+                    <p>No expense categories found</p>
+                    <button className="btn btn-primary" onClick={() => openCategoryForm()}>
+                      <Plus size={16} /> Add your first category
+                    </button>
                   </div>
-                  <div className="card-body">
-                    {category.description && (
-                      <div className="card-field full-width">
-                        <span className="field-value">{category.description}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="card-footer">
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => openCategoryForm(category)}
-                      leftIcon={<Edit2 size={14} />}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDeleteCategory(category.id)}
-                      disabled={loadingCategoryId === category.id}
-                      leftIcon={loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
+                ) : (
+                  <table className="zoho-table">
+                    <thead>
+                      <tr>
+                        <th>Category Name</th>
+                        <th>Description</th>
+                        <th>Items Count</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenseCategoryPagination.paginatedItems(filteredCategories).map(category => (
+                        <tr key={category.id}>
+                          <td><strong>{category.name}</strong></td>
+                          <td style={{ color: 'var(--gray-600)' }}>{category.description || '—'}</td>
+                          <td>{expenses.filter(e => e.categoryId === category.id).length}</td>
+                          <td className="col-actions" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                            <div className="action-btns">
+                              <button className="action-btn edit" onClick={() => openCategoryForm(category)} disabled={loadingCategoryId === category.id} title="Edit category">
+                                <Edit2 size={14} />
+                              </button>
+                              <button className="action-btn delete" onClick={() => handleDeleteCategory(category.id)} disabled={loadingCategoryId === category.id} title="Delete category">
+                                {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <TablePagination pagination={expenseCategoryPagination} />
+            </div>
           </div>
         </div>
       )}
+
       {/* Expense Detail Modal */}
       {detailExpense && (
         <div className="modal-overlay" onClick={() => setDetailExpense(null)}>

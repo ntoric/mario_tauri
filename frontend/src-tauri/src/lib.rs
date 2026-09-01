@@ -1,4 +1,5 @@
 mod printer;
+mod updater;
 
 use serde::{Deserialize, Serialize};
 use printer::{PrinterService, PrintJob, Device, RawPrintRequest};
@@ -160,8 +161,15 @@ pub fn run() {
             get_printers,
             print_job,
             debug_usb_devices,
-            save_csv_file
+            save_csv_file,
+            updater::app_version,
+            updater::check_for_updates,
+            updater::download_and_install_update
         ])
+        .setup(|app| {
+            updater::spawn_startup_check(app.handle().clone());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -52,6 +52,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Password string   `json:"password"`
 		Name     string   `json:"name"`
 		Email    string   `json:"email"`
+		Phone    string   `json:"phone"`
 		Role     string   `json:"role"`
 		StoreID  string   `json:"storeId"`
 		StoreIDs []string `json:"storeIds"`
@@ -92,6 +93,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Password: string(hashedPassword),
 		Name:     raw.Name,
 		Email:    raw.Email,
+		Phone:    raw.Phone,
 		Role:     raw.Role,
 		StoreID:  finalStoreID,
 		IsActive: true,
@@ -108,6 +110,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Username: u.Username,
 		Name:     u.Name,
 		Email:    u.Email,
+		Phone:    u.Phone,
 		Role:     u.Role,
 		StoreID:  u.StoreID,
 		IsActive: u.IsActive,
@@ -150,6 +153,9 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if val, exists := raw["email"]; exists {
 		updates["email"] = val
+	}
+	if val, exists := raw["phone"]; exists {
+		updates["phone"] = val
 	}
 	if val, exists := raw["isActive"]; exists {
 		updates["is_active"] = val

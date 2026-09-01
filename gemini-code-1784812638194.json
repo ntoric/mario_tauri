@@ -1,0 +1,105 @@
+[
+  {
+    "category": "BURGER ITEMS",
+    "items": [
+      {
+        "name": "PANEER CHEESE BURGER",
+        "price": 120
+      },
+      {
+        "name": "SCHEZWAN PANEER BURGER",
+        "price": 130
+      },
+      {
+        "name": "BUFFALO CHICKEN BURGER",
+        "price": 150
+      },
+      {
+        "name": "ZINGER BURGER",
+        "price": 100
+      },
+      {
+        "name": "DOUBLE DECKER BURGER",
+        "price": 160
+      },
+      {
+        "name": "MEXICAN BURGER",
+        "price": 140
+      },
+      {
+        "name": "NASHVILLE BURGER JUMBO",
+        "price": 230
+      },
+      {
+        "name": "NASHVILLE HOT BURGER",
+        "price": 150
+      }
+    ]
+  },
+  {
+    "category": "WRAP ITEMS",
+    "items": [
+      {
+        "name": "MEXICAN WRAP",
+        "price": 150
+      },
+      {
+        "name": "TENDER WRAP",
+        "price": 150
+      },
+      {
+        "name": "TWISTER WRAP",
+        "price": 140
+      },
+      {
+        "name": "AFGHANI WRAP",
+        "price": 150
+      },
+      {
+        "name": "JUMBO WRAP",
+        "price": 160
+      },
+      {
+        "name": "VEGGIE WRAP",
+        "price": 100
+      },
+      {
+        "name": "NASHVILLE WRAP",
+        "price": 140
+      },
+      {
+        "name": "PANEER WRAP",
+        "price": 110
+      }
+    ]
+  },
+  {
+    "category": "LOADED FRIES",
+    "items": [
+      {
+        "name": "FIESTA CHEESY LOADED FRIES",
+        "price": 180
+      },
+      {
+        "name": "MEXICAN FRIES",
+        "price": 150
+      },
+      {
+        "name": "LOADED FRIES",
+        "price": 150
+      },
+      {
+        "name": "NASHVILLE LOADED FRIES",
+        "price": 170
+      },
+      {
+        "name": "VEGGIE LOADED FRIES",
+        "price": 130
+      },
+      {
+        "name": "FULL MEAT LOADED FRIES",
+        "price": 230
+      }
+    ]
+  }
+]

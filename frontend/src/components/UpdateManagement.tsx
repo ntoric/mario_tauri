@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, Monitor, AlertCircle, Check, X, RefreshCw, ToggleLeft, ToggleRight, Calendar, Clock } from 'lucide-react';
+import { Download, Smartphone, Monitor, AlertCircle, RefreshCw, ToggleLeft, ToggleRight, Calendar, Clock } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useToast } from '../contexts/ToastContext';
 import { api } from '../services/api';
 
 interface AppUpdate {
@@ -18,11 +19,10 @@ interface AppUpdate {
 const UpdateManagement: React.FC = () => {
   const { user } = useAuthStore();
   const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   const [appUpdates, setAppUpdates] = useState<Record<string, AppUpdate>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
 
   useEffect(() => {
     setHeaderContent({
@@ -34,7 +34,6 @@ const UpdateManagement: React.FC = () => {
 
   const loadUpdates = async () => {
     setIsLoading(true);
-    setError('');
     try {
       const updatesData = await api.getAllAppUpdates();
       const updatesMap: Record<string, AppUpdate> = {};
@@ -45,7 +44,8 @@ const UpdateManagement: React.FC = () => {
       }
       setAppUpdates(updatesMap);
     } catch (err: any) {
-      setError(err.message || 'Failed to load app updates');
+      console.error('Failed to load app updates:', err);
+      toast.error(err.message || 'Failed to load app updates');
     } finally {
       setIsLoading(false);
     }
@@ -53,13 +53,11 @@ const UpdateManagement: React.FC = () => {
 
   const handleToggleUpdate = async (platform: string, currentEnabled: boolean) => {
     setIsToggling(platform);
-    setMessage('');
-    setError('');
     
     try {
       const update = appUpdates[platform];
       if (!update) {
-        setError('No update configuration found for this platform');
+        toast.error('No update configuration found for this platform');
         return;
       }
 
@@ -71,10 +69,11 @@ const UpdateManagement: React.FC = () => {
         releaseNotes: update.releaseNotes || ''
       });
 
-      setMessage(response.message || `Update ${!currentEnabled ? 'enabled' : 'disabled'} successfully`);
+      toast.success(response.message || `Update ${!currentEnabled ? 'enabled' : 'disabled'} successfully`);
       await loadUpdates();
     } catch (err: any) {
-      setError(err.message || 'Failed to toggle update status');
+      console.error('Failed to toggle update status:', err);
+      toast.error(err.message || 'Failed to toggle update status');
     } finally {
       setIsToggling(null);
     }
@@ -102,26 +101,6 @@ const UpdateManagement: React.FC = () => {
 
   return (
     <div className="update-management-container">
-      {error && (
-        <div className="error-message" style={{ marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
-
-      {message && (
-        <div className="success-message" style={{ marginBottom: '1rem' }}>
-          <Check size={16} />
-          <span>{message}</span>
-          <button 
-            className="btn btn-icon" 
-            onClick={() => setMessage('')}
-            style={{ marginLeft: 'auto' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
       {/* Active Updates Summary */}
       {hasActiveUpdates && (
         <div className="active-updates-banner">

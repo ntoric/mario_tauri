@@ -1,0 +1,224 @@
+[
+  {
+    "category": "Oreo Special",
+    "items": [
+      { "name": "Scotch Oreo", "price": 90 },
+      { "name": "Strawberry Oreo", "price": 90 },
+      { "name": "Chocolate Oreo", "price": 90 },
+      { "name": "Peanut Butter Oreo", "price": 110 },
+      { "name": "KitKat Oreo", "price": 90 },
+      { "name": "Munch Oreo", "price": 100 },
+      { "name": "Lotte Oreo", "price": 100 },
+      { "name": "Biscoff Oreo", "price": 120 }
+    ]
+  },
+  {
+    "category": "Fresh Juice",
+    "items": [
+      { "name": "Fresh Lime", "price": 30 },
+      { "name": "Mosambi", "price": 70 },
+      { "name": "Orange", "price": 70 },
+      { "name": "Muskmelon", "price": 50 },
+      { "name": "Grape", "price": 60 },
+      { "name": "Pineapple", "price": 60 },
+      { "name": "Watermelon", "price": 50 },
+      { "name": "Papaya", "price": 50 }
+    ]
+  },
+  {
+    "category": "Ice Cream Shakes",
+    "items": [
+      { "name": "Chocolate", "price": 80 },
+      { "name": "Strawberry", "price": 70 },
+      { "name": "Blackcurrant", "price": 70 },
+      { "name": "Vanilla", "price": 70 },
+      { "name": "Pista", "price": 70 },
+      { "name": "Cassata", "price": 80 },
+      { "name": "Mango", "price": 70 },
+      { "name": "Butterscotch", "price": 70 },
+      { "name": "Blueberry", "price": 70 }
+    ]
+  },
+  {
+    "category": "Cake Milkshake",
+    "items": [
+      { "name": "Brownie", "price": 120 },
+      { "name": "Brownie Oreo", "price": 140 },
+      { "name": "Red Velvet", "price": 120 },
+      { "name": "Red Velvet Oreo", "price": 140 },
+      { "name": "Lavender", "price": 120 },
+      { "name": "Lavender Oreo", "price": 140 },
+      { "name": "Brownie KitKat", "price": 110 },
+      { "name": "Brownie Biscoff", "price": 120 }
+    ]
+  },
+  {
+    "category": "Flavoured Drinks",
+    "items": [
+      { "name": "Rose Milk", "price": 40 },
+      { "name": "Badam Milk", "price": 50 }
+    ]
+  },
+  {
+    "category": "Cocktails",
+    "items": [
+      { "name": "Tasty Cocktail", "price": 90 },
+      { "name": "Healthy Cocktail", "price": 90 }
+    ]
+  },
+  {
+    "category": "Cake Milkshake with Ice Cream",
+    "items": [
+      { "name": "Brownie", "price": 110 },
+      { "name": "Brownie Oreo", "price": 130 },
+      { "name": "Red Velvet", "price": 110 },
+      { "name": "Red Velvet Oreo", "price": 130 },
+      { "name": "Lavender", "price": 110 },
+      { "name": "Lavender Oreo", "price": 130 },
+      { "name": "Brownie KitKat", "price": 130 },
+      { "name": "Brownie Biscoff", "price": 140 }
+    ]
+  },
+  {
+    "category": "Fruit Milkshake",
+    "items": [
+      { "name": "Apple", "price": 80 },
+      { "name": "Pomegranate", "price": 80 },
+      { "name": "Custard Apple Shake", "price": 90 },
+      { "name": "Butter Fruit Shake", "price": 90 },
+      { "name": "Mango Shake", "price": 90 },
+      { "name": "Muskmelon Shake", "price": 70 },
+      { "name": "Papaya Shake", "price": 70 },
+      { "name": "Pineapple Shake", "price": 70 },
+      { "name": "Watermelon Shake", "price": 60 },
+      { "name": "Grape Shake", "price": 70 },
+      { "name": "Fig Shake", "price": 80 },
+      { "name": "Chikku Shake", "price": 80 }
+    ]
+  },
+  {
+    "category": "Choco Special",
+    "items": [
+      { "name": "Choco Mango", "price": 100 },
+      { "name": "Choco Fig", "price": 100 },
+      { "name": "Choco Custard", "price": 90 },
+      { "name": "Choco Chikku", "price": 100 },
+      { "name": "Choco Apple", "price": 80 },
+      { "name": "Choco Banana", "price": 90 },
+      { "name": "Choco Dates", "price": 100 },
+      { "name": "Choco Sharjah", "price": 90 }
+    ]
+  },
+  {
+    "category": "Chocolate Special Shake",
+    "items": [
+      { "name": "Snickers", "price": 90 },
+      { "name": "Dairy Milk", "price": 90 },
+      { "name": "5 Star", "price": 90 },
+      { "name": "Munch", "price": 90 },
+      { "name": "Biscoff", "price": 100 }
+    ]
+  },
+  {
+    "category": "Kitkat Special",
+    "items": [
+      { "name": "Scotch KitKat", "price": 90 },
+      { "name": "Strawberry KitKat", "price": 90 },
+      { "name": "Chocolate KitKat", "price": 90 },
+      { "name": "Lotte KitKat", "price": 100 },
+      { "name": "Brownie KitKat", "price": 100 },
+      { "name": "Galaxy KitKat", "price": 100 },
+      { "name": "Snickers KitKat", "price": 100 }
+    ]
+  },
+  {
+    "category": "Seasonal Drink",
+    "items": [
+      { "name": "Kiwi", "price": 100 },
+      { "name": "Strawberry", "price": 100 },
+      { "name": "Dragon Fruit", "price": 100 },
+      { "name": "Blueberry", "price": 100 }
+    ]
+  },
+  {
+    "category": "Healthy & Glow",
+    "items": [
+      { "name": "Detox & Hydrate (Cucumber + Lemon + Ginger + Mint)", "price": 90 },
+      { "name": "Boost Immunity (Orange + Carrot + Ginger)", "price": 90 },
+      { "name": "Glowing Skin (Beetroot + Apple + Carrot + Lemon)", "price": 90 },
+      { "name": "Skin Hydration (Watermelon + Mint + Cucumber + Ginger)", "price": 90 },
+      { "name": "Digestive Health (Pineapple + Cucumber + Ginger + Lemon)", "price": 90 }
+    ]
+  },
+  {
+    "category": "Lime Special",
+    "items": [
+      { "name": "Mango Lime", "price": 50 },
+      { "name": "Ginger Lime", "price": 40 },
+      { "name": "Mint Lime", "price": 40 },
+      { "name": "Jaljeera Lime", "price": 40 },
+      { "name": "Melon Lime", "price": 50 },
+      { "name": "Carrot Lime", "price": 50 },
+      { "name": "Grape Lime", "price": 50 },
+      { "name": "Strawberry Lime", "price": 60 },
+      { "name": "Pineapple Lime", "price": 50 }
+    ]
+  },
+  {
+    "category": "Mario Special Juice",
+    "items": [
+      { "name": "Pineapple Spark (Pineapple + Mint)", "price": 90 },
+      { "name": "Green Punch (Mint + Sweet Lime)", "price": 90 },
+      { "name": "A.B.C (Apple + Beetroot + Carrot)", "price": 90 },
+      { "name": "Blue Sea (Sweet Lime + Grapes)", "price": 90 },
+      { "name": "Papaya Smash (Papaya + Muskmelon)", "price": 90 },
+      { "name": "Sunshine (Sweet Lime + Pineapple)", "price": 90 },
+      { "name": "Summer Dream (Pomegranate + Pineapple)", "price": 90 },
+      { "name": "Power Booster (Carrot + Mint + Mosambi)", "price": 90 },
+      { "name": "Melon Smash (Watermelon + Pineapple)", "price": 90 },
+      { "name": "Bio C (Pineapple + Grape)", "price": 90 },
+      { "name": "A.C.P (Apple + Carrot + Pineapple)", "price": 90 },
+      { "name": "O.C.A (Orange + Carrot + Apple)", "price": 90 }
+    ]
+  },
+  {
+    "category": "Mario Special Milkshake",
+    "items": [
+      { "name": "Malabar Special (Banana + Dates)", "price": 80 },
+      { "name": "Ocean Spy (Fig + Cheese)", "price": 80 },
+      { "name": "Mango Smoothie (Banana + Mango)", "price": 80 },
+      { "name": "Scotch 'n' Custard (Custard Apple + Butterscotch)", "price": 80 },
+      { "name": "Scotch & Apple (Apple + Butterscotch)", "price": 80 },
+      { "name": "Dark Fantasy", "price": 80 },
+      { "name": "Booster (Custard Apple + Banana + Boost)", "price": 80 },
+      { "name": "Titanic (Custard Apple + Carrot)", "price": 80 },
+      { "name": "Apple Slider (Apple + Banana)", "price": 80 },
+      { "name": "Papaya Delight (Papaya + Dates)", "price": 90 },
+      { "name": "Dream Night (Butter Fruit + Dates)", "price": 90 },
+      { "name": "Protein Power (Banana + Pomegranate + Apple)", "price": 90 },
+      { "name": "Candle Light (Cherry + Banana)", "price": 80 },
+      { "name": "Marry Gold (Mango + Strawberry)", "price": 80 },
+      { "name": "Pina Cola (Mango + Dates + Boost)", "price": 80 },
+      { "name": "Mushakkal (Apple + Chikku + Banana)", "price": 80 },
+      { "name": "Kashmir (Apple + Carrot)", "price": 80 },
+      { "name": "Iran Special (Dry Fig)", "price": 80 },
+      { "name": "Sharjah (Banana + Boost)", "price": 80 },
+      { "name": "Arabian Delights (Dates)", "price": 90 },
+      { "name": "Mix Max (Mango + Chikku)", "price": 80 },
+      { "name": "Green Paneer (Dates + Fig)", "price": 80 },
+      { "name": "Old Boy (Dry Fruits)", "price": 90 },
+      { "name": "Blue Diamond (Blackcurrant + Grapes)", "price": 80 },
+      { "name": "Arabian Nights (Apple + Dates)", "price": 90 }
+    ]
+  },
+  {
+    "category": "Special Protein Shake",
+    "items": [
+      { "name": "Creamy Mango Oats (Mango + Oats)", "price": 100 },
+      { "name": "Rich Protein (Dates + Oats + Dry Nuts + Banana)", "price": 110 },
+      { "name": "Peanut Butter Shake (Peanut + Peanut Butter + Banana + Dates)", "price": 110 },
+      { "name": "Berry Smoothie (Strawberry + Blueberry + Nuts)", "price": 130 },
+      { "name": "Choco Pro Shake (Cocoa Powder + Dates + Banana + Peanut)", "price": 120 }
+    ]
+  }
+]

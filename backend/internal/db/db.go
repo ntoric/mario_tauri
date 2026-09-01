@@ -74,6 +74,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			invoice_size VARCHAR(20) DEFAULT '3inch',
 			kot_print_enabled BOOLEAN DEFAULT true,
 			remote_billing_enabled BOOLEAN DEFAULT false,
+			kitchen_window_enabled BOOLEAN DEFAULT false,
 			logo_url TEXT,
 			is_active BOOLEAN DEFAULT true,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -146,6 +147,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			table_id VARCHAR(255) REFERENCES tables(id),
 			table_number INTEGER NOT NULL,
 			status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
+			kitchen_status VARCHAR(20) DEFAULT 'pending' CHECK (kitchen_status IN ('pending', 'preparing', 'ready', 'served')),
+			kot_reissued_at TIMESTAMP,
+			kot_items JSONB,
+			special_note TEXT,
 			total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
 			tax_amount DECIMAL(10, 2) DEFAULT 0,
 			discount_amount DECIMAL(10, 2) DEFAULT 0,
@@ -214,6 +219,15 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 
+		// Password reset tokens table
+		`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+			id SERIAL PRIMARY KEY,
+			user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			token VARCHAR(255) NOT NULL UNIQUE,
+			expires_at TIMESTAMP NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
 		// App updates table
 		`CREATE TABLE IF NOT EXISTS app_updates (
 			id VARCHAR(255) PRIMARY KEY,
@@ -267,6 +281,81 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			is_active BOOLEAN DEFAULT true,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+
+		// Inventory items (raw materials / ingredients kept in stock)
+		`CREATE TABLE IF NOT EXISTS inventory_items (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			description TEXT,
+			unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+			quantity DECIMAL(14, 3) NOT NULL DEFAULT 0,
+			reorder_level DECIMAL(14, 3) NOT NULL DEFAULT 0,
+			unit_cost DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Recipes (one recipe per menu item)
+		`CREATE TABLE IF NOT EXISTS recipes (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Recipe ingredients (components of a recipe)
+		`CREATE TABLE IF NOT EXISTS recipe_ingredients (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			recipe_id VARCHAR(255) REFERENCES recipes(id) ON DELETE CASCADE,
+			inventory_item_id VARCHAR(255) REFERENCES inventory_items(id) ON DELETE CASCADE,
+			quantity DECIMAL(14, 3) NOT NULL,
+			unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Purchases (restocking inventory from vendors)
+		`CREATE TABLE IF NOT EXISTS purchases (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			vendor VARCHAR(255),
+			purchase_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+			payment_method VARCHAR(50),
+			receipt_number VARCHAR(100),
+			notes TEXT,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
+
+		// Purchase line items
+		`CREATE TABLE IF NOT EXISTS purchase_items (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			purchase_id VARCHAR(255) REFERENCES purchases(id) ON DELETE CASCADE,
+			inventory_item_id VARCHAR(255) REFERENCES inventory_items(id) ON DELETE CASCADE,
+			quantity DECIMAL(14, 3) NOT NULL,
+			unit_price DECIMAL(10, 2) NOT NULL,
+			total DECIMAL(12, 2) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Kitchen status history — tracks time spent in each kitchen step per order
+		`CREATE TABLE IF NOT EXISTS kitchen_status_history (
+			id SERIAL PRIMARY KEY,
+			order_id VARCHAR(255) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'preparing', 'ready', 'served')),
+			entered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			exited_at TIMESTAMP,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range queries {
@@ -280,15 +369,24 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS printer_name VARCHAR(255)`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS kot_print_enabled BOOLEAN DEFAULT true`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS remote_billing_enabled BOOLEAN DEFAULT false`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS kitchen_window_enabled BOOLEAN DEFAULT false`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS kitchen_status VARCHAR(20) DEFAULT 'pending' CHECK (kitchen_status IN ('pending', 'preparing', 'ready', 'served'))`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS kot_reissued_at TIMESTAMP`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS kot_items JSONB`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS special_note TEXT`,
+		// Re-apply the kitchen_status CHECK constraint to include 'served' for existing deployments
+		`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_kitchen_status_check`,
+		`ALTER TABLE orders ADD CONSTRAINT orders_kitchen_status_check CHECK (kitchen_status IN ('pending', 'preparing', 'ready', 'served'))`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
 		// Item preparation expenses — additive migration for existing deployments
 		`CREATE TABLE IF NOT EXISTS item_expenses (
 			id VARCHAR(255) PRIMARY KEY,

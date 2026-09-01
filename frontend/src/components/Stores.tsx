@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Building2, MapPin, Phone, Receipt, Loader2, Power } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Building2, Loader2, Power, Sliders } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
-import { usePageHeader } from '../contexts/PageHeaderContext';
-import { Button } from '../components/ui/Button';
+import { useToast } from '../contexts/ToastContext';
+import { Button } from './ui/Button';
+import Toggle from './ui/Toggle';
 
 const Stores: React.FC = () => {
   const { stores, createStore, updateStore, deleteStore, switchStore, fetchStores } = useDataStore();
   const { user, setCurrentStore, canSwitchStores } = useAuthStore();
-  const { setHeaderContent } = usePageHeader();
+  const toast = useToast();
   const [showModal, setShowModal] = useState(false);
 
   // Fetch data on mount
@@ -28,6 +29,46 @@ const Stores: React.FC = () => {
   // Loading states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingStoreId, setLoadingStoreId] = useState<string | null>(null);
+
+  // Store features modal
+  const [featuresStore, setFeaturesStore] = useState<any>(null);
+  const [featuresForm, setFeaturesForm] = useState({
+    kitchenWindowEnabled: false,
+    remoteBillingEnabled: false,
+    kotPrintEnabled: true,
+  });
+  const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+
+  const openFeatures = (store: any) => {
+    setFeaturesStore(store);
+    setFeaturesForm({
+      kitchenWindowEnabled: store.kitchenWindowEnabled === true,
+      remoteBillingEnabled: store.remoteBillingEnabled === true,
+      kotPrintEnabled: store.kotPrintEnabled !== false,
+    });
+  };
+
+  const closeFeatures = () => {
+    setFeaturesStore(null);
+  };
+
+  const handleSaveFeatures = async () => {
+    if (!featuresStore) return;
+    setIsSavingFeatures(true);
+    try {
+      await updateStore(featuresStore.id, {
+        kitchenWindowEnabled: featuresForm.kitchenWindowEnabled,
+        remoteBillingEnabled: featuresForm.remoteBillingEnabled,
+        kotPrintEnabled: featuresForm.kotPrintEnabled,
+      });
+      toast.success('Store features updated successfully');
+      closeFeatures();
+    } catch (error) {
+      toast.error('Failed to update store features');
+    } finally {
+      setIsSavingFeatures(false);
+    }
+  };
 
   const openModal = (store?: any) => {
     if (store) {
@@ -54,8 +95,10 @@ const Stores: React.FC = () => {
     try {
       if (editingStore) {
         await updateStore(editingStore.id, form);
+        toast.success('Store updated successfully');
       } else {
         const newStore = await createStore(form);
+        toast.success('Store created successfully');
         // Auto-switch to new store for superadmin/business owner
         if (newStore && canSwitchStores()) {
           await switchStore(newStore.id);
@@ -73,6 +116,7 @@ const Stores: React.FC = () => {
       setLoadingStoreId(id);
       try {
         await deleteStore(id);
+        toast.success('Store deleted successfully');
       } finally {
         setLoadingStoreId(null);
       }
@@ -81,151 +125,125 @@ const Stores: React.FC = () => {
 
   const canDelete = user?.role === 'superadmin';
   const canToggleStatus = user?.role === 'superadmin';
+  const canManageFeatures = user?.role === 'superadmin' || user?.role === 'business_owner';
 
   const handleToggleStatus = async (store: any) => {
     setLoadingStoreId(store.id);
     try {
       await updateStore(store.id, { isActive: !store.isActive });
+      toast.success(store.isActive ? 'Store disabled' : 'Store enabled');
     } finally {
       setLoadingStoreId(null);
     }
   };
 
-  // Set page header
-  useEffect(() => {
-    setHeaderContent({
-      title: 'Manage Stores',
-      subtitle: 'Create and manage your cafe branches',
-      actions: (
-        <button className="btn btn-primary" onClick={() => openModal()}>
-          <Plus size={18} />
-          Add Store
-        </button>
-      ),
-    });
-  }, [setHeaderContent]);
-
   return (
     <div>
-      <div className="stores-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem' }}>
-        {stores.map((store: any) => (
-          <div key={store.id} className="card" style={{ position: 'relative' }}>
-            <div className="card-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                }}>
-                  <Building2 size={24} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{store.name}</h3>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--gray-600)' }}>{store.branch || 'Main Branch'}</p>
-                </div>
-              </div>
-              <div className="action-btns">
-                {canToggleStatus && (
-                  <button
-                    className="action-btn"
-                    onClick={() => handleToggleStatus(store)}
-                    disabled={loadingStoreId === store.id}
-                    style={{
-                      opacity: loadingStoreId === store.id ? 0.5 : 1,
-                      cursor: loadingStoreId === store.id ? 'not-allowed' : 'pointer',
-                      color: store.isActive ? 'var(--success)' : 'var(--gray-400)'
-                    }}
-                    title={store.isActive ? 'Disable Store' : 'Enable Store'}
-                  >
-                    {loadingStoreId === store.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Power size={14} />
-                    )}
-                  </button>
-                )}
-                <button 
-                  className="action-btn edit" 
-                  onClick={() => openModal(store)}
-                  disabled={loadingStoreId === store.id}
-                  style={{
-                    opacity: loadingStoreId === store.id ? 0.5 : 1,
-                    cursor: loadingStoreId === store.id ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <Edit2 size={14} />
-                </button>
-                {canDelete && (
-                  <button 
-                    className="action-btn delete" 
-                    onClick={() => handleDelete(store.id)}
-                    disabled={loadingStoreId === store.id}
-                    style={{
-                      opacity: loadingStoreId === store.id ? 0.5 : 1,
-                      cursor: loadingStoreId === store.id ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {loadingStoreId === store.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="card-body">
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                {store.location && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <MapPin size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--gray-700)', fontSize: '0.9rem' }}>{store.location}</span>
-                  </div>
-                )}
-                {store.phone && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Phone size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--gray-700)', fontSize: '0.9rem' }}>{store.phone}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--gray-200)' }}>
-                  {store.gstin && (
-                    <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)', display: 'block' }}>GSTIN</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 500, fontFamily: 'monospace' }}>{store.gstin}</span>
-                    </div>
-                  )}
-                  {store.fssaiNo && (
-                    <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)', display: 'block' }}>FSSAI</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{store.fssaiNo}</span>
-                    </div>
-                  )}
-                </div>
-                {(store.printerVendorId || store.invoiceSize) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-                    <Receipt size={14} style={{ color: 'var(--gray-400)' }} />
-                    <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                      {store.invoiceSize || '3inch'} printer
-                    </span>
-                  </div>
-                )}
+      {stores.length === 0 ? (
+        <div className="empty-state">
+          <Building2 size={48} />
+          <p>No stores found</p>
+          <button className="btn btn-primary" onClick={() => openModal()}>
+            <Plus size={16} /> Create your first store
+          </button>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Stores ({stores.length})</span>
+            <button className="btn btn-primary" onClick={() => openModal()}>
+              <Plus size={16} />
+              Add Store
+            </button>
+          </div>
+          <div className="card-body" style={{ padding: 0 }}>
+            <div className="zoho-table-wrap">
+              <div className="zoho-table-scroll">
+                <table className="zoho-table">
+                  <thead>
+                    <tr>
+                      <th>Store Name</th>
+                      <th>Branch</th>
+                      <th>Location</th>
+                      <th>Phone</th>
+                      <th>GSTIN</th>
+                      <th>FSSAI</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stores.map((store: any) => (
+                      <tr key={store.id}>
+                        <td style={{ fontWeight: 600, color: 'var(--dark)' }}>{store.name}</td>
+                        <td>{store.branch || '—'}</td>
+                        <td style={{ color: 'var(--gray-600)' }}>{store.location || '—'}</td>
+                        <td>{store.phone || '—'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{store.gstin || '—'}</td>
+                        <td>{store.fssaiNo || '—'}</td>
+                        <td>
+                          <span className={`badge ${store.isActive ? 'badge-success' : 'badge-secondary'}`}>
+                            {store.isActive ? 'Active' : 'Disabled'}
+                          </span>
+                        </td>
+                        <td className="col-actions" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                          <div className="action-btns">
+                            {canManageFeatures && (
+                              <button
+                                className="action-btn"
+                                onClick={() => openFeatures(store)}
+                                disabled={loadingStoreId === store.id}
+                                title="Store Features"
+                              >
+                                <Sliders size={14} />
+                              </button>
+                            )}
+                            {canToggleStatus && (
+                              <button
+                                className={`action-btn ${store.isActive ? '' : 'disabled-toggle'}`}
+                                onClick={() => handleToggleStatus(store)}
+                                disabled={loadingStoreId === store.id}
+                                title={store.isActive ? 'Disable Store' : 'Enable Store'}
+                                style={{ color: store.isActive ? '#48bb78' : 'var(--gray-400)' }}
+                              >
+                                {loadingStoreId === store.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Power size={14} />
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className="action-btn edit"
+                              onClick={() => openModal(store)}
+                              disabled={loadingStoreId === store.id}
+                              title="Edit Store"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            {canDelete && (
+                              <button
+                                className="action-btn delete"
+                                onClick={() => handleDelete(store.id)}
+                                disabled={loadingStoreId === store.id}
+                                title="Delete Store"
+                              >
+                                {loadingStoreId === store.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
-        ))}
-      </div>
-
-      {stores.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
-          <Building2 size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
-          <p style={{ fontSize: '1.125rem' }}>No stores found</p>
-          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Create your first store to get started</p>
         </div>
       )}
 
@@ -323,6 +341,77 @@ const Stores: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Store Features Modal */}
+      {featuresStore && (
+        <div className="modal-overlay" onClick={closeFeatures}>
+          <div className="modal" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Store Features — {featuresStore.name}</h2>
+              <button className="close-btn" onClick={closeFeatures}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--gray-600)', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+                Enable or disable features for this store. Changes can be made anytime.
+              </p>
+
+              <div className="form-group" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
+                <Toggle
+                  checked={featuresForm.kitchenWindowEnabled}
+                  onChange={checked => setFeaturesForm({ ...featuresForm, kitchenWindowEnabled: checked })}
+                  label="Kitchen Window / Step"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
+                  Adds a Kitchen Display page showing active orders, where staff can mark orders as preparing / ready / served.
+                </p>
+              </div>
+
+              <div className="form-group" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
+                <Toggle
+                  checked={featuresForm.remoteBillingEnabled}
+                  onChange={checked => setFeaturesForm({ ...featuresForm, remoteBillingEnabled: checked })}
+                  label="Remote Billing"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
+                  Allows bills to be queued and processed remotely for this store.
+                </p>
+              </div>
+
+              <div className="form-group" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
+                <Toggle
+                  checked={featuresForm.kotPrintEnabled}
+                  onChange={checked => setFeaturesForm({ ...featuresForm, kotPrintEnabled: checked })}
+                  label="KOT (Kitchen Order Ticket) Printing"
+                />
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '3rem' }}>
+                  Automatically prints a KOT ticket to the kitchen printer when orders are placed.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={closeFeatures}
+                disabled={isSavingFeatures}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleSaveFeatures}
+                isLoading={isSavingFeatures}
+                loadingText="Saving..."
+              >
+                Save Features
+              </Button>
+            </div>
           </div>
         </div>
       )}

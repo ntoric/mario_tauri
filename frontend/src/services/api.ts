@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import type { KitchenStatusHistoryEntry } from '../types';
+
 const API_URL = import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_URL ||
   'https://mario-v2-backend.ntoric.com/api';
@@ -32,7 +34,7 @@ class ApiService {
     localStorage.removeItem('cafe-user');
   }
 
-  private async fetch(endpoint: string, options: RequestInit = {}, skipAuthRedirect = false) {
+  private async fetch(endpoint: string, options: RequestInit = {}, _skipAuthRedirect = false) {
     const url = `${API_URL}${endpoint}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -44,24 +46,28 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log(`Fetching: ${url}`);
-    console.log(`Token present: ${!!token}`);
-    console.log(`Token length: ${token?.length || 0}`);
     const response = await fetch(url, {
       ...options,
       headers,
     });
 
-    console.log(`Response URL: ${response.url}`);
-    console.log(`Response status: ${response.status}`);
-
     if (!response.ok) {
-      console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
-      if (response.status === 401 && !skipAuthRedirect) {
-        console.error('[API ERROR] 401 Unauthorized - clearing token and redirecting to login');
-        this.clearToken();
-        window.location.replace('/#/login');
+      // On 401, throw a typed error but do NOT auto-clear token or redirect.
+      // The auth store / UI decides whether to log the user out.
+      // This keeps the session alive across transient backend issues.
+      if (response.status === 401) {
+        const contentType = response.headers.get('content-type');
+        let errorBody;
+        if (contentType && contentType.includes('application/json')) {
+          errorBody = await response.json();
+        } else {
+          errorBody = { error: 'Session expired' };
+        }
+        const err = new Error(errorBody.error || 'Session expired');
+        (err as any).status = 401;
+        throw err;
       }
+      console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
       const contentType = response.headers.get('content-type');
       let error;
       if (contentType && contentType.includes('application/json')) {
@@ -104,6 +110,20 @@ class ApiService {
 
   async getMe() {
     return this.fetch('/auth/me');
+  }
+
+  async forgotPassword(email: string) {
+    return this.fetch('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }, true);
+  }
+
+  async resetPasswordWithToken(token: string, password: string) {
+    return this.fetch('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }, true);
   }
 
   // Stores
@@ -366,6 +386,17 @@ class ApiService {
     });
   }
 
+  async updateOrderKitchenStatus(id: string, kitchenStatus: 'pending' | 'preparing' | 'ready' | 'served') {
+    return this.fetch(`/orders/${id}/kitchen-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ kitchenStatus }),
+    });
+  }
+
+  async getKitchenHistory(orderId: string): Promise<KitchenStatusHistoryEntry[]> {
+    return this.fetch(`/orders/${orderId}/kitchen-history`);
+  }
+
   // Bills
   async getBills(storeId: string) {
     return this.fetch(`/bills?storeId=${storeId}`);
@@ -525,6 +556,109 @@ class ApiService {
     if (startDate) url += `&startDate=${startDate}`;
     if (endDate) url += `&endDate=${endDate}`;
     return this.fetch(url);
+  }
+
+  // SMTP Settings
+  async getSmtpSettings() {
+    return this.fetch('/smtp-settings');
+  }
+
+  async updateSmtpSettings(config: {
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    from: string;
+    fromName: string;
+    useTLS: boolean;
+  }) {
+    return this.fetch('/smtp-settings', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async testSmtpSettings(toEmail: string) {
+    return this.fetch('/smtp-settings/test', {
+      method: 'POST',
+      body: JSON.stringify({ toEmail }),
+    });
+  }
+
+  // Inventory Items
+  async getInventoryItems(storeId: string) {
+    return this.fetch(`/inventory-items?storeId=${storeId}`);
+  }
+
+  async createInventoryItem(item: any) {
+    return this.fetch('/inventory-items', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  }
+
+  async updateInventoryItem(id: string, item: any) {
+    return this.fetch(`/inventory-items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(item),
+    });
+  }
+
+  async deleteInventoryItem(id: string, storeId?: string) {
+    let url = `/inventory-items/${id}`;
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url, { method: 'DELETE' });
+  }
+
+  // Recipes
+  async getRecipes(storeId: string) {
+    return this.fetch(`/recipes?storeId=${storeId}`);
+  }
+
+  async getRecipe(itemId: string) {
+    return this.fetch(`/items/${itemId}/recipe`);
+  }
+
+  async upsertRecipe(itemId: string, ingredients: any[]) {
+    return this.fetch('/recipes', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, ingredients }),
+    });
+  }
+
+  async deleteRecipe(id: string, storeId?: string) {
+    let url = `/recipes/${id}`;
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url, { method: 'DELETE' });
+  }
+
+  // Purchases
+  async getPurchases(storeId: string) {
+    return this.fetch(`/purchases?storeId=${storeId}`);
+  }
+
+  async getPurchase(id: string) {
+    return this.fetch(`/purchases/${id}`);
+  }
+
+  async createPurchase(purchase: any) {
+    return this.fetch('/purchases', {
+      method: 'POST',
+      body: JSON.stringify(purchase),
+    });
+  }
+
+  async updatePurchase(id: string, purchase: any) {
+    return this.fetch(`/purchases/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(purchase),
+    });
+  }
+
+  async deletePurchase(id: string, storeId?: string) {
+    let url = `/purchases/${id}`;
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url, { method: 'DELETE' });
   }
 
 }

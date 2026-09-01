@@ -22,6 +22,7 @@ type Config struct {
 	SuperadminUsername string
 	SuperadminPassword string
 	SuperadminName     string
+	FrontendURL        string
 }
 
 func LoadConfig() (*Config, error) {
@@ -88,6 +89,7 @@ func LoadConfig() (*Config, error) {
 	superadminUsername := getEnv("SUPERADMIN_USERNAME", "superadmin")
 	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "superadmin123")
 	superadminName := getEnv("SUPERADMIN_NAME", "Super Administrator")
+	frontendURL := getEnv("FRONTEND_URL", "http://localhost:5173")
 
 	return &Config{
 		DBHost:             dbHost,
@@ -103,6 +105,7 @@ func LoadConfig() (*Config, error) {
 		SuperadminUsername: superadminUsername,
 		SuperadminPassword: superadminPassword,
 		SuperadminName:     superadminName,
+		FrontendURL:        frontendURL,
 	}, nil
 }
 
