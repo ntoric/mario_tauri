@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, DollarSign, Eye } from 'lucide-react';
 import { useDataStore, useUIStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
+import Pagination from '../components/ui/Pagination';
 import { formatCurrency } from '../utils/currency';
 import type { ExpenseCategory, Expense } from '../types';
+
+const PAGE_SIZE = 10;
 
 const Expenses: React.FC = () => {
   const { expenseCategories, expenses, createExpenseCategory, updateExpenseCategory, deleteExpenseCategory, createExpense, updateExpense, deleteExpense, fetchExpenseCategories, fetchExpenses } = useDataStore();
@@ -19,6 +22,8 @@ const Expenses: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
+  const [expensePage, setExpensePage] = useState(1);
+  const [categoryPage, setCategoryPage] = useState(1);
 
   // Fetch data on mount
   useEffect(() => {
@@ -209,6 +214,16 @@ const Expenses: React.FC = () => {
   const filteredCategories = expenseCategories.filter(category =>
     category.name.toLowerCase().includes(categorySearchQuery.toLowerCase())
   );
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (expensePage - 1) * PAGE_SIZE;
+    return filteredExpenses.slice(start, start + PAGE_SIZE);
+  }, [filteredExpenses, expensePage]);
+
+  const paginatedCategories = useMemo(() => {
+    const start = (categoryPage - 1) * PAGE_SIZE;
+    return filteredCategories.slice(start, start + PAGE_SIZE);
+  }, [filteredCategories, categoryPage]);
 
   return (
     <div className="expenses-page">
@@ -408,7 +423,7 @@ const Expenses: React.FC = () => {
                 type="text"
                 placeholder="Search expenses..."
                 value={expenseSearchQuery}
-                onChange={(e) => setExpenseSearchQuery(e.target.value)}
+                onChange={(e) => { setExpenseSearchQuery(e.target.value); setExpensePage(1); }}
               />
             </div>
             <div className="date-filters">
@@ -445,7 +460,7 @@ const Expenses: React.FC = () => {
             </Button>
           </div>
 
-          <div className="expenses-table-container">
+          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {filteredExpenses.length === 0 ? (
               <div className="empty-state">
                 <DollarSign size={48} />
@@ -453,44 +468,55 @@ const Expenses: React.FC = () => {
                 <Button onClick={() => openExpenseForm()}>Add your first expense</Button>
               </div>
             ) : (
-              <table className="expenses-table">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Amount</th>
-                    <th>Category</th>
-                    <th>Date</th>
-                    <th>Vendor</th>
-                    <th>Payment</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredExpenses.map((expense) => (
-                    <tr key={expense.id} onClick={() => setDetailExpense(expense)}>
-                      <td>{expense.title}</td>
-                      <td className="col-amount">{formatCurrency(expense.amount)}</td>
-                      <td>{expense.categoryName || 'Uncategorized'}</td>
-                      <td className="col-date">{new Date(expense.expenseDate).toLocaleDateString()}</td>
-                      <td>{expense.vendor || '—'}</td>
-                      <td className="col-payment">
-                        {expense.paymentMethod ? <span className="payment-badge">{expense.paymentMethod}</span> : '—'}
-                      </td>
-                      <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                        <button title="View" onClick={() => setDetailExpense(expense)}>
-                          <Eye size={14} />
-                        </button>
-                        <button title="Edit" onClick={() => openExpenseForm(expense)}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="delete" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
-                          {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <div className="table-scroll-container">
+                  <table className="expenses-table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th>Amount</th>
+                        <th>Category</th>
+                        <th>Date</th>
+                        <th>Vendor</th>
+                        <th>Payment</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedExpenses.map((expense) => (
+                        <tr key={expense.id} onClick={() => setDetailExpense(expense)}>
+                          <td>{expense.title}</td>
+                          <td className="col-amount">{formatCurrency(expense.amount)}</td>
+                          <td>{expense.categoryName || 'Uncategorized'}</td>
+                          <td className="col-date">{new Date(expense.expenseDate).toLocaleDateString()}</td>
+                          <td>{expense.vendor || '—'}</td>
+                          <td className="col-payment">
+                            {expense.paymentMethod ? <span className="payment-badge">{expense.paymentMethod}</span> : '—'}
+                          </td>
+                          <td className="col-actions" onClick={(e) => e.stopPropagation()}>
+                            <button title="View" onClick={() => setDetailExpense(expense)}>
+                              <Eye size={14} />
+                            </button>
+                            <button title="Edit" onClick={() => openExpenseForm(expense)}>
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="delete" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
+                              {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  currentPage={expensePage}
+                  totalPages={Math.ceil(filteredExpenses.length / PAGE_SIZE)}
+                  totalItems={filteredExpenses.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setExpensePage}
+                />
+              </>
             )}
           </div>
         </div>
@@ -506,7 +532,7 @@ const Expenses: React.FC = () => {
                 type="text"
                 placeholder="Search categories..."
                 value={categorySearchQuery}
-                onChange={(e) => setCategorySearchQuery(e.target.value)}
+                onChange={(e) => { setCategorySearchQuery(e.target.value); setCategoryPage(1); }}
               />
             </div>
             <Button onClick={() => openCategoryForm()}>
@@ -515,49 +541,49 @@ const Expenses: React.FC = () => {
             </Button>
           </div>
 
-          <div className="data-grid compact-grid">
+          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {filteredCategories.length === 0 ? (
               <div className="empty-state">
                 <p>No expense categories found</p>
                 <Button onClick={() => openCategoryForm()}>Add your first category</Button>
               </div>
             ) : (
-              filteredCategories.map((category) => (
-                <div key={category.id} className="data-card">
-                  <div className="card-header">
-                    <div className="card-title-section">
-                      <span className="card-title-label">Category</span>
-                      <h3>{category.name}</h3>
-                    </div>
-                  </div>
-                  <div className="card-body">
-                    {category.description && (
-                      <div className="card-field full-width">
-                        <span className="field-value">{category.description}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="card-footer">
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => openCategoryForm(category)}
-                      leftIcon={<Edit2 size={14} />}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDeleteCategory(category.id)}
-                      disabled={loadingCategoryId === category.id}
-                      leftIcon={loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    >
-                      Delete
-                    </Button>
-                  </div>
+              <>
+                <div className="table-scroll-container">
+                  <table className="expenses-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedCategories.map((category) => (
+                        <tr key={category.id}>
+                          <td><strong>{category.name}</strong></td>
+                          <td>{category.description || '—'}</td>
+                          <td className="col-actions" onClick={(e) => e.stopPropagation()}>
+                            <button title="Edit" onClick={() => openCategoryForm(category)}>
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="delete" title="Delete" onClick={() => handleDeleteCategory(category.id)} disabled={loadingCategoryId === category.id}>
+                              {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))
+                <Pagination
+                  currentPage={categoryPage}
+                  totalPages={Math.ceil(filteredCategories.length / PAGE_SIZE)}
+                  totalItems={filteredCategories.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setCategoryPage}
+                />
+              </>
             )}
           </div>
         </div>

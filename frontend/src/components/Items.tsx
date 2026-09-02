@@ -5,7 +5,9 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
+import Pagination from '../components/ui/Pagination';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled, getDefaultTaxPercent } from '../utils/tax';
 import { api } from '../services/api';
 import type { Category, Item, ItemExpense } from '../types';
 
@@ -23,14 +25,20 @@ const newDraftId = () => `draft-${Date.now()}-${Math.random().toString(36).slice
 const emptyExpenseForm = () => ({ name: '', description: '', amount: '' });
 
 const Items: React.FC = () => {
-  const { categories, items, createCategory, updateCategory, deleteCategory, createItem, updateItem, deleteItem, fetchCategories, fetchItems } = useDataStore();
+  const { categories, items, stores, createCategory, updateCategory, deleteCategory, createItem, updateItem, deleteItem, fetchCategories, fetchItems } = useDataStore();
   const { currentStoreId } = useAuthStore();
+  const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
+  const defaultTaxPercent = getDefaultTaxPercent(currentStore);
   const { setHeaderContent } = usePageHeader();
   const { openItemModal, openCategoryModal, itemModal, categoryModal, closeItemModal, closeCategoryModal } = useUIStore();
   const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items');
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
+  const [itemPage, setItemPage] = useState(1);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [itemModalTab, setItemModalTab] = useState<ItemModalTab>('details');
   const [itemExpenses, setItemExpenses] = useState<ItemExpense[]>([]);
   const [draftExpenses, setDraftExpenses] = useState<DraftExpense[]>([]);
@@ -96,7 +104,7 @@ const Items: React.FC = () => {
 
   const resetItemModal = () => {
     setItemModalTab('details');
-    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: '0' });
+    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString() });
     resetExpenseForm();
     setItemExpenses([]);
     setDraftExpenses([]);
@@ -115,7 +123,7 @@ const Items: React.FC = () => {
       });
       loadItemExpenses(item.id);
     } else {
-      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: '0' });
+      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString() });
     }
     openItemModal(item);
   };
@@ -155,7 +163,7 @@ const Items: React.FC = () => {
       price: parseFloat(itemForm.price),
       categoryId: itemForm.categoryId,
       hsnCode: itemForm.hsnCode,
-      taxPercent: parseFloat(itemForm.taxPercent) || 0,
+      taxPercent: taxEnabled ? (parseFloat(itemForm.taxPercent) || 0) : 0,
     };
 
     try {
@@ -318,10 +326,30 @@ const Items: React.FC = () => {
   const getProfitColor = (item: Item) => {
     if (!item.totalCost || item.totalCost === 0) return 'var(--gray-500)';
     const profit = item.profit ?? 0;
-    if (profit > 0) return '#38a169';
-    if (profit < 0) return '#e53e3e';
+    if (profit > 0) return '#2ba54a';
+    if (profit < 0) return '#c62828';
     return 'var(--gray-600)';
   };
+
+  const filteredItems = useMemo(() => items.filter(item =>
+    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
+    getCategoryName(item.categoryId).toLowerCase().includes(itemSearchQuery.toLowerCase())
+  ), [items, itemSearchQuery, categories]);
+
+  const filteredCategories = useMemo(() => categories.filter(category =>
+    category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
+    (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+  ), [categories, categorySearchQuery]);
+
+  const paginatedItems = useMemo(() => {
+    const start = (itemPage - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, itemPage]);
+
+  const paginatedCategories = useMemo(() => {
+    const start = (categoryPage - 1) * PAGE_SIZE;
+    return filteredCategories.slice(start, start + PAGE_SIZE);
+  }, [filteredCategories, categoryPage]);
 
   const modalExpenses = useMemo(() => {
     if (isCreating) return draftExpenses;
@@ -388,13 +416,13 @@ const Items: React.FC = () => {
       </div>
       <div>
         <div style={{ color: 'var(--gray-500)' }}>Profit</div>
-        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#38a169' : '#e53e3e') : 'var(--gray-600)' }}>
+        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
           {modalTotalCost > 0 ? formatCurrency(modalProfit) : '—'}
         </strong>
       </div>
       <div>
         <div style={{ color: 'var(--gray-500)' }}>Profit %</div>
-        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#38a169' : '#e53e3e') : 'var(--gray-600)' }}>
+        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
           {modalTotalCost > 0 && modalPrice > 0 ? `${modalProfitPercent.toFixed(1)}%` : '—'}
         </strong>
       </div>
@@ -472,7 +500,7 @@ const Items: React.FC = () => {
               {editingExpenseId ? 'Edit Expense' : 'Add Expense'}
             </div>
             {expenseFormError && (
-              <div style={{ color: '#e53e3e', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{expenseFormError}</div>
+              <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{expenseFormError}</div>
             )}
             <div className="form-row">
               <div className="form-group" style={{ marginBottom: '0.75rem' }}>
@@ -565,16 +593,17 @@ const Items: React.FC = () => {
               required
             />
           </div>
-          <div className="form-group">
-            <label>Tax %</label>
+          <div className="form-group" style={!taxEnabled ? { opacity: 0.5 } : undefined}>
+            <label>Tax % {!taxEnabled && <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(disabled in settings)</span>}</label>
             <input
               type="number"
               step="0.01"
               min="0"
               max="100"
-              value={itemForm.taxPercent}
+              value={taxEnabled ? itemForm.taxPercent : '0'}
               onChange={e => setItemForm({ ...itemForm, taxPercent: e.target.value })}
               placeholder="0"
+              disabled={!taxEnabled}
             />
           </div>
         </div>
@@ -626,7 +655,7 @@ const Items: React.FC = () => {
       {activeTab === 'items' && (
         <div className="card">
           <div className="card-header">
-            <span className="card-title">All Items ({items.length})</span>
+            <span className="card-title">All Items ({filteredItems.length})</span>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <div className="search-input-wrapper">
                 <Search size={16} className="search-icon" />
@@ -634,7 +663,7 @@ const Items: React.FC = () => {
                   type="text"
                   placeholder="Search items..."
                   value={itemSearchQuery}
-                  onChange={e => setItemSearchQuery(e.target.value)}
+                  onChange={e => { setItemSearchQuery(e.target.value); setItemPage(1); }}
                   className="search-input"
                 />
               </div>
@@ -644,27 +673,23 @@ const Items: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-            <table className="items-table">
-              <thead>
-                <tr>
-                  <th>Item Name</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Prep Cost</th>
-                  <th>Profit</th>
-                  <th>Profit %</th>
-                  <th>Tax %</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items
-                  .filter(item =>
-                    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
-                    getCategoryName(item.categoryId).toLowerCase().includes(itemSearchQuery.toLowerCase())
-                  )
-                  .map(item => (
+          <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="table-scroll-container">
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th>Item Name</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Prep Cost</th>
+                    <th>Profit</th>
+                    <th>Profit %</th>
+                    {taxEnabled && <th>Tax %</th>}
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedItems.map(item => (
                   <tr key={item.id}>
                     <td><strong>{item.name}</strong></td>
                     <td><span className="badge badge-primary">{getCategoryName(item.categoryId)}</span></td>
@@ -676,7 +701,7 @@ const Items: React.FC = () => {
                       {item.totalCost && item.totalCost > 0 ? formatCurrency(item.profit ?? 0) : '—'}
                     </td>
                     <td style={{ color: getProfitColor(item), fontWeight: 600 }}>{formatProfitPercent(item)}</td>
-                    <td>{item.taxPercent || 0}%</td>
+                    {taxEnabled && <td>{item.taxPercent || 0}%</td>}
                     <td>
                       <div className="action-btns">
                         <button className="action-btn edit" onClick={() => openItemForm(item)} disabled={loadingItemId === item.id} title="Edit item">
@@ -689,8 +714,16 @@ const Items: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={itemPage}
+              totalPages={Math.ceil(filteredItems.length / PAGE_SIZE)}
+              totalItems={filteredItems.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setItemPage}
+            />
           </div>
         </div>
       )}
@@ -698,7 +731,7 @@ const Items: React.FC = () => {
       {activeTab === 'categories' && (
         <div className="card">
           <div className="card-header">
-            <span className="card-title">All Categories ({categories.length})</span>
+            <span className="card-title">All Categories ({filteredCategories.length})</span>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <div className="search-input-wrapper">
                 <Search size={16} className="search-icon" />
@@ -706,7 +739,7 @@ const Items: React.FC = () => {
                   type="text"
                   placeholder="Search categories..."
                   value={categorySearchQuery}
-                  onChange={e => setCategorySearchQuery(e.target.value)}
+                  onChange={e => { setCategorySearchQuery(e.target.value); setCategoryPage(1); }}
                   className="search-input"
                 />
               </div>
@@ -716,23 +749,19 @@ const Items: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="card-body" style={{ padding: 0 }}>
-            <table className="items-table">
-              <thead>
-                <tr>
-                  <th>Category Name</th>
-                  <th>Description</th>
-                  <th>Items Count</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories
-                  .filter(category =>
-                    category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
-                    (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
-                  )
-                  .map(category => (
+          <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="table-scroll-container">
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th>Category Name</th>
+                    <th>Description</th>
+                    <th>Items Count</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedCategories.map(category => (
                   <tr key={category.id}>
                     <td><strong>{category.name}</strong></td>
                     <td style={{ color: 'var(--gray-600)' }}>{category.description || '-'}</td>
@@ -749,8 +778,16 @@ const Items: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={categoryPage}
+              totalPages={Math.ceil(filteredCategories.length / PAGE_SIZE)}
+              totalItems={filteredCategories.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCategoryPage}
+            />
           </div>
         </div>
       )}

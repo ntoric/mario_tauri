@@ -87,7 +87,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             {error && (
               <div style={{
                 padding: '0.75rem',
-                background: 'rgba(245, 101, 101, 0.1)',
+                background: 'rgba(229,57,53, 0.1)',
                 color: 'var(--danger)',
                 borderRadius: 'var(--radius)',
                 marginBottom: '1rem',
@@ -100,7 +100,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             {success && (
               <div style={{
                 padding: '0.75rem',
-                background: 'rgba(72, 187, 120, 0.1)',
+                background: 'rgba(43,165,74, 0.1)',
                 color: 'var(--success)',
                 borderRadius: 'var(--radius)',
                 marginBottom: '1rem',

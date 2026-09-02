@@ -47,19 +47,19 @@ func RenderInvoice(invoice Invoice, width string) []byte {
 	data = append(data, normalSize...)
 	data = append(data, boldOff...)
 
-	if invoice.Store.Branch != "" {
+	if strings.TrimSpace(invoice.Store.Branch) != "" {
 		data = append(data, []byte(invoice.Store.Branch+"\n")...)
 	}
-	if invoice.Store.Location != "" {
+	if strings.TrimSpace(invoice.Store.Location) != "" {
 		data = append(data, []byte(invoice.Store.Location+"\n")...)
 	}
-	if invoice.Store.Phone != "" {
+	if strings.TrimSpace(invoice.Store.Phone) != "" {
 		data = append(data, []byte("MOB : "+invoice.Store.Phone+"\n")...)
 	}
-	if invoice.Store.GSTNumber != "" {
+	if strings.TrimSpace(invoice.Store.GSTNumber) != "" {
 		data = append(data, []byte("GSTIN : "+invoice.Store.GSTNumber+"\n")...)
 	}
-	if invoice.Store.FSSAILicNo != "" {
+	if strings.TrimSpace(invoice.Store.FSSAILicNo) != "" {
 		data = append(data, []byte("FSSAI LIC NO : "+invoice.Store.FSSAILicNo+"\n")...)
 	}
 
@@ -74,10 +74,10 @@ func RenderInvoice(invoice Invoice, width string) []byte {
 	// INFO SECTION
 	data = append(data, alignLeft...)
 	data = append(data, []byte("Date : "+invoice.Date+"\n")...)
-	if invoice.Customer.Name != "" && invoice.Customer.Name != "Guest" {
+	if strings.TrimSpace(invoice.Customer.Name) != "" && invoice.Customer.Name != "Guest" {
 		data = append(data, []byte("Cust : "+invoice.Customer.Name+"\n")...)
 	}
-	if invoice.Customer.Mobile != "" {
+	if strings.TrimSpace(invoice.Customer.Mobile) != "" {
 		data = append(data, []byte("Mob  : "+invoice.Customer.Mobile+"\n")...)
 	}
 	if invoice.BillNo != "" {

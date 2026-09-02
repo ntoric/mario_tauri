@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette } from 'lucide-react';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
@@ -31,7 +31,7 @@ const BusinessSettings: React.FC = () => {
   
   const currentStore = stores.find(s => s.id === currentStoreId);
   
-  const [activeTab, setActiveTab] = useState<'general' | 'printer' | 'appearance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance'>('general');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -68,6 +68,11 @@ const BusinessSettings: React.FC = () => {
     themeColor: '',
   });
 
+  const [taxSettings, setTaxSettings] = useState({
+    taxEnabled: true,
+    defaultTaxPercent: 0,
+  });
+
   useEffect(() => {
     if (currentStore) {
       setGeneralSettings({
@@ -90,6 +95,10 @@ const BusinessSettings: React.FC = () => {
       setLogoPreview(currentStore.logoUrl || null);
       setAppearanceSettings({
         themeColor: currentStore.themeColor || '',
+      });
+      setTaxSettings({
+        taxEnabled: currentStore.taxEnabled !== false,
+        defaultTaxPercent: currentStore.defaultTaxPercent ?? 0,
       });
     }
   }, [currentStore]);
@@ -191,6 +200,25 @@ const BusinessSettings: React.FC = () => {
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
       setSaveMessage('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveTax = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentStore) return;
+
+    setIsSaving(true);
+    try {
+      await updateStore(currentStore.id, {
+        taxEnabled: taxSettings.taxEnabled,
+        defaultTaxPercent: taxSettings.defaultTaxPercent,
+      });
+      setSaveMessage('Tax settings saved successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (error) {
+      setSaveMessage('Failed to save tax settings');
     } finally {
       setIsSaving(false);
     }
@@ -298,6 +326,13 @@ const BusinessSettings: React.FC = () => {
           General Info
         </button>
         <button
+          className={`tab ${activeTab === 'tax' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tax')}
+        >
+          <Percent size={18} />
+          Tax
+        </button>
+        <button
           className={`tab ${activeTab === 'printer' ? 'active' : ''}`}
           onClick={() => setActiveTab('printer')}
         >
@@ -316,7 +351,7 @@ const BusinessSettings: React.FC = () => {
       {saveMessage && (
         <div style={{ 
           padding: '1rem', 
-          background: saveMessage.includes('success') ? 'rgba(72, 187, 120, 0.1)' : 'rgba(245, 101, 101, 0.1)',
+          background: saveMessage.includes('success') ? 'rgba(43,165,74, 0.1)' : 'rgba(229,57,53, 0.1)',
           color: saveMessage.includes('success') ? 'var(--success)' : 'var(--danger)',
           borderRadius: 'var(--radius)',
           marginBottom: '1.5rem'
@@ -482,6 +517,60 @@ const BusinessSettings: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'tax' && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Tax Configuration</span>
+          </div>
+          <form onSubmit={handleSaveTax}>
+            <div className="card-body">
+              <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
+                Enable or disable tax for this store. When disabled, all tax-related fields, calculations, and invoice tax lines will be hidden across the application for this store.
+              </p>
+
+              <div className="form-group" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={taxSettings.taxEnabled}
+                    onChange={e => setTaxSettings({ ...taxSettings, taxEnabled: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  <span style={{ fontWeight: 600 }}>Enable Tax</span>
+                </label>
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
+                  When enabled, tax percentages on items and tax totals on orders/bills will be calculated and displayed. When disabled, all tax fields are hidden and tax amounts are treated as zero.
+                </p>
+              </div>
+
+              <div className="form-group" style={{ marginTop: '1.5rem' }}>
+                <label>Default Tax %</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={taxSettings.defaultTaxPercent}
+                  onChange={e => setTaxSettings({ ...taxSettings, defaultTaxPercent: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                  disabled={!taxSettings.taxEnabled}
+                  style={!taxSettings.taxEnabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                />
+                <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
+                  This percentage will be used as the default tax rate when creating new items.
+                </small>
+              </div>
+            </div>
+            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+                <Save size={18} />
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {activeTab === 'appearance' && (
         <div className="card">
           <div className="card-header">
@@ -506,7 +595,7 @@ const BusinessSettings: React.FC = () => {
                     border: '2px solid',
                     borderColor: !appearanceSettings.themeColor ? 'var(--primary)' : 'var(--gray-200)',
                     borderRadius: 'var(--radius)',
-                    background: !appearanceSettings.themeColor ? 'rgba(255,107,53,0.05)' : 'white',
+                    background: !appearanceSettings.themeColor ? 'rgba(245,130,32,0.05)' : 'white',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -525,8 +614,8 @@ const BusinessSettings: React.FC = () => {
                     width: '40px',
                     height: '40px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #ff8c61 0%, #ff6b35 50%, #e55a2b 100%)',
-                    boxShadow: '0 2px 8px rgba(255,107,53,0.3)',
+                    background: 'linear-gradient(135deg, #f99b3f 0%, #f58220 50%, #e0731a 100%)',
+                    boxShadow: '0 2px 8px rgba(245,130,32,0.3)',
                   }} />
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Default (Orange)</span>
                 </label>
@@ -585,7 +674,7 @@ const BusinessSettings: React.FC = () => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
                   <input
                     type="color"
-                    value={appearanceSettings.themeColor || '#ff6b35'}
+                    value={appearanceSettings.themeColor || '#f58220'}
                     onChange={(e) => {
                       setAppearanceSettings({ themeColor: e.target.value });
                       applyThemeColor(e.target.value);
@@ -622,7 +711,7 @@ const BusinessSettings: React.FC = () => {
                     borderRadius: '20px',
                     fontSize: '0.8rem',
                     fontWeight: 600,
-                    background: 'rgba(255,107,53,0.1)',
+                    background: 'rgba(245,130,32,0.1)',
                     color: 'var(--primary)',
                   }}>
                     Active Badge
@@ -662,7 +751,7 @@ const BusinessSettings: React.FC = () => {
                 {printerError && (
                   <div style={{ 
                     padding: '0.75rem', 
-                    background: 'rgba(245, 101, 101, 0.1)', 
+                    background: 'rgba(229,57,53, 0.1)', 
                     color: 'var(--danger)',
                     borderRadius: 'var(--radius)',
                     marginBottom: '0.75rem',

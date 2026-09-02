@@ -5,13 +5,15 @@ import { useDataStore, useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 
-type DateRange = 'today' | 'week' | 'month' | 'all';
+type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
 const Reports: React.FC = () => {
   const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRange>('today');
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
 
   useEffect(() => {
     fetchOrders();
@@ -35,22 +37,38 @@ const Reports: React.FC = () => {
     } else if (range === 'month') {
       d.setDate(1);
       d.setHours(0, 0, 0, 0);
+    } else if (range === 'custom') {
+      return customDateFrom ? new Date(customDateFrom + 'T00:00:00') : new Date(0);
     } else {
       return new Date(0);
     }
     return d;
   };
 
-  const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange]);
+  const getRangeEnd = (range: DateRange): Date => {
+    if (range === 'custom') {
+      return customDateTo ? new Date(customDateTo + 'T23:59:59') : new Date();
+    }
+    return new Date();
+  };
+
+  const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange, customDateFrom]);
+  const rangeEnd = useMemo(() => getRangeEnd(dateRange), [dateRange, customDateTo]);
 
   const filteredBills = useMemo(
-    () => bills.filter(b => new Date(b.generatedAt) >= rangeStart),
-    [bills, rangeStart]
+    () => bills.filter(b => {
+      const t = new Date(b.generatedAt);
+      return t >= rangeStart && t <= rangeEnd;
+    }),
+    [bills, rangeStart, rangeEnd]
   );
 
   const filteredOrders = useMemo(
-    () => orders.filter(o => new Date(o.createdAt) >= rangeStart),
-    [orders, rangeStart]
+    () => orders.filter(o => {
+      const t = new Date(o.createdAt);
+      return t >= rangeStart && t <= rangeEnd;
+    }),
+    [orders, rangeStart, rangeEnd]
   );
 
   const completedOrders = useMemo(
@@ -156,11 +174,10 @@ const Reports: React.FC = () => {
 
   // Comparison: previous period
   const prevRangeStart = useMemo(() => {
-    const d = new Date(rangeStart);
-    const diff = now.getTime() - rangeStart.getTime();
-    d.setTime(rangeStart.getTime() - diff);
+    const diff = rangeEnd.getTime() - rangeStart.getTime();
+    const d = new Date(rangeStart.getTime() - diff);
     return d;
-  }, [rangeStart]);
+  }, [rangeStart, rangeEnd]);
 
   const prevRevenue = useMemo(() => {
     return bills
@@ -178,13 +195,14 @@ const Reports: React.FC = () => {
     week: 'Last 7 Days',
     month: 'This Month',
     all: 'All Time',
+    custom: 'Custom',
   };
 
   return (
     <div>
       {/* Date Range Selector */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {(['today', 'week', 'month', 'all'] as DateRange[]).map(r => (
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {(['today', 'week', 'month', 'all', 'custom'] as DateRange[]).map(r => (
           <button
             key={r}
             className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
@@ -193,6 +211,25 @@ const Reports: React.FC = () => {
             {rangeLabel[r]}
           </button>
         ))}
+        {dateRange === 'custom' && (
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              type="date"
+              className="history-date-input"
+              value={customDateFrom}
+              onChange={e => setCustomDateFrom(e.target.value)}
+              placeholder="From"
+            />
+            <span style={{ color: 'var(--gray-500)', fontSize: '0.8rem' }}>to</span>
+            <input
+              type="date"
+              className="history-date-input"
+              value={customDateTo}
+              onChange={e => setCustomDateTo(e.target.value)}
+              placeholder="To"
+            />
+          </div>
+        )}
       </div>
 
       {/* Summary Stats */}
@@ -231,7 +268,7 @@ const Reports: React.FC = () => {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(245, 101, 101, 0.15)', color: 'var(--danger)' }}>
+          <div className="stat-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
             <Calendar size={24} />
           </div>
           <div className="stat-content">

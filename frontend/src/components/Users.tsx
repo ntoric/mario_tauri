@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X, Lock, Eye, EyeOff, Power, Loader2 } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
+import Pagination from '../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 const ROLES = [
   { value: 'superadmin', label: 'Super Admin', description: 'Full system access' },
@@ -32,6 +35,7 @@ const Users: React.FC = () => {
     fetchStores();
   }, [fetchUsers, fetchStores]);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [passwordUser, setPasswordUser] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -240,23 +244,29 @@ const Users: React.FC = () => {
     });
   }, [setHeaderContent]);
 
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return users.slice(start, start + PAGE_SIZE);
+  }, [users, currentPage]);
+
   return (
     <div>
       <div className="card">
-        <div className="card-body" style={{ padding: 0 }}>
-          <table className="items-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Store</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user: any) => (
+        <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="table-scroll-container">
+            <table className="items-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Store</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedUsers.map((user: any) => (
                 <tr key={user.id}>
                   <td>
                     <strong>{user.name}</strong>
@@ -329,6 +339,14 @@ const Users: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(users.length / PAGE_SIZE)}
+            totalItems={users.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 
@@ -520,7 +538,7 @@ const Users: React.FC = () => {
                 {passwordError && (
                   <div style={{
                     padding: '0.75rem',
-                    background: 'rgba(245, 101, 101, 0.1)',
+                    background: 'rgba(229,57,53, 0.1)',
                     color: 'var(--danger)',
                     borderRadius: 'var(--radius)',
                     marginBottom: '1rem',
@@ -533,7 +551,7 @@ const Users: React.FC = () => {
                 {passwordSuccess && (
                   <div style={{
                     padding: '0.75rem',
-                    background: 'rgba(72, 187, 120, 0.1)',
+                    background: 'rgba(43,165,74, 0.1)',
                     color: 'var(--success)',
                     borderRadius: 'var(--radius)',
                     marginBottom: '1rem',

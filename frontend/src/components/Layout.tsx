@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -16,7 +16,14 @@ const LayoutContent: React.FC = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [now, setNow] = useState(new Date());
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Live clock (Petpooja-style date/time in top bar)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Ensure store is selected on mount (for business_admin and staff)
   useEffect(() => {
@@ -55,9 +62,13 @@ const LayoutContent: React.FC = () => {
 
   return (
     <div className="layout">
-      <aside className={`sidebar ${sidebarExpanded ? 'expanded' : 'collapsed'}`}>
+      <aside
+        className={`sidebar ${sidebarExpanded ? 'expanded' : 'collapsed'}`}
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+      >
         <div className="sidebar-header">
-          <div className="sidebar-brand" onClick={() => setSidebarExpanded(!sidebarExpanded)} style={{ cursor: 'pointer' }}>
+          <div className="sidebar-brand" style={{ cursor: 'default' }}>
             <div className="sidebar-brand-icon" style={{
               background: currentStore?.logoUrl ? 'white' : undefined,
               overflow: 'hidden',
@@ -232,7 +243,7 @@ const LayoutContent: React.FC = () => {
                         fontSize: '0.9rem',
                         transition: 'background 0.2s'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(245, 101, 101, 0.1)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(229,57,53, 0.1)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <LogOut size={16} />
@@ -320,7 +331,7 @@ const LayoutContent: React.FC = () => {
                         fontSize: '0.9rem',
                         transition: 'background 0.2s'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(245, 101, 101, 0.1)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(229,57,53, 0.1)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <LogOut size={16} />
@@ -334,7 +345,7 @@ const LayoutContent: React.FC = () => {
         </div>
       </aside>
 
-      <main className={`main-content ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+      <main className="main-content">
         <UpdateBanner />
         <header className="top-navbar">
           <div className="navbar-left">
@@ -347,7 +358,21 @@ const LayoutContent: React.FC = () => {
           </div>
           
           <div className="navbar-center">
-            {showStoreSelector && <StoreSelector />}
+            {showStoreSelector ? (
+              <StoreSelector />
+            ) : (
+              <div className="navbar-datetime">
+                <Clock size={16} style={{ color: 'var(--primary)' }} />
+                <div className="navbar-datetime-text">
+                  <span className="navbar-time">
+                    {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                  <span className="navbar-date">
+                    {now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="navbar-right">

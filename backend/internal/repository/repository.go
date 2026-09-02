@@ -121,13 +121,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, created_at FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, created_at 
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at 
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, created_at 
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -145,7 +145,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-			&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
+			&logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -166,7 +166,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, is_active, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, created_at FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
@@ -174,7 +174,7 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-		&logoURL, &themeColor, &s.IsActive, &s.CreatedAt,
+		&logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &s.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -196,11 +196,12 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 }
 
 func (r *StoreRepository) Create(ctx context.Context, s models.Store) error {
-	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, is_active)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true)`
+	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, tax_enabled, default_tax_percent, is_active)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)`
 	_, err := r.db.ExecContext(ctx, sqlStr,
 		s.ID, s.Name, s.Branch, s.Location, s.GSTIN, s.FSSAINo, s.Phone,
 		s.PrinterName, s.PrinterVendorID, s.PrinterProductID, s.InvoiceSize, s.KOTPrintEnabled, s.RemoteBillingEnabled,
+		s.TaxEnabled, s.DefaultTaxPercent,
 	)
 	return err
 }
@@ -918,7 +919,7 @@ type TableRepository struct {
 }
 
 func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.Table, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active FROM tables WHERE store_id = $1 AND is_active = true ORDER BY number", storeID)
+	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active, section FROM tables WHERE store_id = $1 AND is_active = true ORDER BY number", storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -927,7 +928,7 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 	var tables []models.Table
 	for rows.Next() {
 		var t models.Table
-		if err := rows.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive); err != nil {
+		if err := rows.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
 			return nil, err
 		}
 		tables = append(tables, t)
@@ -937,10 +938,10 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 }
 
 func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
-	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d seats=%d pos=(%d,%d)\n",
-		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
-	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, seats, position_x, position_y) VALUES ($1, $2, $3, $4, $5, $6)",
-		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y)
+	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d seats=%d pos=(%d,%d) section=%v\n",
+		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section)
+	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, seats, position_x, position_y, section) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section)
 	if err != nil {
 		fmt.Println("TableRepository.Create: exec error -", err)
 	}
@@ -948,9 +949,9 @@ func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
 }
 
 func (r *TableRepository) GetByID(ctx context.Context, id string) (*models.Table, error) {
-	row := r.db.QueryRowContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active FROM tables WHERE id = $1", id)
+	row := r.db.QueryRowContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active, section FROM tables WHERE id = $1", id)
 	var t models.Table
-	if err := row.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive); err != nil {
+	if err := row.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -960,13 +961,31 @@ func (r *TableRepository) GetByID(ctx context.Context, id string) (*models.Table
 }
 
 func (r *TableRepository) Update(ctx context.Context, t models.Table) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4 WHERE id = $5",
-		t.Number, t.Seats, t.Position.X, t.Position.Y, t.ID)
+	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4, section = $5 WHERE id = $6",
+		t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section, t.ID)
 	return err
 }
 
 func (r *TableRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM tables WHERE id = $1", id)
+	return err
+}
+
+// RenameSection bulk-renames a section within a store (case-sensitive match).
+// If oldName is empty, it targets tables with NULL section (the default).
+func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, newName string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE tables SET section = $1 WHERE store_id = $2 AND COALESCE(section, '') = COALESCE($3, '')",
+		newName, storeID, oldName)
+	return err
+}
+
+// DeleteSection clears the section on all tables in the given section,
+// effectively moving them back to the default (NULL) section.
+func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionName string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE tables SET section = NULL WHERE store_id = $1 AND COALESCE(section, '') = COALESCE($2, '')",
+		storeID, sectionName)
 	return err
 }
 

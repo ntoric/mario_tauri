@@ -142,6 +142,9 @@ func main() {
 		r.Post("/api/tables", h.CreateTable)
 		r.Put("/api/tables/{id}", h.UpdateTable)
 		r.Delete("/api/tables/{id}", h.DeleteTable)
+		// Table sections (bulk operations)
+		r.Put("/api/tables/sections/rename", h.RenameSection)
+		r.Delete("/api/tables/sections/{name}", h.DeleteSection)
 
 		// Orders
 		r.Get("/api/orders", h.GetOrders)

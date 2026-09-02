@@ -171,7 +171,7 @@ const TopSellingCategoriesReport: React.FC = () => {
           position: fixed;
           top: 20px;
           right: 20px;
-          background: #48bb78;
+          background: #2ba54a;
           color: white;
           padding: 1rem 1.5rem;
           border-radius: 8px;
@@ -206,7 +206,7 @@ const TopSellingCategoriesReport: React.FC = () => {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #f56565;
+        background: #e53935;
         color: white;
         padding: 1rem 1.5rem;
         border-radius: 8px;

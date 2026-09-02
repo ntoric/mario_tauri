@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/currency';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
 import { printerService } from '../services/printer';
+import { isTaxEnabled } from '../utils/tax';
 import type { OrderItem, Item } from '../types';
 
 const OrderPage: React.FC = () => {
@@ -23,6 +24,7 @@ const OrderPage: React.FC = () => {
   } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
 
   const table = tables.find(t => t.id === tableId);
   const existingOrder = table ? getActiveOrderByTable(table.id) : undefined;
@@ -175,6 +177,7 @@ const OrderPage: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -184,7 +187,7 @@ const OrderPage: React.FC = () => {
   const buildPrintItems = () => {
     return orderItems.map(oi => {
       const itemTotal = oi.item.price * oi.quantity;
-      const taxPercent = oi.item.taxPercent || 0;
+      const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
       return {
         name: oi.item.name,
         hsn: oi.item.description || '',
@@ -219,7 +222,7 @@ const OrderPage: React.FC = () => {
             qty: oi.quantity,
             unit: 'PCS',
             rate: oi.item.price,
-            tax_percent: oi.item.taxPercent || 0,
+            tax_percent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
             amount: oi.item.price * oi.quantity,
           })),
           notes: '',
@@ -237,8 +240,9 @@ const OrderPage: React.FC = () => {
   const printInvoiceBill = async (invoiceNo: string, total: number) => {
     const printItems = buildPrintItems();
     const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-    const cgst = taxable * 0.025;
-    const sgst = taxable * 0.025;
+    const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+    const cgst = actualTax / 2;
+    const sgst = actualTax / 2;
 
     await printerService.printInvoice({
       type: 'invoice',
@@ -256,7 +260,7 @@ const OrderPage: React.FC = () => {
           location: currentStore?.location || '',
           ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
           ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-          phone: currentStore?.phone || '',
+          ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
           address: currentStore?.location || '',
         },
         customer: {
@@ -594,63 +598,26 @@ const OrderPage: React.FC = () => {
   return (
     <div className="order-page">
       <div className="order-page-layout">
-        {/* Left Sidebar - Order Items */}
+        {/* Left Sidebar - Categories (Petpooja style) */}
         <div className="order-page-left">
-          <div className="order-page-left-header">
-            <h3>Order Items ({orderItems.length})</h3>
-            {existingOrder && (
-              <OrderTimer createdAt={existingOrder.createdAt} className="detail-timer" />
-            )}
+          <h3>Categories</h3>
+          <div className="order-categories-vertical">
+            <button
+              className={`category-btn-vertical ${selectedCategory === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedCategory('all')}
+            >
+              All Items
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
+                onClick={() => setSelectedCategory(cat.id)}
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
-
-          {orderItems.length === 0 ? (
-            <div className="empty-order">
-              Click items to add
-            </div>
-          ) : (
-            <>
-              <div className="order-items-scrollable">
-                {orderItems.map(oi => (
-                  <div key={oi.itemId} className="order-item-compact">
-                    <div className="order-item-info">
-                      <div className="order-item-name">{oi.item.name}</div>
-                      <div className="order-item-price">{formatCurrency(oi.item.price)}</div>
-                    </div>
-                    <div className="order-item-actions">
-                      {!viewOnly && (
-                        <>
-                          <button
-                            className="quantity-btn"
-                            onClick={() => updateQuantity(oi.itemId, -1)}
-                          >
-                            <Minus size={10} />
-                          </button>
-                          <span className="order-item-quantity">{oi.quantity}</span>
-                          <button
-                            className="quantity-btn"
-                            onClick={() => updateQuantity(oi.itemId, 1)}
-                          >
-                            <Plus size={10} />
-                          </button>
-                          <button
-                            className="remove-item-btn"
-                            onClick={() => removeItem(oi.itemId)}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </>
-                      )}
-                      {viewOnly && (
-                        <span className="order-item-quantity">x{oi.quantity}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-
         </div>
 
         {/* Main Area - Items Grid */}
@@ -679,6 +646,7 @@ const OrderPage: React.FC = () => {
               <div
                 key={item.id}
                 className="item-card"
+                data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
                 <div className="item-name">{item.name}</div>
@@ -688,26 +656,79 @@ const OrderPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Categories */}
+        {/* Right Sidebar - Cart / Bill (Petpooja style) */}
         <div className="order-page-right">
-          <h3>Categories</h3>
-          <div className="order-categories-vertical">
-            <button
-              className={`category-btn-vertical ${selectedCategory === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedCategory('all')}
-            >
-              All Items
-            </button>
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                {cat.name}
-              </button>
-            ))}
+          <div className="order-page-left-header">
+            <h3>Cart ({orderItems.length})</h3>
+            {existingOrder && (
+              <OrderTimer createdAt={existingOrder.createdAt} className="detail-timer" />
+            )}
           </div>
+
+          {orderItems.length === 0 ? (
+            <div className="empty-order">
+              Click items to add
+            </div>
+          ) : (
+            <div className="order-items-scrollable">
+              {orderItems.map(oi => (
+                <div key={oi.itemId} className="order-item-compact">
+                  <div className="order-item-info">
+                    <div className="order-item-name">{oi.item.name}</div>
+                    <div className="order-item-price">{formatCurrency(oi.item.price)} x {oi.quantity}</div>
+                  </div>
+                  <div className="order-item-actions">
+                    {!viewOnly && (
+                      <>
+                        <button
+                          className="quantity-btn"
+                          onClick={() => updateQuantity(oi.itemId, -1)}
+                        >
+                          <Minus size={10} />
+                        </button>
+                        <span className="order-item-quantity">{oi.quantity}</span>
+                        <button
+                          className="quantity-btn"
+                          onClick={() => updateQuantity(oi.itemId, 1)}
+                        >
+                          <Plus size={10} />
+                        </button>
+                        <button
+                          className="remove-item-btn"
+                          onClick={() => removeItem(oi.itemId)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </>
+                    )}
+                    {viewOnly && (
+                      <span className="order-item-quantity">x{oi.quantity}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cart totals summary */}
+          {orderItems.length > 0 && (
+            <div className="order-cart-summary">
+              <div className="cart-summary-row">
+                <span>Subtotal</span>
+                <span>{formatCurrency(calculateTotal())}</span>
+              </div>
+              {taxEnabled && (
+                <div className="cart-summary-row">
+                  <span>Tax</span>
+                  <span>{formatCurrency(calculateTax())}</span>
+                </div>
+              )}
+              <div className="cart-summary-row total">
+                <span>Total</span>
+                <span className="cart-amount">{formatCurrency(total)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -728,10 +749,12 @@ const OrderPage: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(calculateTotal())}</span>
                 </div>
-                <div className="breakdown-row">
-                  <span>Tax</span>
-                  <span>{formatCurrency(calculateTax())}</span>
-                </div>
+                {taxEnabled && (
+                  <div className="breakdown-row">
+                    <span>Tax</span>
+                    <span>{formatCurrency(calculateTax())}</span>
+                  </div>
+                )}
                 <div className="breakdown-row final">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>

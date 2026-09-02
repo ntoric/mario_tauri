@@ -378,7 +378,7 @@ const ItemProfitReportPage: React.FC = () => {
           </div>
           <div className="summary-cards" style={{ marginBottom: '1.75rem' }}>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(99, 179, 237, 0.15)', color: '#3182ce' }}>
+              <div className="card-icon" style={{ background: 'rgba(99, 179, 237, 0.15)', color: '#1976d2' }}>
                 <BarChart3 size={24} />
               </div>
               <div className="card-content">
@@ -400,7 +400,7 @@ const ItemProfitReportPage: React.FC = () => {
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(245, 101, 101, 0.15)', color: 'var(--danger)' }}>
+              <div className="card-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
                 <Receipt size={24} />
               </div>
               <div className="card-content">
@@ -413,7 +413,7 @@ const ItemProfitReportPage: React.FC = () => {
             </div>
             <div className="summary-card">
               <div className="card-icon" style={{
-                background: salesSummary.profit >= 0 ? 'rgba(72, 187, 120, 0.15)' : 'rgba(245, 101, 101, 0.15)',
+                background: salesSummary.profit >= 0 ? 'rgba(43,165,74, 0.15)' : 'rgba(229,57,53, 0.15)',
                 color: getProfitColor(salesSummary.profit, salesSummary.prepCost > 0),
               }}>
                 <TrendingUp size={24} />
@@ -427,7 +427,7 @@ const ItemProfitReportPage: React.FC = () => {
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(237, 137, 54, 0.15)', color: '#dd6b20' }}>
+              <div className="card-icon" style={{ background: 'rgba(245,166,35, 0.15)', color: '#e09516' }}>
                 <Percent size={24} />
               </div>
               <div className="card-content">
@@ -475,7 +475,7 @@ const ItemProfitReportPage: React.FC = () => {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{ background: 'rgba(245, 101, 101, 0.12)', color: 'var(--danger)' }}>
+              <div className="stat-icon" style={{ background: 'rgba(229,57,53, 0.12)', color: 'var(--danger)' }}>
                 <Receipt size={22} />
               </div>
               <div className="stat-content">

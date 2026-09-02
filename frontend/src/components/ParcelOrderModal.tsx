@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Minus, Trash2, Search, Printer, Package, ChevronDown } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -12,6 +13,7 @@ const ParcelOrderModal: React.FC = () => {
   const { user, currentStoreId } = useAuthStore();
   const { parcelOrderModal, closeParcelOrderModal } = useUIStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -111,6 +113,7 @@ const ParcelOrderModal: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -161,14 +164,14 @@ const ParcelOrderModal: React.FC = () => {
           itemId: oi.itemId,
           quantity: oi.quantity,
           unitPrice: oi.item.price,
-          taxPercent: oi.item.taxPercent || 0,
+          taxPercent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
           notes: oi.notes || '',
           item: {
             id: oi.item.id,
             name: oi.item.name,
             price: oi.item.price,
             description: oi.item.description || '',
-            taxPercent: oi.item.taxPercent || 0,
+            taxPercent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
           },
         })),
         totalAmount,
@@ -203,7 +206,7 @@ const ParcelOrderModal: React.FC = () => {
                 qty: oi.quantity,
                 unit: 'PCS',
                 rate: oi.item.price,
-                tax_percent: oi.item.taxPercent || 0,
+                tax_percent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
                 amount: oi.item.price * oi.quantity,
               })),
               notes: '',
@@ -221,7 +224,7 @@ const ParcelOrderModal: React.FC = () => {
       try {
         const printItems = orderItems.map(oi => {
           const itemTotal = oi.item.price * oi.quantity;
-          const taxPercent = oi.item.taxPercent || 0;
+          const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
           return {
             name: oi.item.name,
             hsn: oi.item.description || '',
@@ -234,8 +237,9 @@ const ParcelOrderModal: React.FC = () => {
         });
 
         const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-        const cgst = taxable * 0.025;
-        const sgst = taxable * 0.025;
+        const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+        const cgst = actualTax / 2;
+        const sgst = actualTax / 2;
 
         await printerService.printInvoice({
           type: 'invoice',
@@ -253,7 +257,7 @@ const ParcelOrderModal: React.FC = () => {
               location: currentStore?.location || '',
               ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
               ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              phone: currentStore?.phone || '',
+              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
               address: currentStore?.location || '',
             },
             customer: {
@@ -413,6 +417,7 @@ const ParcelOrderModal: React.FC = () => {
                   <div
                     key={item.id}
                     className="item-card"
+                    data-tooltip={item.name}
                     onClick={() => addItemToOrder(item)}
                   >
                     <div className="item-name">{item.name}</div>
@@ -468,10 +473,12 @@ const ParcelOrderModal: React.FC = () => {
                       <span>Subtotal</span>
                       <span>{formatCurrency(calculateTotal())}</span>
                     </div>
-                    <div className="total-row">
-                      <span>Tax</span>
-                      <span>{formatCurrency(calculateTax())}</span>
-                    </div>
+                    {taxEnabled && (
+                      <div className="total-row">
+                        <span>Tax</span>
+                        <span>{formatCurrency(calculateTax())}</span>
+                      </div>
+                    )}
                     <div className="total-row final">
                       <span>Total</span>
                       <span>{formatCurrency(total)}</span>

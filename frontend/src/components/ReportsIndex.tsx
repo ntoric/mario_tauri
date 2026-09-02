@@ -50,21 +50,21 @@ const ReportsIndex: React.FC = () => {
       description: 'Combined sales, revenue, and expense analysis with profit tracking',
       icon: <DollarSign size={32} />,
       path: '/reports/revenue',
-      color: '#ed8936',
+      color: '#f5a623',
     },
     {
       title: 'Item Profit Report',
       description: 'Per-item preparation costs, profit margins, and expense breakdown',
       icon: <PieChart size={32} />,
       path: '/reports/item-profit',
-      color: '#4299e1',
+      color: '#2196f3',
     },
     {
       title: 'Expense Reports',
       description: 'Analyze business expenses by category and date',
       icon: <TrendingUp size={32} />,
       path: '/expense-reports',
-      color: '#48bb78',
+      color: '#2ba54a',
     },
   ];
 

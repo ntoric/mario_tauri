@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Receipt, Download, Loader2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
-import { useAuthStore } from '../stores';
+import { useAuthStore, useDataStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import type { RevenueReport, Bill, Expense } from '../types';
 import { Button } from './ui/Button';
 
 const RevenueReport: React.FC = () => {
   const { currentStoreId } = useAuthStore();
+  const { stores } = useDataStore();
+  const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
   const [periodFilter, setPeriodFilter] = useState<string>('today');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
@@ -193,7 +197,7 @@ const RevenueReport: React.FC = () => {
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(245, 101, 101, 0.15)', color: 'var(--danger)' }}>
+              <div className="card-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
                 <Receipt size={24} />
               </div>
               <div className="card-content">
@@ -202,7 +206,7 @@ const RevenueReport: React.FC = () => {
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: report.netProfit >= 0 ? 'rgba(72, 187, 120, 0.15)' : 'rgba(245, 101, 101, 0.15)', color: getProfitColor(report.netProfit) }}>
+              <div className="card-icon" style={{ background: report.netProfit >= 0 ? 'rgba(43,165,74, 0.15)' : 'rgba(229,57,53, 0.15)', color: getProfitColor(report.netProfit) }}>
                 {report.netProfit >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
               </div>
               <div className="card-content">
@@ -235,7 +239,7 @@ const RevenueReport: React.FC = () => {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{ background: 'rgba(245, 101, 101, 0.15)', color: 'var(--danger)' }}>
+              <div className="stat-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
                 <Receipt size={24} />
               </div>
               <div className="stat-content">
@@ -244,7 +248,7 @@ const RevenueReport: React.FC = () => {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{ background: 'rgba(72, 187, 120, 0.15)', color: 'var(--success)' }}>
+              <div className="stat-icon" style={{ background: 'rgba(43,165,74, 0.15)', color: 'var(--success)' }}>
                 <DollarSign size={24} />
               </div>
               <div className="stat-content">
@@ -366,7 +370,7 @@ const RevenueReport: React.FC = () => {
                     <th>Item</th>
                     <th>Qty</th>
                     <th>Rate</th>
-                    <th>Tax</th>
+                    {taxEnabled && <th>Tax</th>}
                     <th className="amount">Amount</th>
                   </tr>
                 </thead>
@@ -377,13 +381,13 @@ const RevenueReport: React.FC = () => {
                         <td>{oi.item.name}</td>
                         <td>{oi.quantity}</td>
                         <td>{formatCurrency(oi.item.price)}</td>
-                        <td>{oi.item.taxPercent || 0}%</td>
+                        {taxEnabled && <td>{oi.item.taxPercent || 0}%</td>}
                         <td className="amount">{formatCurrency(oi.item.price * oi.quantity)}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>No items available</td>
+                      <td colSpan={taxEnabled ? 5 : 4} style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>No items available</td>
                     </tr>
                   )}
                 </tbody>
@@ -394,10 +398,12 @@ const RevenueReport: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(selectedBill.subtotal)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '240px', fontSize: '0.95rem', color: 'var(--gray-700)' }}>
-                  <span>Tax</span>
-                  <span>{formatCurrency(selectedBill.taxTotal)}</span>
-                </div>
+                {taxEnabled && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '240px', fontSize: '0.95rem', color: 'var(--gray-700)' }}>
+                    <span>Tax</span>
+                    <span>{formatCurrency(selectedBill.taxTotal)}</span>
+                  </div>
+                )}
                 {selectedBill.discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', width: '240px', fontSize: '0.95rem', color: 'var(--danger)' }}>
                     <span>Discount</span>

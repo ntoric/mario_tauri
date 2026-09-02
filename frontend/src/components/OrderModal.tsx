@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Plus, Minus, Trash2, Receipt, Search, Printer, ChevronDown } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -12,6 +13,7 @@ const OrderModal: React.FC = () => {
   const { user, currentStoreId } = useAuthStore();
   const { orderModal, closeOrderModal } = useUIStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -131,6 +133,7 @@ const OrderModal: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -197,7 +200,7 @@ const OrderModal: React.FC = () => {
                   qty: oi.quantity,
                   unit: 'PCS',
                   rate: oi.item.price,
-                  tax_percent: oi.item.taxPercent || 0,
+                  tax_percent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
                   amount: oi.item.price * oi.quantity,
                 })),
                 notes: '',
@@ -290,7 +293,7 @@ const OrderModal: React.FC = () => {
       // Print invoice via printer service
       const printItems = orderItems.map(oi => {
         const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
+        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
@@ -303,8 +306,9 @@ const OrderModal: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const cgst = taxable * 0.025; // Assuming 5% total tax split as 2.5% CGST + 2.5% SGST
-      const sgst = taxable * 0.025;
+      const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+      const cgst = actualTax / 2;
+      const sgst = actualTax / 2;
 
       try {
         await printerService.printInvoice({
@@ -323,7 +327,7 @@ const OrderModal: React.FC = () => {
               location: currentStore?.location || '',
               ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
               ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              phone: currentStore?.phone || '',
+              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
               address: currentStore?.location || '',
             },
             customer: {
@@ -520,6 +524,7 @@ const OrderModal: React.FC = () => {
                       <div
                         key={item.id}
                         className="item-card"
+                        data-tooltip={item.name}
                         onClick={() => addItemToOrder(item)}
                       >
                         <div className="item-name">{item.name}</div>
@@ -590,10 +595,12 @@ const OrderModal: React.FC = () => {
                       <span>Subtotal</span>
                       <span>{formatCurrency(calculateTotal())}</span>
                     </div>
-                    <div className="total-row">
-                      <span>Tax</span>
-                      <span>{formatCurrency(calculateTax())}</span>
-                    </div>
+                    {taxEnabled && (
+                      <div className="total-row">
+                        <span>Tax</span>
+                        <span>{formatCurrency(calculateTax())}</span>
+                      </div>
+                    )}
                     <div className="total-row final">
                       <span>Total</span>
                       <span>{formatCurrency(total)}</span>

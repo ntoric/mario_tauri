@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Printer, Check } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -10,6 +11,7 @@ const BillModal: React.FC = () => {
   const { stores, orders, createBill, completeOrder } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
   const { billModal, closeBillModal } = useUIStore();
   const [isPrinting, setIsPrinting] = useState(false);
   const [printError, setPrintError] = useState('');
@@ -31,10 +33,10 @@ const BillModal: React.FC = () => {
 
   const calculateTotals = () => {
     const subtotal = order.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
-    const tax = order.items.reduce((sum: number, oi: any) => {
+    const tax = taxEnabled ? order.items.reduce((sum: number, oi: any) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
-    }, 0);
+    }, 0) : 0;
     const total = subtotal + tax;
     return { subtotal, tax, total };
   };
@@ -99,7 +101,7 @@ const BillModal: React.FC = () => {
       // Print invoice via printer service
       const printItems = order.items.map((oi: any) => {
         const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
+        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
@@ -112,8 +114,9 @@ const BillModal: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const cgst = taxable * 0.025;
-      const sgst = taxable * 0.025;
+      const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
+      const cgst = actualTax / 2;
+      const sgst = actualTax / 2;
 
       try {
         await printerService.printInvoice({
@@ -132,7 +135,7 @@ const BillModal: React.FC = () => {
               location: currentStore?.location || '',
               ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
               ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              phone: currentStore?.phone || '',
+              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
               address: currentStore?.location || '',
             },
             customer: {
@@ -247,10 +250,12 @@ const BillModal: React.FC = () => {
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
-              <div className="bill-total-row">
-                <span>Tax</span>
-                <span>{formatCurrency(tax)}</span>
-              </div>
+              {taxEnabled && (
+                <div className="bill-total-row">
+                  <span>Tax</span>
+                  <span>{formatCurrency(tax)}</span>
+                </div>
+              )}
               <div className="bill-total-row grand-total">
                 <span>TOTAL</span>
                 <span>{formatCurrency(total)}</span>

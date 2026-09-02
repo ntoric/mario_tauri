@@ -37,7 +37,7 @@ const StoreSwitcher: React.FC = () => {
                   padding: '1rem',
                   border: '1px solid var(--gray-200)',
                   borderRadius: 'var(--radius)',
-                  background: store.id === currentStoreId ? 'rgba(255, 107, 53, 0.1)' : 'white',
+                  background: store.id === currentStoreId ? 'rgba(245,130,32, 0.1)' : 'white',
                   borderColor: store.id === currentStoreId ? 'var(--primary)' : undefined,
                   cursor: 'pointer',
                   textAlign: 'left',

@@ -27,6 +27,8 @@ type Store struct {
 	RemoteBillingEnabled bool      `json:"remoteBillingEnabled"`
 	LogoURL              string    `json:"logoUrl"`
 	ThemeColor           string    `json:"themeColor"`
+	TaxEnabled           bool      `json:"taxEnabled"`
+	DefaultTaxPercent    float64   `json:"defaultTaxPercent"`
 	IsActive             bool      `json:"isActive"`
 	CreatedAt            time.Time `json:"createdAt"`
 }
@@ -114,6 +116,7 @@ type Table struct {
 	Seats    int      `json:"seats"`
 	Position Position `json:"position"`
 	IsActive bool     `json:"isActive"`
+	Section  *string  `json:"section,omitempty"`
 }
 
 // NestedItem represents the minimal item structure attached to order items

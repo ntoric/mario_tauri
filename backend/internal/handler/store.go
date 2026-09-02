@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"cafe-backend/internal/middleware"
@@ -80,10 +82,33 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.Store
-	if err := h.readJSON(r, &req); err != nil {
+	// Read the body once into a buffer so we can decode it twice: once into
+	// the typed Store struct and once into a raw map to detect whether
+	// taxEnabled was explicitly provided. Go's bool zero value is false, so
+	// we cannot distinguish "absent" from "explicitly false" after a single
+	// unmarshal. Default to enabled (true) only when the client did not send
+	// the field, preserving backward-compatible behaviour for older clients
+	// that predate the tax toggle.
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
+	}
+	r.Body.Close()
+
+	var req models.Store
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	var raw map[string]interface{}
+	if json.Unmarshal(bodyBytes, &raw) == nil {
+		if _, exists := raw["taxEnabled"]; !exists {
+			req.TaxEnabled = true
+		}
+	} else {
+		req.TaxEnabled = true
 	}
 
 	req.ID = uuid.New().String()
@@ -93,7 +118,7 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 	req.IsActive = true
 
 	// Replicating database write and business_owner auto-assignment
-	err := h.Repo.Store.Create(r.Context(), req)
+	err = h.Repo.Store.Create(r.Context(), req)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -178,6 +203,8 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 		"remoteBillingEnabled": "remote_billing_enabled",
 		"isActive":          "is_active",
 		"themeColor":        "theme_color",
+		"taxEnabled":        "tax_enabled",
+		"defaultTaxPercent": "default_tax_percent",
 	}
 
 	for jsonKey, sqlCol := range keyMapping {

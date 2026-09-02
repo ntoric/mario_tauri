@@ -1,29 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, ChevronDown, CalendarDays, Ban } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { ConfirmDialog } from './ConfirmDialog';
+import Pagination from './ui/Pagination';
 import type { Order } from '../types';
+
+const PAGE_SIZE = 15;
 
 const History: React.FC = () => {
   const { orders, bills, stores, fetchOrders, fetchBills, cancelOrder } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId) || stores[0];
+  const taxEnabled = isTaxEnabled(currentStore);
   const { setHeaderContent } = usePageHeader();
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [viewingBill, setViewingBill] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isPrinting, setIsPrinting] = useState<string | null>(null);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
@@ -38,7 +43,7 @@ const History: React.FC = () => {
       
       const printItems = order.items.map(oi => {
         const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
+        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
@@ -51,10 +56,11 @@ const History: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const cgst = taxable * 0.025; // Assuming 5% total tax split as 2.5% CGST + 2.5% SGST
-      const sgst = taxable * 0.025;
+      const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+      const cgst = actualTax / 2;
+      const sgst = actualTax / 2;
       const subtotal = associatedBill?.subtotal || taxable;
-      const taxTotal = associatedBill?.taxTotal || (cgst + sgst);
+      const taxTotal = associatedBill?.taxTotal ?? actualTax;
       const total = associatedBill?.total || (subtotal + taxTotal);
       const paymentMethod = associatedBill?.paymentMethod || order.paymentMethod || 'cash';
 
@@ -74,7 +80,7 @@ const History: React.FC = () => {
             location: currentStore?.location || '',
             ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
             ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-            phone: currentStore?.phone || '',
+            ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
             address: currentStore?.location || '',
           },
           customer: {
@@ -174,6 +180,11 @@ const History: React.FC = () => {
     return matchesSearch && matchesStatus && matchesDate;
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredOrders.slice(start, start + PAGE_SIZE);
+  }, [filteredOrders, currentPage]);
+
   // Set page header
   useEffect(() => {
     setHeaderContent({
@@ -262,10 +273,10 @@ const History: React.FC = () => {
             type="text"
             placeholder="Search by table or item..."
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
           />
         </div>
-        <select className="history-filter-select" value={periodFilter} onChange={e => setPeriodFilter(e.target.value)}>
+        <select className="history-filter-select" value={periodFilter} onChange={e => { setPeriodFilter(e.target.value); setCurrentPage(1); }}>
           <option value="all">All Time</option>
           <option value="today">Today</option>
           <option value="yesterday">Yesterday</option>
@@ -292,7 +303,7 @@ const History: React.FC = () => {
             />
           </div>
         )}
-        <select className="history-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+        <select className="history-filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
           <option value="all">All Status</option>
           <option value="completed">Completed</option>
           <option value="active">Active</option>
@@ -307,104 +318,92 @@ const History: React.FC = () => {
           <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Try adjusting your search or filters</p>
         </div>
       ) : (
-        <div className="order-list">
-          {filteredOrders.map(order => (
-            <div key={order.id} className={`order-panel ${order.status} ${expandedOrderId === order.id ? 'expanded' : ''}`}>
-              <div
-                className="order-panel-top"
-                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="order-panel-info">
-                  {isParcel(order) ? (
-                    <span className="order-panel-title">
-                      <Package size={16} />
-                      Parcel
-                      {order.customerName && (
-                        <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem', fontWeight: 400 }}>
-                          ({order.customerName})
+        <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="table-scroll-container">
+            <table className="items-table">
+              <thead>
+                <tr>
+                  <th>Order #</th>
+                  <th>Type</th>
+                  <th>Table/Customer</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedOrders.map(order => (
+                  <tr key={order.id}>
+                    <td><strong>#{order.id.slice(-6).toUpperCase()}</strong></td>
+                    <td>
+                      {isParcel(order) ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Package size={13} /> Parcel
                         </span>
+                      ) : (
+                        'Dine-in'
                       )}
-                    </span>
-                  ) : (
-                    <span className="order-panel-title">Table {order.tableNumber}</span>
-                  )}
-                  <span className={getStatusBadgeClass(order.status)}>
-                    {order.status}
-                  </span>
-                  <span className="order-panel-item-count">
-                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="order-panel-meta">
-                  <span>#{order.id.slice(-6).toUpperCase()}</span>
-                  <span>{formatDate(order.createdAt)}</span>
-                  <span className="order-panel-total-inline">
-                    {formatCurrency(order.totalAmount)}
-                  </span>
-                  <ChevronDown
-                    size={18}
-                    className="order-panel-chevron"
-                  />
-                </div>
-              </div>
-
-              {expandedOrderId === order.id && (
-                <>
-                  <div className="order-panel-body">
-                    {order.items.map((oi, idx) => (
-                      <div key={idx} className="order-panel-item">
-                        <span>
-                          <span className="order-panel-item-qty">{oi.quantity}x</span>
-                          {oi.item.name}
-                        </span>
-                        <span className="order-panel-item-price">{formatCurrency(oi.quantity * oi.item.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="order-panel-footer">
-                    <div className="order-panel-total">
-                      <span className="order-panel-total-label">Total</span>
-                      <span className="order-panel-total-value">{formatCurrency(order.totalAmount)}</span>
-                    </div>
-                    <div className="order-panel-actions">
-                      <button className="btn btn-primary btn-sm" onClick={() => setViewingOrder(order)}>
-                        <Eye size={16} />
-                        View Details
+                    </td>
+                    <td>
+                      {isParcel(order)
+                        ? (order.customerName || 'Walk-in')
+                        : `Table ${order.tableNumber}`}
+                    </td>
+                    <td>{order.items.length}</td>
+                    <td>{formatCurrency((order.totalAmount || 0) + (order.taxAmount || 0))}</td>
+                    <td>
+                      <span className={getStatusBadgeClass(order.status)}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{formatDate(order.createdAt)}</td>
+                    <td style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                      <button
+                        className="action-btn"
+                        onClick={() => setViewingOrder(order)}
+                        title="View Details"
+                      >
+                        <Eye size={14} />
                       </button>
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="action-btn"
                         onClick={() => setViewingBill(order)}
+                        title="View Bill"
                       >
                         <Receipt size={14} />
-                        View Bill
                       </button>
                       <button
-                        className="btn btn-secondary btn-sm"
+                        className="action-btn"
                         onClick={() => handlePrintBill(order)}
                         disabled={isPrinting === order.id}
                         title="Print Bill"
                       >
                         <Printer size={14} />
-                        {isPrinting === order.id ? 'Printing...' : 'Print Bill'}
                       </button>
                       {order.status === 'completed' && (
                         <button
-                          className="btn btn-danger btn-sm"
+                          className="action-btn delete"
                           onClick={() => setCancelTarget(order)}
                           title="Cancel Order"
                         >
                           <Ban size={14} />
-                          Cancel Order
                         </button>
                       )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredOrders.length / PAGE_SIZE)}
+            totalItems={filteredOrders.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -444,10 +443,12 @@ const History: React.FC = () => {
                     <span>Subtotal</span>
                     <span>{formatCurrency(viewingOrder.totalAmount)}</span>
                   </div>
-                  <div className="total-row">
-                    <span>Tax</span>
-                    <span>{formatCurrency(viewingOrder.taxAmount || 0)}</span>
-                  </div>
+                  {taxEnabled && (
+                    <div className="total-row">
+                      <span>Tax</span>
+                      <span>{formatCurrency(viewingOrder.taxAmount || 0)}</span>
+                    </div>
+                  )}
                   <div className="total-row final">
                     <span>Total</span>
                     <span>{formatCurrency((viewingOrder.totalAmount || 0) + (viewingOrder.taxAmount || 0))}</span>
@@ -535,10 +536,12 @@ const History: React.FC = () => {
                     <span>Subtotal</span>
                     <span>{formatCurrency(viewingBill.totalAmount)}</span>
                   </div>
-                  <div className="bill-total-row">
-                    <span>Tax</span>
-                    <span>{formatCurrency(viewingBill.taxAmount || 0)}</span>
-                  </div>
+                  {taxEnabled && (
+                    <div className="bill-total-row">
+                      <span>Tax</span>
+                      <span>{formatCurrency(viewingBill.taxAmount || 0)}</span>
+                    </div>
+                  )}
                   <div className="bill-total-row grand-total">
                     <span>TOTAL</span>
                     <span>{formatCurrency((viewingBill.totalAmount || 0) + (viewingBill.taxAmount || 0))}</span>

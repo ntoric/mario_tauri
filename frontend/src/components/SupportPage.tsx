@@ -74,7 +74,7 @@ const SupportPage: React.FC = () => {
           width: '80px',
           height: '80px',
           borderRadius: '16px',
-          background: 'rgba(245, 101, 101, 0.1)',
+          background: 'rgba(229,57,53, 0.1)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

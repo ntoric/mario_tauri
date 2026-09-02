@@ -29,6 +29,8 @@ export interface Store {
   remoteBillingEnabled?: boolean;
   logoUrl?: string;
   themeColor?: string;
+  taxEnabled?: boolean;
+  defaultTaxPercent?: number;
   isActive: boolean;
   createdAt?: string;
 }
@@ -93,6 +95,7 @@ export interface Table {
   seats: number;
   position: { x: number; y: number };
   isActive: boolean;
+  section?: string;
 }
 
 export interface OrderItem {

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Layers, Edit2, Check, Filter, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
+import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
@@ -14,10 +15,11 @@ import OrderTimer from './OrderTimer';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
-  const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue } = useDataStore();
+  const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, renameTableSection, deleteTableSection } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
   const { setHeaderContent } = usePageHeader();
   const [viewMode, setViewMode] = useState<'layout' | 'list'>('layout');
 
@@ -120,7 +122,7 @@ const Tables: React.FC = () => {
 
             const printItems = order.items.map((oi: any) => {
               const itemTotal = oi.item.price * oi.quantity;
-              const taxPercent = oi.item.taxPercent || 0;
+              const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
               return {
                 name: oi.item.name,
                 hsn: oi.item.description || '',
@@ -133,8 +135,9 @@ const Tables: React.FC = () => {
             });
 
             const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-            const cgst = taxable * 0.025;
-            const sgst = taxable * 0.025;
+            const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
+            const cgst = actualTax / 2;
+            const sgst = actualTax / 2;
 
             await printerService.printInvoice({
               type: 'invoice',
@@ -152,7 +155,7 @@ const Tables: React.FC = () => {
                   location: currentStore?.location || '',
                   ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
                   ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-                  phone: currentStore?.phone || '',
+                  ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
                   address: currentStore?.location || '',
                 },
                 customer: {
@@ -201,10 +204,19 @@ const Tables: React.FC = () => {
   }, [currentStoreId, currentStore?.remoteBillingEnabled, currentStore, fetchBillQueue, fetchOrders]);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newTable, setNewTable] = useState({ number: '', seats: 4 });
+  const [newTable, setNewTable] = useState({ number: '', seats: 4, section: '' });
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
+  const [activeSection, setActiveSection] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'vacant' | 'occupied'>('all');
+  const [showSectionsModal, setShowSectionsModal] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editingSectionValue, setEditingSectionValue] = useState('');
+  const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
+  const [sectionLoading, setSectionLoading] = useState(false);
   
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
@@ -332,10 +344,10 @@ const Tables: React.FC = () => {
     if (!activeOrder) return;
 
     const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
-    const tax = activeOrder.items.reduce((sum: number, oi: any) => {
+    const tax = taxEnabled ? activeOrder.items.reduce((sum: number, oi: any) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
-    }, 0);
+    }, 0) : 0;
     const total = subtotal + tax;
     const invoiceNo = `INV-${Date.now()}`;
 
@@ -358,7 +370,7 @@ const Tables: React.FC = () => {
       // Print invoice via printer service
       const printItems = activeOrder.items.map((oi: any) => {
         const itemTotal = oi.item.price * oi.quantity;
-        const taxPercent = oi.item.taxPercent || 0;
+        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
@@ -371,8 +383,9 @@ const Tables: React.FC = () => {
       });
 
       const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const cgst = taxable * 0.025;
-      const sgst = taxable * 0.025;
+      const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
+      const cgst = actualTax / 2;
+      const sgst = actualTax / 2;
 
       try {
         await printerService.printInvoice({
@@ -391,7 +404,7 @@ const Tables: React.FC = () => {
               location: currentStore?.location || '',
               ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
               ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              phone: currentStore?.phone || '',
+              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
               address: currentStore?.location || '',
             },
             customer: {
@@ -483,9 +496,10 @@ const Tables: React.FC = () => {
         number: parseInt(newTable.number),
         seats: newTable.seats,
         position: { x: 0, y: 0 },
+        ...(newTable.section ? { section: newTable.section } : {}),
       });
       setShowAddModal(false);
-      setNewTable({ number: '', seats: 4 });
+      setNewTable({ number: '', seats: 4, section: '' });
     } finally {
       setIsAddingTable(false);
     }
@@ -507,11 +521,77 @@ const Tables: React.FC = () => {
     }
   };
 
+  // --- Section management ---
+  const handleAddSection = async () => {
+    const name = newSectionName.trim();
+    if (!name) return;
+    // Adding a section is implicit: tables created with this section will create it.
+    // We just close the input and reset. The section tab will appear once a table uses it.
+    setNewSectionName('');
+    // No backend call needed — sections are derived from tables.
+  };
+
+  const handleRenameSection = async (oldName: string) => {
+    const newName = editingSectionValue.trim();
+    if (!newName || newName === oldName) {
+      setEditingSection(null);
+      return;
+    }
+    setSectionLoading(true);
+    try {
+      // oldName "" means the default (NULL) section — but we display "Ground Floor".
+      // The backend treats "" as NULL. We need to send the actual stored value.
+      const actualOldName = oldName === 'Ground Floor' ? '' : oldName;
+      await renameTableSection(actualOldName, newName);
+      setEditingSection(null);
+      setEditingSectionValue('');
+      // If the active section was the renamed one, switch to the new name
+      if (activeSection === oldName) setActiveSection(newName);
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
+  const handleDeleteSection = async () => {
+    if (!sectionToDelete) return;
+    const name = sectionToDelete;
+    setSectionToDelete(null);
+    setSectionLoading(true);
+    try {
+      const actualName = name === 'Ground Floor' ? '' : name;
+      await deleteTableSection(actualName);
+      if (activeSection === name) setActiveSection('all');
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
   const billDialogOrder = billDialogTable ? getActiveOrderByTable(billDialogTable.id) : null;
-  const billDialogTotal = billDialogOrder ? 
+  const billDialogTotal = billDialogOrder ?
     billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) +
-    billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0)
+    (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
     : 0;
+
+  // Derive sections from tables (default to "Ground Floor" when unset)
+  const sections = React.useMemo(() => {
+    const set = new Set<string>();
+    tables.forEach(t => set.add(t.section || 'Ground Floor'));
+    return Array.from(set);
+  }, [tables]);
+
+  const filteredTables = React.useMemo(() => {
+    return tables
+      .filter(t => activeSection === 'all' || (t.section || 'Ground Floor') === activeSection)
+      .filter(t => {
+        if (statusFilter === 'all') return true;
+        const occupied = !!getActiveOrderByTable(t.id);
+        return statusFilter === 'occupied' ? occupied : !occupied;
+      })
+      .sort((a, b) => a.number - b.number);
+  }, [tables, activeSection, statusFilter, getActiveOrderByTable]);
+
+  const occupiedCount = tables.filter(t => getActiveOrderByTable(t.id)).length;
+  const vacantCount = tables.length - occupiedCount;
 
   return (
     <>
@@ -529,8 +609,76 @@ const Tables: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="tables-layout-grid compact">
-                {tables.sort((a, b) => a.number - b.number).map((table) => {
+              <>
+                {/* Section tabs (floor/section switcher) + status filter dropdown */}
+                <div className="tables-section-tabs">
+                  <button
+                    className={`tables-section-tab ${activeSection === 'all' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('all')}
+                  >
+                    All Tables <span className="tab-count">{tables.length}</span>
+                  </button>
+                  {sections.map(sec => (
+                    <button
+                      key={sec}
+                      className={`tables-section-tab ${activeSection === sec ? 'active' : ''}`}
+                      onClick={() => setActiveSection(sec)}
+                    >
+                      {sec} <span className="tab-count">{tables.filter(t => (t.section || 'Ground Floor') === sec).length}</span>
+                    </button>
+                  ))}
+
+                  {/* Status filter dropdown */}
+                  <div className="status-filter-dropdown">
+                    <button
+                      className={`tables-section-tab status-filter-trigger ${statusFilter !== 'all' ? 'active' : ''}`}
+                      onClick={() => setShowStatusDropdown(s => !s)}
+                      title="Filter by status"
+                    >
+                      <Filter size={13} />
+                      {statusFilter === 'all' ? 'All Status' : statusFilter === 'vacant' ? `Vacant (${vacantCount})` : `Occupied (${occupiedCount})`}
+                      <ChevronDown size={13} />
+                    </button>
+                    {showStatusDropdown && (
+                      <>
+                        <div className="status-filter-overlay" onClick={() => setShowStatusDropdown(false)} />
+                        <div className="status-filter-menu">
+                          <button
+                            className={`status-filter-option ${statusFilter === 'all' ? 'active' : ''}`}
+                            onClick={() => { setStatusFilter('all'); setShowStatusDropdown(false); }}
+                          >
+                            All Tables <span className="tab-count">{tables.length}</span>
+                          </button>
+                          <button
+                            className={`status-filter-option ${statusFilter === 'vacant' ? 'active' : ''}`}
+                            onClick={() => { setStatusFilter('vacant'); setShowStatusDropdown(false); }}
+                          >
+                            Vacant <span className="tab-count">{vacantCount}</span>
+                          </button>
+                          <button
+                            className={`status-filter-option ${statusFilter === 'occupied' ? 'active' : ''}`}
+                            onClick={() => { setStatusFilter('occupied'); setShowStatusDropdown(false); }}
+                          >
+                            Occupied <span className="tab-count">{occupiedCount}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {isAdmin && (
+                    <button
+                      className="tables-section-tab manage-sections-btn"
+                      onClick={() => setShowSectionsModal(true)}
+                      title="Manage sections"
+                    >
+                      <Layers size={14} /> Manage
+                    </button>
+                  )}
+                </div>
+
+                <div className="tables-layout-grid compact">
+                {filteredTables.map((table) => {
                   const activeOrder = getActiveOrderByTable(table.id);
                   return (
                     <div
@@ -590,18 +738,18 @@ const Tables: React.FC = () => {
                           </button>
                         </>
                       )}
-                      <div className="table-layout-number">{table.number}</div>
-                      <div className="table-layout-seats">{table.seats}s</div>
-                      <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
-                        {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
-                      </div>
                       {activeOrder && (
                         <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
                       )}
+                      <div className="table-layout-number">{table.number}</div>
+                      <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
+                        {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
+                      </div>
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              </>
             )}
           </div>
         ) : (
@@ -618,7 +766,7 @@ const Tables: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {tables.sort((a, b) => a.number - b.number).map(table => {
+                  {filteredTables.map(table => {
                     const activeOrder = getActiveOrderByTable(table.id);
                     return (
                       <tr
@@ -661,7 +809,7 @@ const Tables: React.FC = () => {
                               <>
                                 <button
                                   className="action-btn"
-                                  style={{ background: 'rgba(255, 107, 53, 0.1)', color: 'var(--primary)' }}
+                                  style={{ background: 'rgba(245,130,32, 0.1)', color: 'var(--primary)' }}
                                   onClick={(e) => handleBillClick(e as any, table)}
                                   title="Print Bill"
                                 >
@@ -669,7 +817,7 @@ const Tables: React.FC = () => {
                                 </button>
                                 <button 
                                   className="action-btn" 
-                                  style={{ background: 'rgba(66, 153, 225, 0.1)', color: 'var(--info)' }}
+                                  style={{ background: 'rgba(33,150,243, 0.1)', color: 'var(--info)' }}
                                   onClick={(e) => handleChangeTableClick(e as any, table)}
                                   title="Change Table"
                                 >
@@ -741,6 +889,21 @@ const Tables: React.FC = () => {
                       required
                     />
                   </div>
+                </div>
+                <div className="form-group">
+                  <label>Section / Floor (optional)</label>
+                  <input
+                    type="text"
+                    value={newTable.section}
+                    onChange={e => setNewTable({ ...newTable, section: e.target.value })}
+                    placeholder="e.g., Ground Floor"
+                    list="table-sections"
+                  />
+                  <datalist id="table-sections">
+                    {sections.map(sec => (
+                      <option key={sec} value={sec} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
               <div className="modal-footer">
@@ -896,7 +1059,7 @@ const Tables: React.FC = () => {
               <div style={{ 
                 width: '64px', 
                 height: '64px', 
-                background: 'rgba(66, 153, 225, 0.1)', 
+                background: 'rgba(33,150,243, 0.1)', 
                 borderRadius: '50%', 
                 display: 'flex', 
                 alignItems: 'center', 
@@ -925,6 +1088,162 @@ const Tables: React.FC = () => {
       )}
 
       <BillModal />
+
+      {/* Manage Sections Modal */}
+      {showSectionsModal && (
+        <div className="modal-overlay" onClick={() => setShowSectionsModal(false)}>
+          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Manage Sections</h2>
+              <button className="close-btn" onClick={() => setShowSectionsModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginBottom: '0.75rem' }}>
+                Sections are created automatically when you assign a table to them. Rename or delete sections below. Deleting a section moves its tables back to the default.
+              </p>
+
+              {/* Add new section */}
+              <div className="form-group" style={{ marginBottom: '0.85rem' }}>
+                <label>Add New Section</label>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <input
+                    type="text"
+                    value={newSectionName}
+                    onChange={e => setNewSectionName(e.target.value)}
+                    placeholder="e.g., First Floor, Outdoor..."
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newSectionName.trim()) {
+                        setNewSectionName('');
+                        // Open the Add Table modal pre-filled with this section
+                        setNewTable({ number: '', seats: 4, section: newSectionName.trim() });
+                        setShowSectionsModal(false);
+                        setShowAddModal(true);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!newSectionName.trim()}
+                    onClick={() => {
+                      if (!newSectionName.trim()) return;
+                      setNewTable({ number: '', seats: 4, section: newSectionName.trim() });
+                      setNewSectionName('');
+                      setShowSectionsModal(false);
+                      setShowAddModal(true);
+                    }}
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                </div>
+                <small style={{ color: 'var(--gray-400)', fontSize: '0.7rem', marginTop: '0.3rem', display: 'block' }}>
+                  You'll be prompted to add a table to this new section.
+                </small>
+              </div>
+
+              {/* Existing sections list */}
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: '0.4rem', display: 'block' }}>
+                Existing Sections
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {sections.map(sec => {
+                  const count = tables.filter(t => (t.section || 'Ground Floor') === sec).length;
+                  return (
+                    <div
+                      key={sec}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.5rem 0.65rem',
+                        background: 'var(--gray-100)',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--gray-200)',
+                      }}
+                    >
+                      {editingSection === sec ? (
+                        <div style={{ display: 'flex', gap: '0.3rem', flex: 1 }}>
+                          <input
+                            type="text"
+                            value={editingSectionValue}
+                            autoFocus
+                            onChange={e => setEditingSectionValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleRenameSection(sec);
+                              if (e.key === 'Escape') { setEditingSection(null); setEditingSectionValue(''); }
+                            }}
+                            style={{ flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                          />
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => handleRenameSection(sec)}
+                            disabled={sectionLoading || !editingSectionValue.trim()}
+                          >
+                            <Check size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Layers size={14} style={{ color: 'var(--primary)' }} />
+                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--dark)' }}>{sec}</span>
+                            <span className="badge" style={{ background: 'var(--gray-200)', color: 'var(--gray-600)' }}>
+                              {count} {count === 1 ? 'table' : 'tables'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.25rem' }}>
+                            <button
+                              className="btn btn-sm"
+                              style={{ padding: '0.25rem 0.45rem' }}
+                              onClick={() => { setEditingSection(sec); setEditingSectionValue(sec); }}
+                              title="Rename section"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }}
+                              onClick={() => setSectionToDelete(sec)}
+                              disabled={sectionLoading}
+                              title="Delete section"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {sections.length === 0 && (
+                  <div style={{ textAlign: 'center', color: 'var(--gray-400)', fontSize: '0.8rem', padding: '1rem' }}>
+                    No sections yet. Add one above.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowSectionsModal(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Section Confirmation */}
+      <ConfirmDialog
+        isOpen={!!sectionToDelete}
+        title="Delete Section"
+        message={`Delete the section "${sectionToDelete}"? Tables in this section will be moved back to the default section. The tables themselves will not be deleted.`}
+        confirmLabel="Delete Section"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={handleDeleteSection}
+        onCancel={() => setSectionToDelete(null)}
+      />
     </>
   );
 };

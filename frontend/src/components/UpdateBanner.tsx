@@ -114,7 +114,7 @@ const UpdateBanner: React.FC = () => {
       <style>{`
         .update-banner {
           background: #fff3e0;
-          border-bottom: 2px solid #ff6b35;
+          border-bottom: 2px solid #f58220;
           color: #1a1a1a;
           padding: 0.75rem 1rem;
           position: sticky;
@@ -138,7 +138,7 @@ const UpdateBanner: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #ff6b35;
+          background: #f58220;
           border-radius: 8px;
           color: white;
         }
@@ -166,7 +166,7 @@ const UpdateBanner: React.FC = () => {
           align-items: center;
           gap: 0.5rem;
           padding: 0.5rem 1rem;
-          background: #ff6b35;
+          background: #f58220;
           color: white;
           border: none;
           border-radius: 6px;
@@ -177,7 +177,7 @@ const UpdateBanner: React.FC = () => {
         }
 
         .update-banner-download:hover {
-          background: #e55a2b;
+          background: #e0731a;
           transform: translateY(-1px);
         }
 

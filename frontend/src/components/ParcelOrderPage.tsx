@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
+import { isTaxEnabled } from '../utils/tax';
 import type { OrderItem, Item } from '../types';
 
 const ParcelOrderPage: React.FC = () => {
@@ -19,6 +20,7 @@ const ParcelOrderPage: React.FC = () => {
   } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const taxEnabled = isTaxEnabled(currentStore);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -125,6 +127,7 @@ const ParcelOrderPage: React.FC = () => {
   };
 
   const calculateTax = () => {
+    if (!taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
       return sum + (oi.item.price * oi.quantity * taxPercent / 100);
@@ -142,14 +145,14 @@ const ParcelOrderPage: React.FC = () => {
         itemId: oi.itemId,
         quantity: oi.quantity,
         unitPrice: oi.item.price,
-        taxPercent: oi.item.taxPercent || 0,
+        taxPercent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
         notes: oi.notes || '',
         item: {
           id: oi.item.id,
           name: oi.item.name,
           price: oi.item.price,
           description: oi.item.description || '',
-          taxPercent: oi.item.taxPercent || 0,
+          taxPercent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
         },
       })),
       totalAmount,
@@ -236,7 +239,7 @@ const ParcelOrderPage: React.FC = () => {
                 qty: oi.quantity,
                 unit: 'PCS',
                 rate: oi.item.price,
-                tax_percent: oi.item.taxPercent || 0,
+                tax_percent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
                 amount: oi.item.price * oi.quantity,
               })),
               notes: '',
@@ -254,7 +257,7 @@ const ParcelOrderPage: React.FC = () => {
       try {
         const printItems = orderItems.map(oi => {
           const itemTotal = oi.item.price * oi.quantity;
-          const taxPercent = oi.item.taxPercent || 0;
+          const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
           return {
             name: oi.item.name,
             hsn: oi.item.description || '',
@@ -267,8 +270,9 @@ const ParcelOrderPage: React.FC = () => {
         });
 
         const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-        const cgst = taxable * 0.025;
-        const sgst = taxable * 0.025;
+        const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+        const cgst = actualTax / 2;
+        const sgst = actualTax / 2;
 
         await printerService.printInvoice({
           type: 'invoice',
@@ -286,7 +290,7 @@ const ParcelOrderPage: React.FC = () => {
               location: currentStore?.location || '',
               ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
               ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              phone: currentStore?.phone || '',
+              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
               address: currentStore?.location || '',
             },
             customer: {
@@ -340,71 +344,26 @@ const ParcelOrderPage: React.FC = () => {
   return (
     <div className="order-page">
       <div className="order-page-layout">
-        {/* Left Sidebar - Order Items + Customer Details */}
+        {/* Left Sidebar - Categories (Petpooja style) */}
         <div className="order-page-left">
-          <h3>Customer Details</h3>
-          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={e => setCustomerName(e.target.value)}
-              placeholder="e.g. John Doe"
-              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
-            />
+          <h3>Categories</h3>
+          <div className="order-categories-vertical">
+            <button
+              className={`category-btn-vertical ${selectedCategory === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedCategory('all')}
+            >
+              All Items
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
+                onClick={() => setSelectedCategory(cat.id)}
+              >
+                {cat.name}
+              </button>
+            ))}
           </div>
-          <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Mobile <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
-            <input
-              type="text"
-              value={customerMobile}
-              onChange={e => setCustomerMobile(e.target.value)}
-              placeholder="e.g. 9876543210"
-              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
-            />
-          </div>
-
-          <h3>Order Items ({orderItems.length})</h3>
-
-          {orderItems.length === 0 ? (
-            <div className="empty-order">
-              Click items to add
-            </div>
-          ) : (
-            <>
-              <div className="order-items-scrollable">
-                {orderItems.map(oi => (
-                  <div key={oi.itemId} className="order-item-compact">
-                    <div className="order-item-info">
-                      <div className="order-item-name">{oi.item.name}</div>
-                      <div className="order-item-price">{formatCurrency(oi.item.price)}</div>
-                    </div>
-                    <div className="order-item-actions">
-                      <button
-                        className="quantity-btn"
-                        onClick={() => updateQuantity(oi.itemId, -1)}
-                      >
-                        <Minus size={10} />
-                      </button>
-                      <span className="order-item-quantity">{oi.quantity}</span>
-                      <button
-                        className="quantity-btn"
-                        onClick={() => updateQuantity(oi.itemId, 1)}
-                      >
-                        <Plus size={10} />
-                      </button>
-                      <button
-                        className="remove-item-btn"
-                        onClick={() => removeItem(oi.itemId)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
         </div>
 
         {/* Main Area - Items Grid */}
@@ -433,6 +392,7 @@ const ParcelOrderPage: React.FC = () => {
               <div
                 key={item.id}
                 className="item-card"
+                data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
                 <div className="item-name">{item.name}</div>
@@ -442,26 +402,90 @@ const ParcelOrderPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Categories */}
+        {/* Right Sidebar - Customer + Cart (Petpooja style) */}
         <div className="order-page-right">
-          <h3>Categories</h3>
-          <div className="order-categories-vertical">
-            <button
-              className={`category-btn-vertical ${selectedCategory === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedCategory('all')}
-            >
-              All Items
-            </button>
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                {cat.name}
-              </button>
-            ))}
+          <h3>Parcel Order</h3>
+          <div className="form-group" style={{ marginBottom: '0.6rem' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              placeholder="e.g. John Doe"
+              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
+            />
           </div>
+          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Mobile <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
+            <input
+              type="text"
+              value={customerMobile}
+              onChange={e => setCustomerMobile(e.target.value)}
+              placeholder="e.g. 9876543210"
+              style={{ padding: '0.5rem', fontSize: '0.9rem' }}
+            />
+          </div>
+
+          <div className="order-page-left-header">
+            <h3>Cart ({orderItems.length})</h3>
+          </div>
+
+          {orderItems.length === 0 ? (
+            <div className="empty-order">
+              Click items to add
+            </div>
+          ) : (
+            <div className="order-items-scrollable">
+              {orderItems.map(oi => (
+                <div key={oi.itemId} className="order-item-compact">
+                  <div className="order-item-info">
+                    <div className="order-item-name">{oi.item.name}</div>
+                    <div className="order-item-price">{formatCurrency(oi.item.price)} x {oi.quantity}</div>
+                  </div>
+                  <div className="order-item-actions">
+                    <button
+                      className="quantity-btn"
+                      onClick={() => updateQuantity(oi.itemId, -1)}
+                    >
+                      <Minus size={10} />
+                    </button>
+                    <span className="order-item-quantity">{oi.quantity}</span>
+                    <button
+                      className="quantity-btn"
+                      onClick={() => updateQuantity(oi.itemId, 1)}
+                    >
+                      <Plus size={10} />
+                    </button>
+                    <button
+                      className="remove-item-btn"
+                      onClick={() => removeItem(oi.itemId)}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {orderItems.length > 0 && (
+            <div className="order-cart-summary">
+              <div className="cart-summary-row">
+                <span>Subtotal</span>
+                <span>{formatCurrency(calculateTotal())}</span>
+              </div>
+              {taxEnabled && (
+                <div className="cart-summary-row">
+                  <span>Tax</span>
+                  <span>{formatCurrency(calculateTax())}</span>
+                </div>
+              )}
+              <div className="cart-summary-row total">
+                <span>Total</span>
+                <span className="cart-amount">{formatCurrency(total)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -482,10 +506,12 @@ const ParcelOrderPage: React.FC = () => {
                   <span>Subtotal</span>
                   <span>{formatCurrency(calculateTotal())}</span>
                 </div>
-                <div className="breakdown-row">
-                  <span>Tax</span>
-                  <span>{formatCurrency(calculateTax())}</span>
-                </div>
+                {taxEnabled && (
+                  <div className="breakdown-row">
+                    <span>Tax</span>
+                    <span>{formatCurrency(calculateTax())}</span>
+                  </div>
+                )}
                 <div className="breakdown-row final">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>

@@ -282,6 +282,9 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS remote_billing_enabled BOOLEAN DEFAULT false`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50)`,
+		// Tax configuration — global enable/disable per store and a default tax percent
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS tax_enabled BOOLEAN DEFAULT true`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS default_tax_percent DECIMAL(5, 2) DEFAULT 0`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
@@ -289,6 +292,8 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
+		// Table sections — additive migration for existing deployments (NULL = default "Ground Floor")
+		`ALTER TABLE tables ADD COLUMN IF NOT EXISTS section VARCHAR(255) DEFAULT NULL`,
 		// Item preparation expenses — additive migration for existing deployments
 		`CREATE TABLE IF NOT EXISTS item_expenses (
 			id VARCHAR(255) PRIMARY KEY,

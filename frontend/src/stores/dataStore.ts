@@ -53,6 +53,8 @@ interface DataState {
   createTable: (table: Omit<Table, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Table, 'isActive'>>) => Promise<void>;
   updateTable: (id: string, table: Partial<Table>) => Promise<void>;
   deleteTable: (id: string) => Promise<void>;
+  renameTableSection: (oldName: string, newName: string) => Promise<void>;
+  deleteTableSection: (name: string) => Promise<void>;
   
   // Orders
   fetchOrders: () => Promise<void>;
@@ -350,6 +352,16 @@ export const useDataStore = create<DataState>((set, get) => ({
   deleteTable: async (id) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     await api.deleteTable(id);
+    await get().fetchTables();
+  },
+
+  renameTableSection: async (oldName, newName) => {
+    await api.renameTableSection(oldName, newName);
+    await get().fetchTables();
+  },
+
+  deleteTableSection: async (name) => {
+    await api.deleteTableSection(name);
     await get().fetchTables();
   },
 

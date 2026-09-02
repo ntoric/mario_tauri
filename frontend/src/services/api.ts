@@ -304,6 +304,20 @@ class ApiService {
     });
   }
 
+  // Table sections (bulk operations)
+  async renameTableSection(oldName: string, newName: string) {
+    return this.fetch('/tables/sections/rename', {
+      method: 'PUT',
+      body: JSON.stringify({ oldName, newName }),
+    });
+  }
+
+  async deleteTableSection(name: string) {
+    return this.fetch(`/tables/sections/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Orders
   async getOrders(storeId: string, status?: string) {
     let url = `/orders?storeId=${storeId}`;

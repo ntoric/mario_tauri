@@ -11,7 +11,7 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'default', name: 'Orange (Default)', primary: '#ff6b35', primaryDark: '#e55a2b', primaryLight: '#ff8c61' },
+  { id: 'default', name: 'Orange (Default)', primary: '#f58220', primaryDark: '#e0731a', primaryLight: '#f99b3f' },
   { id: 'blue', name: 'Blue', primary: '#3b82f6', primaryDark: '#2563eb', primaryLight: '#60a5fa' },
   { id: 'green', name: 'Green', primary: '#10b981', primaryDark: '#059669', primaryLight: '#34d399' },
   { id: 'purple', name: 'Purple', primary: '#8b5cf6', primaryDark: '#7c3aed', primaryLight: '#a78bfa' },

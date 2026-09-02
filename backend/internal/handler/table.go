@@ -127,3 +127,72 @@ func (h *Handler) DeleteTable(w http.ResponseWriter, r *http.Request) {
 
 	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Table deleted"})
 }
+
+// RenameSection handles PUT /api/tables/sections/rename
+// Body: { "oldName": "...", "newName": "..." }
+// Backward compatible: oldName "" targets the default (NULL) section.
+func (h *Handler) RenameSection(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		OldName string `json:"oldName"`
+		NewName string `json:"newName"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	if req.NewName == "" {
+		h.writeError(w, http.StatusBadRequest, "New section name is required")
+		return
+	}
+
+	storeID := claims.StoreID
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	if err := h.Repo.Table.RenameSection(r.Context(), storeID, req.OldName, req.NewName); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.broadcastTableStatusUpdate(storeID, "table_updated")
+
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Section renamed"})
+}
+
+// DeleteSection handles DELETE /api/tables/sections/:name
+// Moves all tables in the given section back to the default (NULL) section.
+func (h *Handler) DeleteSection(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	sectionName := chi.URLParam(r, "name")
+	if sectionName == "" {
+		h.writeError(w, http.StatusBadRequest, "Section name required")
+		return
+	}
+
+	storeID := claims.StoreID
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	if err := h.Repo.Table.DeleteSection(r.Context(), storeID, sectionName); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.broadcastTableStatusUpdate(storeID, "table_updated")
+
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Section deleted"})
+}
