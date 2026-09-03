@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Layers, Edit2, Check, Filter, ChevronDown, Keyboard } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, Keyboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -224,7 +224,7 @@ const Tables: React.FC = () => {
   // Keyboard navigation state
   const [kbFocusedIndex, setKbFocusedIndex] = useState<number>(-1);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  
+
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('upi');
@@ -775,25 +775,12 @@ const Tables: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* Section tabs (floor/section switcher) + status filter dropdown */}
+                {/* Status filter dropdown */}
                 <div className="tables-section-tabs">
-                  <button
-                    className={`tables-section-tab ${activeSection === 'all' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('all')}
-                  >
+                  <div className="tables-section-tab tables-count-tab">
                     All Tables <span className="tab-count">{tables.length}</span>
-                  </button>
-                  {sections.map(sec => (
-                    <button
-                      key={sec}
-                      className={`tables-section-tab ${activeSection === sec ? 'active' : ''}`}
-                      onClick={() => setActiveSection(sec)}
-                    >
-                      {sec} <span className="tab-count">{tables.filter(t => (t.section || 'Ground Floor') === sec).length}</span>
-                    </button>
-                  ))}
+                  </div>
 
-                  {/* Status filter dropdown */}
                   <div className="status-filter-dropdown">
                     <button
                       className={`tables-section-tab status-filter-trigger ${statusFilter !== 'all' ? 'active' : ''}`}
@@ -830,16 +817,6 @@ const Tables: React.FC = () => {
                       </>
                     )}
                   </div>
-
-                  {isAdmin && (
-                    <button
-                      className="tables-section-tab manage-sections-btn"
-                      onClick={() => setShowSectionsModal(true)}
-                      title="Manage sections"
-                    >
-                      <Layers size={14} /> Manage
-                    </button>
-                  )}
                 </div>
 
                 <div className="tables-layout-grid compact">
@@ -1055,21 +1032,6 @@ const Tables: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label>Section / Floor (optional)</label>
-                  <input
-                    type="text"
-                    value={newTable.section}
-                    onChange={e => setNewTable({ ...newTable, section: e.target.value })}
-                    placeholder="e.g., Ground Floor"
-                    list="table-sections"
-                  />
-                  <datalist id="table-sections">
-                    {sections.map(sec => (
-                      <option key={sec} value={sec} />
-                    ))}
-                  </datalist>
-                </div>
               </div>
               <div className="modal-footer">
                 <Button
@@ -1253,153 +1215,6 @@ const Tables: React.FC = () => {
       )}
 
       <BillModal />
-
-      {/* Manage Sections Modal */}
-      {showSectionsModal && (
-        <div className="modal-overlay" onClick={() => setShowSectionsModal(false)}>
-          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Manage Sections</h2>
-              <button className="close-btn" onClick={() => setShowSectionsModal(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginBottom: '0.75rem' }}>
-                Create sections here, then assign tables to them from the Add Table dialog. Rename or delete sections below. Deleting a section moves its tables back to the default.
-              </p>
-
-              {/* Add new section */}
-              <div className="form-group" style={{ marginBottom: '0.85rem' }}>
-                <label>Add New Section</label>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  <input
-                    type="text"
-                    value={newSectionName}
-                    onChange={e => setNewSectionName(e.target.value)}
-                    placeholder="e.g., First Floor, Outdoor..."
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && newSectionName.trim() && !sectionLoading) {
-                        e.preventDefault();
-                        void handleAddSection();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={!newSectionName.trim() || sectionLoading}
-                    onClick={() => void handleAddSection()}
-                  >
-                    {sectionLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
-                  </button>
-                </div>
-                <small style={{ color: 'var(--gray-400)', fontSize: '0.7rem', marginTop: '0.3rem', display: 'block' }}>
-                  The section is created immediately. Add tables to it separately via Add Table.
-                </small>
-              </div>
-
-              {/* Existing sections list */}
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: '0.4rem', display: 'block' }}>
-                Existing Sections
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {sections.map(sec => {
-                  const count = tables.filter(t => (t.section || 'Ground Floor') === sec).length;
-                  return (
-                    <div
-                      key={sec}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.5rem 0.65rem',
-                        background: 'var(--gray-100)',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--gray-200)',
-                      }}
-                    >
-                      {editingSection === sec ? (
-                        <div style={{ display: 'flex', gap: '0.3rem', flex: 1 }}>
-                          <input
-                            type="text"
-                            value={editingSectionValue}
-                            autoFocus
-                            onChange={e => setEditingSectionValue(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleRenameSection(sec);
-                              if (e.key === 'Escape') { setEditingSection(null); setEditingSectionValue(''); }
-                            }}
-                            style={{ flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-                          />
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => handleRenameSection(sec)}
-                            disabled={sectionLoading || !editingSectionValue.trim()}
-                          >
-                            <Check size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Layers size={14} style={{ color: 'var(--primary)' }} />
-                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--dark)' }}>{sec}</span>
-                            <span className="badge" style={{ background: 'var(--gray-200)', color: 'var(--gray-600)' }}>
-                              {count} {count === 1 ? 'table' : 'tables'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.25rem' }}>
-                            <button
-                              className="btn btn-sm"
-                              style={{ padding: '0.25rem 0.45rem' }}
-                              onClick={() => { setEditingSection(sec); setEditingSectionValue(sec); }}
-                              title="Rename section"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              className="btn btn-sm"
-                              style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }}
-                              onClick={() => setSectionToDelete(sec)}
-                              disabled={sectionLoading}
-                              title="Delete section"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {sections.length === 0 && (
-                  <div style={{ textAlign: 'center', color: 'var(--gray-400)', fontSize: '0.8rem', padding: '1rem' }}>
-                    No sections yet. Add one above.
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowSectionsModal(false)}>
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Section Confirmation */}
-      <ConfirmDialog
-        isOpen={!!sectionToDelete}
-        title="Delete Section"
-        message={`Delete the section "${sectionToDelete}"? Tables in this section will be moved back to the default section. The tables themselves will not be deleted.`}
-        confirmLabel="Delete Section"
-        cancelLabel="Cancel"
-        variant="warning"
-        onConfirm={handleDeleteSection}
-        onCancel={() => setSectionToDelete(null)}
-      />
 
       <ShortcutsHelp
         isOpen={showShortcutsHelp}
