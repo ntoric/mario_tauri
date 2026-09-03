@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, Keyboard } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
+import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
+import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import { printerService } from '../services/printer';
 import { isTaxEnabled } from '../utils/tax';
 import type { OrderItem, Item } from '../types';
@@ -50,6 +52,12 @@ const OrderPage: React.FC = () => {
     message: string;
   }>({ show: false, message: '' });
 
+  // Keyboard navigation state
+  const [kbFocusedItemIndex, setKbFocusedItemIndex] = useState<number>(-1);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const itemsGridRef = useRef<HTMLDivElement>(null);
+
   // Prevent outer .page-content from scrolling; keep bottom bar fixed
   useEffect(() => {
     const pageContent = document.querySelector('.page-content');
@@ -78,10 +86,15 @@ const OrderPage: React.FC = () => {
       title,
       subtitle: currentStore?.name || '',
       actions: (
-        <button className="btn btn-secondary" onClick={() => navigate('/')}>
-          <ArrowLeft size={16} />
-          Back to Tables
-        </button>
+        <>
+          <button className="btn btn-secondary" onClick={() => setShowShortcutsHelp(true)} title="Keyboard shortcuts (?)">
+            <Keyboard size={16} />
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigate('/')}>
+            <ArrowLeft size={16} />
+            Back to Tables
+          </button>
+        </>
       ),
     });
   }, [table, existingOrder, currentStore, setHeaderContent, navigate]);
@@ -100,19 +113,6 @@ const OrderPage: React.FC = () => {
     setSelectedCategory('all');
     setSearchQuery('');
   }, [existingOrder?.id]);
-
-  // Handle Enter key shortcut for Save & Print
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && e.ctrlKey && !isPrinting && !isSubmitting && orderItems.length > 0) {
-        e.preventDefault();
-        handleSavePrint();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPrinting, isSubmitting, paymentMethod, currentStore, orderItems.length]);
 
   // Log button state for debugging
   useEffect(() => {
@@ -595,6 +595,125 @@ const OrderPage: React.FC = () => {
 
   const total = calculateTotal() + calculateTax();
 
+  // Keep keyboard focus index in range when the filtered items list changes.
+  useEffect(() => {
+    setKbFocusedItemIndex(idx => {
+      if (filteredItems.length === 0) return -1;
+      if (idx < 0 || idx >= filteredItems.length) return -1;
+      return idx;
+    });
+  }, [filteredItems.length]);
+
+  // Scroll focused item card into view.
+  useEffect(() => {
+    if (kbFocusedItemIndex < 0) return;
+    const el = itemsGridRef.current?.querySelector('.item-card.kb-focused') as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [kbFocusedItemIndex]);
+
+  const anyModalOpen = !!(showBillDialog || printerConfirm.show || errorDialog.show || showShortcutsHelp);
+
+  const adjustLastItemQty = useCallback((delta: number) => {
+    setOrderItems(items => {
+      if (items.length === 0) return items;
+      const lastIdx = items.length - 1;
+      const last = items[lastIdx];
+      const newQty = last.quantity + delta;
+      if (newQty <= 0) {
+        return items.filter((_, i) => i !== lastIdx);
+      }
+      return items.map((oi, i) => i === lastIdx ? { ...oi, quantity: newQty } : oi);
+    });
+  }, []);
+
+  const orderShortcuts: ShortcutBinding[] = [
+    { key: '?', modifiers: { shift: true }, handler: () => setShowShortcutsHelp(true), preventDefault: true },
+    { key: 'Escape', handler: () => {
+      if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
+      if (printerConfirm.show) { setPrinterConfirm(p => ({ ...p, show: false })); return; }
+      if (errorDialog.show) { setErrorDialog({ show: false, message: '' }); return; }
+      if (showBreakdown) { setShowBreakdown(false); return; }
+      // If search input is focused, blur it first.
+      if (document.activeElement === searchInputRef.current) {
+        searchInputRef.current?.blur();
+        return;
+      }
+      handleCancel();
+    }, allowInInput: true },
+    { key: 's', modifiers: { ctrl: true }, handler: () => { if (!isSubmitting && orderItems.length > 0) handleSave(); }, preventDefault: true },
+    { key: 'p', modifiers: { ctrl: true }, handler: () => { if (!isPrinting && !isSubmitting && orderItems.length > 0) handleSavePrint(); }, preventDefault: true },
+    { key: 'Enter', modifiers: { ctrl: true }, handler: () => { if (!isPrinting && !isSubmitting && orderItems.length > 0) handleSavePrint(); }, preventDefault: true },
+    { key: 'k', modifiers: { ctrl: true }, handler: () => { if (!isSubmitting && orderItems.length > 0) handleKOT(false); }, preventDefault: true },
+    { key: 'k', modifiers: { ctrl: true, shift: true }, handler: () => { if (!isSubmitting && orderItems.length > 0) handleKOT(true); }, preventDefault: true },
+    { key: 'e', modifiers: { ctrl: true }, handler: () => { if (!isSubmitting && orderItems.length > 0) handleSaveEBill(); }, preventDefault: true },
+    { key: '1', handler: () => { if (!anyModalOpen) setPaymentMethod('cash'); }, preventDefault: true },
+    { key: '2', handler: () => { if (!anyModalOpen) setPaymentMethod('card'); }, preventDefault: true },
+    { key: '3', handler: () => { if (!anyModalOpen) setPaymentMethod('upi'); }, preventDefault: true },
+    { key: '/', handler: () => { if (!anyModalOpen) searchInputRef.current?.focus(); }, preventDefault: true },
+    { key: '+', modifiers: { shift: true }, handler: () => adjustLastItemQty(1), preventDefault: true },
+    { key: '-', handler: () => adjustLastItemQty(-1), preventDefault: true },
+    { key: 'ArrowDown', handler: () => {
+      if (anyModalOpen) return;
+      setKbFocusedItemIndex(idx => {
+        if (filteredItems.length === 0) return -1;
+        return idx < 0 ? 0 : Math.min(idx + 1, filteredItems.length - 1);
+      });
+    } },
+    { key: 'ArrowUp', handler: () => {
+      if (anyModalOpen) return;
+      setKbFocusedItemIndex(idx => {
+        if (filteredItems.length === 0) return -1;
+        return idx <= 0 ? 0 : idx - 1;
+      });
+    } },
+    { key: 'Enter', handler: () => {
+      if (anyModalOpen) return;
+      const focused = kbFocusedItemIndex >= 0 ? filteredItems[kbFocusedItemIndex] : undefined;
+      if (focused) addItemToOrder(focused);
+    } },
+  ];
+  useKeyboardShortcuts(orderShortcuts);
+
+  const orderShortcutGroups: ShortcutGroup[] = [
+    {
+      title: 'Save & Print',
+      entries: [
+        { binding: { key: 's', modifiers: { ctrl: true } }, description: 'Save order to table' },
+        { binding: { key: 'p', modifiers: { ctrl: true } }, description: 'Save, print bill & release table' },
+        { binding: { key: 'Enter', modifiers: { ctrl: true } }, description: 'Save & print (same as Ctrl+P)' },
+        { binding: { key: 'k', modifiers: { ctrl: true } }, description: 'KOT (save & keep on table)' },
+        { binding: { key: 'k', modifiers: { ctrl: true, shift: true } }, description: 'KOT & print' },
+        { binding: { key: 'e', modifiers: { ctrl: true } }, description: 'Save as E-Bill' },
+      ],
+    },
+    {
+      title: 'Payment Method',
+      entries: [
+        { binding: { key: '1' }, description: 'Cash' },
+        { binding: { key: '2' }, description: 'Card' },
+        { binding: { key: '3' }, description: 'UPI' },
+      ],
+    },
+    {
+      title: 'Items & Cart',
+      entries: [
+        { binding: { key: '/' }, description: 'Focus search box' },
+        { binding: { key: 'ArrowDown' }, description: 'Move focus to next item' },
+        { binding: { key: 'ArrowUp' }, description: 'Move focus to previous item' },
+        { binding: { key: 'Enter' }, description: 'Add focused item to cart' },
+        { binding: { key: '+', modifiers: { shift: true } }, description: 'Add one of last cart item' },
+        { binding: { key: '-' }, description: 'Remove one of last cart item' },
+      ],
+    },
+    {
+      title: 'Navigation',
+      entries: [
+        { binding: { key: '?', modifiers: { shift: true } }, description: 'Show this help' },
+        { binding: { key: 'Escape' }, description: 'Close dialog / back to tables' },
+      ],
+    },
+  ];
+
   return (
     <div className="order-page">
       <div className="order-page-layout">
@@ -626,10 +745,11 @@ const OrderPage: React.FC = () => {
             <Search size={16} className="search-icon" />
             <input
               type="text"
-              placeholder="Search items..."
+              placeholder="Search items... (press / to focus)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="order-search-input"
+              ref={searchInputRef}
             />
             {searchQuery && (
               <button
@@ -641,11 +761,11 @@ const OrderPage: React.FC = () => {
             )}
           </div>
 
-          <div className="items-grid-scrollable">
-            {filteredItems.map(item => (
+          <div className="items-grid-scrollable" ref={itemsGridRef}>
+            {filteredItems.map((item, idx) => (
               <div
                 key={item.id}
-                className="item-card"
+                className={`item-card ${idx === kbFocusedItemIndex ? 'kb-focused' : ''}`}
                 data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
@@ -675,6 +795,7 @@ const OrderPage: React.FC = () => {
                 <div key={oi.itemId} className="order-item-compact">
                   <div className="order-item-info">
                     <div className="order-item-name">{oi.item.name}</div>
+                    <div className="order-item-category">{categories.find(c => c.id === oi.item.categoryId)?.name || ''}</div>
                     <div className="order-item-price">{formatCurrency(oi.item.price)} x {oi.quantity}</div>
                   </div>
                   <div className="order-item-actions">
@@ -793,7 +914,7 @@ const OrderPage: React.FC = () => {
                 className="btn btn-secondary"
                 onClick={handleSave}
                 disabled={orderItems.length === 0 || isSubmitting}
-                title="Save order to table and go back"
+                title="Save order to table and go back (Ctrl+S)"
               >
                 <Save size={14} />
                 {actionType === 'save' ? 'Saving...' : 'Save'}
@@ -802,7 +923,7 @@ const OrderPage: React.FC = () => {
                 className="btn btn-warning"
                 onClick={handleSaveEBill}
                 disabled={orderItems.length === 0 || isSubmitting}
-                title="Save as E-Bill (no table hold)"
+                title="Save as E-Bill (no table hold) (Ctrl+E)"
               >
                 <FileText size={14} />
                 {actionType === 'e-bill' ? 'Saving...' : 'Save & E-Bill'}
@@ -811,7 +932,7 @@ const OrderPage: React.FC = () => {
                 className="btn btn-primary"
                 onClick={handleSavePrint}
                 disabled={orderItems.length === 0 || isSubmitting || isPrinting}
-                title="Save, Print Bill & Release Table"
+                title="Save, Print Bill & Release Table (Ctrl+P)"
               >
                 <Printer size={14} />
                 {actionType === 'save-print' ? 'Processing...' : 'Save & Print'}
@@ -825,7 +946,7 @@ const OrderPage: React.FC = () => {
                   handleKOT(false);
                 }}
                 disabled={orderItems.length === 0 || isSubmitting}
-                title="Save Order & Keep on Table"
+                title="Save Order & Keep on Table (Ctrl+K)"
               >
                 <Save size={14} />
                 {actionType === 'kot' ? 'Saving...' : 'KOT'}
@@ -839,14 +960,14 @@ const OrderPage: React.FC = () => {
                   handleKOT(true);
                 }}
                 disabled={orderItems.length === 0 || isSubmitting}
-                title="Save Order, Print KOT & Keep on Table"
+                title="Save Order, Print KOT & Keep on Table (Ctrl+Shift+K)"
               >
                 <ChefHat size={14} />
                 {actionType === 'kot-print' ? 'Saving...' : 'KOT & Print'}
               </button>
             </>
           )}
-          <button className="btn btn-danger" onClick={handleCancel}>
+          <button className="btn btn-danger" onClick={handleCancel} title="Cancel / back (Esc)">
             <X size={14} />
             Cancel
           </button>
@@ -872,6 +993,12 @@ const OrderPage: React.FC = () => {
         variant="danger"
         onConfirm={() => setErrorDialog({ show: false, message: '' })}
         onCancel={() => setErrorDialog({ show: false, message: '' })}
+      />
+
+      <ShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+        groups={orderShortcutGroups}
       />
     </div>
   );

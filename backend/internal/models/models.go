@@ -119,6 +119,14 @@ type Table struct {
 	Section  *string  `json:"section,omitempty"`
 }
 
+// TableSection represents a section/floor that exists independently of tables.
+type TableSection struct {
+	ID        string    `json:"id"`
+	StoreID   string    `json:"storeId"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // NestedItem represents the minimal item structure attached to order items
 type NestedItem struct {
 	ID           string  `json:"id"`
@@ -317,6 +325,15 @@ type SupportConfigRequest struct {
 	Email        string `json:"email"`
 	Phone        string `json:"phone"`
 	WhatsAppLink string `json:"whatsappLink"`
+}
+
+// UpdateRepoConfig holds the GitHub repository used for desktop app update checks
+type UpdateRepoConfig struct {
+	GitHubRepo string `json:"githubRepo"`
+}
+
+type UpdateRepoConfigRequest struct {
+	GitHubRepo string `json:"githubRepo"`
 }
 
 // ExpenseCategory represents expense category table schema and json dto

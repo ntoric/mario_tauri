@@ -267,6 +267,16 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			is_active BOOLEAN DEFAULT true,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+
+		// Table sections — sections exist independently of tables so a section
+		// can be created before any table is assigned to it.
+		`CREATE TABLE IF NOT EXISTS table_sections (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(store_id, name)
+		)`,
 	}
 
 	for _, q := range queries {
@@ -325,9 +335,10 @@ func runSeeds(db *sql.DB, cfg *config.Config) error {
 	// Seed default global settings
 	_, err := db.Exec(`
 		INSERT INTO global_settings (key, value)
-		VALUES 
+		VALUES
 			('cleanup_enabled', 'false'),
-			('cleanup_interval_mins', '60')
+			('cleanup_interval_mins', '60'),
+			('update_github_repo', 'ntoric/mario_tauri')
 		ON CONFLICT (key) DO NOTHING
 	`)
 	if err != nil {

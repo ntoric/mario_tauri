@@ -128,6 +128,79 @@ func (h *Handler) DeleteTable(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Table deleted"})
 }
 
+// GetSections handles GET /api/tables/sections
+// Returns the section catalog for the current store (sections independent of tables).
+func (h *Handler) GetSections(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	storeID := r.URL.Query().Get("storeId")
+	if storeID == "" {
+		storeID = claims.StoreID
+	}
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	sections, err := h.Repo.Table.GetSections(r.Context(), storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if sections == nil {
+		sections = []models.TableSection{}
+	}
+
+	h.writeJSON(w, http.StatusOK, sections)
+}
+
+// CreateSection handles POST /api/tables/sections
+// Body: { "name": "..." }
+// Creates a section in the catalog so it can exist before any table uses it.
+func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Name    string `json:"name"`
+		StoreID string `json:"storeId"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	name := req.Name
+	if name == "" {
+		h.writeError(w, http.StatusBadRequest, "Section name is required")
+		return
+	}
+
+	storeID := req.StoreID
+	if storeID == "" {
+		storeID = claims.StoreID
+	}
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "Store ID required")
+		return
+	}
+
+	if err := h.Repo.Table.CreateSection(r.Context(), storeID, name); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.broadcastTableStatusUpdate(storeID, "table_updated")
+
+	h.writeJSON(w, http.StatusCreated, map[string]string{"message": "Section created", "name": name})
+}
+
 // RenameSection handles PUT /api/tables/sections/rename
 // Body: { "oldName": "...", "newName": "..." }
 // Backward compatible: oldName "" targets the default (NULL) section.
@@ -141,6 +214,7 @@ func (h *Handler) RenameSection(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OldName string `json:"oldName"`
 		NewName string `json:"newName"`
+		StoreID string `json:"storeId"`
 	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -152,7 +226,10 @@ func (h *Handler) RenameSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := claims.StoreID
+	storeID := req.StoreID
+	if storeID == "" {
+		storeID = claims.StoreID
+	}
 	if storeID == "" {
 		h.writeError(w, http.StatusBadRequest, "Store ID required")
 		return
@@ -182,7 +259,10 @@ func (h *Handler) DeleteSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := claims.StoreID
+	storeID := r.URL.Query().Get("storeId")
+	if storeID == "" {
+		storeID = claims.StoreID
+	}
 	if storeID == "" {
 		h.writeError(w, http.StatusBadRequest, "Store ID required")
 		return

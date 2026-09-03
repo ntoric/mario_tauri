@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Layers, Edit2, Check, Filter, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Layers, Edit2, Check, Filter, ChevronDown, Keyboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -12,10 +12,12 @@ import { Button } from '../components/ui/Button';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
+import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
+import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
-  const { stores, tables, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, renameTableSection, deleteTableSection } = useDataStore();
+  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -26,10 +28,11 @@ const Tables: React.FC = () => {
   // Fetch data on mount
   useEffect(() => {
     fetchTables();
+    fetchTableSections();
     fetchOrders();
     fetchCategories();
     fetchItems();
-  }, [fetchTables, fetchOrders, fetchCategories, fetchItems]);
+  }, [fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems]);
 
   // Realtime updates via websocket
   useEffect(() => {
@@ -217,6 +220,10 @@ const Tables: React.FC = () => {
   const [editingSectionValue, setEditingSectionValue] = useState('');
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
   const [sectionLoading, setSectionLoading] = useState(false);
+
+  // Keyboard navigation state
+  const [kbFocusedIndex, setKbFocusedIndex] = useState<number>(-1);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
@@ -286,6 +293,13 @@ const Tables: React.FC = () => {
               {deleteMode ? 'Done' : 'Delete Tables'}
             </button>
           )}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowShortcutsHelp(true)}
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard size={18} />
+          </button>
         </>
       ),
     });
@@ -471,21 +485,6 @@ const Tables: React.FC = () => {
     }
   };
 
-  // Handle Enter key in bill dialog
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (billDialogTable && e.key === 'Enter' && !isPrinting) {
-        e.preventDefault();
-        handlePrintAndComplete();
-      }
-    };
-
-    if (billDialogTable) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [billDialogTable, isPrinting, paymentMethod]);
-
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTable.number) return;
@@ -500,6 +499,9 @@ const Tables: React.FC = () => {
       });
       setShowAddModal(false);
       setNewTable({ number: '', seats: 4, section: '' });
+    } catch (error) {
+      console.error('Failed to add table:', error);
+      setErrorDialog({ show: true, message: (error as Error).message || 'Failed to add table. Please try again.' });
     } finally {
       setIsAddingTable(false);
     }
@@ -525,10 +527,16 @@ const Tables: React.FC = () => {
   const handleAddSection = async () => {
     const name = newSectionName.trim();
     if (!name) return;
-    // Adding a section is implicit: tables created with this section will create it.
-    // We just close the input and reset. The section tab will appear once a table uses it.
-    setNewSectionName('');
-    // No backend call needed — sections are derived from tables.
+    setSectionLoading(true);
+    try {
+      await createTableSection(name);
+      setNewSectionName('');
+    } catch (error) {
+      console.error('Failed to add section:', error);
+      setErrorDialog({ show: true, message: (error as Error).message || 'Failed to add section. Please try again.' });
+    } finally {
+      setSectionLoading(false);
+    }
   };
 
   const handleRenameSection = async (oldName: string) => {
@@ -572,12 +580,19 @@ const Tables: React.FC = () => {
     (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
     : 0;
 
-  // Derive sections from tables (default to "Ground Floor" when unset)
+  // Sections come from the table_sections catalog (independent of tables).
+  // We merge in any sections still referenced by tables so nothing is hidden
+  // if the catalog and tables drift out of sync, plus the implicit "Ground
+  // Floor" default used for tables with no section assigned.
   const sections = React.useMemo(() => {
     const set = new Set<string>();
-    tables.forEach(t => set.add(t.section || 'Ground Floor'));
+    tableSections.forEach(s => set.add(s.name));
+    tables.forEach(t => {
+      if (t.section) set.add(t.section);
+      else set.add('Ground Floor');
+    });
     return Array.from(set);
-  }, [tables]);
+  }, [tableSections, tables]);
 
   const filteredTables = React.useMemo(() => {
     return tables
@@ -592,6 +607,156 @@ const Tables: React.FC = () => {
 
   const occupiedCount = tables.filter(t => getActiveOrderByTable(t.id)).length;
   const vacantCount = tables.length - occupiedCount;
+
+  // Keep keyboard focus index in range when the filtered list changes.
+  useEffect(() => {
+    setKbFocusedIndex(idx => {
+      if (filteredTables.length === 0) return -1;
+      if (idx < 0 || idx >= filteredTables.length) return -1;
+      return idx;
+    });
+  }, [filteredTables.length]);
+
+  const anyModalOpen = !!(
+    billDialogTable || confirmTableChange || changeTableDialog || deleteConfirmTable ||
+    showAddModal || showSectionsModal || showStatusDropdown || showShortcutsHelp ||
+    printerConfirm.show || errorDialog.show || sectionToDelete
+  );
+
+  // Close the top-most open modal/dialog (used by Esc).
+  const closeTopModal = useCallback(() => {
+    if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
+    if (printerConfirm.show) { setPrinterConfirm(p => ({ ...p, show: false })); return; }
+    if (errorDialog.show) { setErrorDialog({ show: false, message: '' }); return; }
+    if (sectionToDelete) { setSectionToDelete(null); return; }
+    if (deleteConfirmTable) { setDeleteConfirmTable(null); return; }
+    if (billDialogTable) { if (!isPrinting) setBillDialogTable(null); return; }
+    if (confirmTableChange) { setConfirmTableChange(null); return; }
+    if (changeTableDialog) { setChangeTableDialog(null); return; }
+    if (showStatusDropdown) { setShowStatusDropdown(false); return; }
+    if (showSectionsModal) { setShowSectionsModal(false); return; }
+    if (showAddModal) { setShowAddModal(false); return; }
+  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, showStatusDropdown, showSectionsModal, showAddModal]);
+
+  const openFocusedTable = useCallback((table: Table) => {
+    if (checkingTableId) return;
+    setCheckingTableId(table.id);
+    setCheckingTableId(null);
+    navigate(`/order/${table.id}`);
+  }, [checkingTableId, navigate]);
+
+  // Keyboard shortcuts for the Tables page.
+  const tablesShortcuts: ShortcutBinding[] = [
+    { key: '?', modifiers: { shift: true }, handler: () => setShowShortcutsHelp(true), preventDefault: true },
+    { key: 'Escape', handler: () => closeTopModal(), allowInInput: true },
+    { key: 'n', handler: () => { if (!anyModalOpen) setShowAddModal(true); }, preventDefault: true },
+    { key: 'p', handler: () => { if (!anyModalOpen) navigate('/parcel-order'); }, preventDefault: true },
+    { key: 'v', handler: () => { if (!anyModalOpen) setViewMode(v => v === 'layout' ? 'list' : 'layout'); } },
+    { key: 'd', handler: () => { if (!anyModalOpen && isAdmin) setDeleteMode(m => !m); }, preventDefault: true },
+    {
+      key: 'f',
+      handler: () => {
+        if (anyModalOpen) return;
+        setStatusFilter(s => s === 'all' ? 'vacant' : s === 'vacant' ? 'occupied' : 'all');
+      },
+      preventDefault: true,
+    },
+    {
+      key: 'ArrowDown',
+      handler: () => {
+        if (anyModalOpen) return;
+        setKbFocusedIndex(idx => {
+          if (filteredTables.length === 0) return -1;
+          return idx < 0 ? 0 : Math.min(idx + 1, filteredTables.length - 1);
+        });
+      },
+    },
+    {
+      key: 'ArrowUp',
+      handler: () => {
+        if (anyModalOpen) return;
+        setKbFocusedIndex(idx => {
+          if (filteredTables.length === 0) return -1;
+          return idx <= 0 ? 0 : idx - 1;
+        });
+      },
+    },
+    {
+      key: 'ArrowRight',
+      handler: () => {
+        if (anyModalOpen) return;
+        setKbFocusedIndex(idx => {
+          if (filteredTables.length === 0) return -1;
+          return idx < 0 ? 0 : Math.min(idx + 1, filteredTables.length - 1);
+        });
+      },
+    },
+    {
+      key: 'ArrowLeft',
+      handler: () => {
+        if (anyModalOpen) return;
+        setKbFocusedIndex(idx => {
+          if (filteredTables.length === 0) return -1;
+          return idx <= 0 ? 0 : idx - 1;
+        });
+      },
+    },
+    {
+      key: 'Enter',
+      handler: () => {
+        // Bill dialog open -> confirm print & complete.
+        if (billDialogTable) {
+          if (!isPrinting) handlePrintAndComplete();
+          return;
+        }
+        if (anyModalOpen) return;
+        const focused = kbFocusedIndex >= 0 ? filteredTables[kbFocusedIndex] : undefined;
+        if (focused) openFocusedTable(focused);
+      },
+    },
+    // Number keys 1-9 -> jump to table with that number.
+    ...(['1','2','3','4','5','6','7','8','9'] as const).map(digit => ({
+      key: digit,
+      handler: () => {
+        if (anyModalOpen) return;
+        const target = filteredTables.find(t => String(t.number) === digit);
+        if (target) openFocusedTable(target);
+      },
+    })),
+  ];
+  useKeyboardShortcuts(tablesShortcuts);
+
+  const tablesShortcutGroups: ShortcutGroup[] = [
+    {
+      title: 'Navigation',
+      entries: [
+        { binding: { key: 'n' }, description: 'Add new table' },
+        { binding: { key: 'p' }, description: 'Open Parcel Order' },
+        { binding: { key: 'v' }, description: 'Toggle layout / list view' },
+        { binding: { key: 'd' }, description: 'Toggle delete mode (admin)' },
+        { binding: { key: 'f' }, description: 'Cycle status filter' },
+        { binding: { key: '?', modifiers: { shift: true } }, description: 'Show this help' },
+      ],
+    },
+    {
+      title: 'Tables',
+      entries: [
+        { binding: { key: 'ArrowDown' }, description: 'Move focus down' },
+        { binding: { key: 'ArrowUp' }, description: 'Move focus up' },
+        { binding: { key: 'ArrowRight' }, description: 'Move focus right' },
+        { binding: { key: 'ArrowLeft' }, description: 'Move focus left' },
+        { binding: { key: 'Enter' }, description: 'Open focused table' },
+        { binding: { key: '1' }, description: 'Open table #1 (1-9 jumps to table)' },
+      ],
+    },
+    {
+      title: 'Dialogs',
+      entries: [
+        { binding: { key: 'Enter' }, description: 'Confirm bill dialog (print & complete)' },
+        { binding: { key: 'Escape' }, description: 'Close top dialog / help' },
+      ],
+    },
+  ];
 
   return (
     <>
@@ -678,12 +843,12 @@ const Tables: React.FC = () => {
                 </div>
 
                 <div className="tables-layout-grid compact">
-                {filteredTables.map((table) => {
+                {filteredTables.map((table, idx) => {
                   const activeOrder = getActiveOrderByTable(table.id);
                   return (
                     <div
                       key={table.id}
-                      className={`table-layout-card compact ${activeOrder ? 'occupied' : ''}`}
+                      className={`table-layout-card compact ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
                       onClick={() => handleTableClick(table)}
                       style={{ position: 'relative' }}
                     >
@@ -766,12 +931,12 @@ const Tables: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTables.map(table => {
+                  {filteredTables.map((table, idx) => {
                     const activeOrder = getActiveOrderByTable(table.id);
                     return (
                       <tr
                         key={table.id}
-                        className="clickable-row"
+                        className={`clickable-row ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
                         onClick={() => handleTableClick(table)}
                         style={{ cursor: 'pointer' }}
                       >
@@ -1101,7 +1266,7 @@ const Tables: React.FC = () => {
             </div>
             <div className="modal-body">
               <p style={{ fontSize: '0.78rem', color: 'var(--gray-500)', marginBottom: '0.75rem' }}>
-                Sections are created automatically when you assign a table to them. Rename or delete sections below. Deleting a section moves its tables back to the default.
+                Create sections here, then assign tables to them from the Add Table dialog. Rename or delete sections below. Deleting a section moves its tables back to the default.
               </p>
 
               {/* Add new section */}
@@ -1114,32 +1279,23 @@ const Tables: React.FC = () => {
                     onChange={e => setNewSectionName(e.target.value)}
                     placeholder="e.g., First Floor, Outdoor..."
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && newSectionName.trim()) {
-                        setNewSectionName('');
-                        // Open the Add Table modal pre-filled with this section
-                        setNewTable({ number: '', seats: 4, section: newSectionName.trim() });
-                        setShowSectionsModal(false);
-                        setShowAddModal(true);
+                      if (e.key === 'Enter' && newSectionName.trim() && !sectionLoading) {
+                        e.preventDefault();
+                        void handleAddSection();
                       }
                     }}
                   />
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={!newSectionName.trim()}
-                    onClick={() => {
-                      if (!newSectionName.trim()) return;
-                      setNewTable({ number: '', seats: 4, section: newSectionName.trim() });
-                      setNewSectionName('');
-                      setShowSectionsModal(false);
-                      setShowAddModal(true);
-                    }}
+                    disabled={!newSectionName.trim() || sectionLoading}
+                    onClick={() => void handleAddSection()}
                   >
-                    <Plus size={14} /> Add
+                    {sectionLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
                   </button>
                 </div>
                 <small style={{ color: 'var(--gray-400)', fontSize: '0.7rem', marginTop: '0.3rem', display: 'block' }}>
-                  You'll be prompted to add a table to this new section.
+                  The section is created immediately. Add tables to it separately via Add Table.
                 </small>
               </div>
 
@@ -1243,6 +1399,12 @@ const Tables: React.FC = () => {
         variant="warning"
         onConfirm={handleDeleteSection}
         onCancel={() => setSectionToDelete(null)}
+      />
+
+      <ShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+        groups={tablesShortcutGroups}
       />
     </>
   );

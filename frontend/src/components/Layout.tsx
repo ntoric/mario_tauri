@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -147,6 +147,10 @@ const LayoutContent: React.FC = () => {
               <NavLink to="/support-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Settings">
                 <span className="nav-icon"><MessageCircle size={18} /></span>
                 {sidebarExpanded && <span>Support Settings</span>}
+              </NavLink>
+              <NavLink to="/developer-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Developer Settings">
+                <span className="nav-icon"><Wrench size={18} /></span>
+                {sidebarExpanded && <span>Developer Settings</span>}
               </NavLink>
               <NavLink to="/system-reset" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="System Reset">
                 <span className="nav-icon"><AlertTriangle size={18} /></span>

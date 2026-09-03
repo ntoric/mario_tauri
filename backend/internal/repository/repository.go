@@ -11,6 +11,7 @@ import (
 
 	"cafe-backend/internal/models"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
@@ -80,6 +81,7 @@ type Repository struct {
 	System             *SystemRepository
 	AppUpdate          *AppUpdateRepository
 	SupportConfig      *SupportConfigRepository
+	UpdateRepo         *UpdateRepoRepository
 	ExpenseCategory    *ExpenseCategoryRepository
 	Expense            *ExpenseRepository
 	ItemExpense        *ItemExpenseRepository
@@ -100,6 +102,7 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		System:          &SystemRepository{db: db},
 		AppUpdate:       &AppUpdateRepository{db: db},
 		SupportConfig:   &SupportConfigRepository{db: db},
+		UpdateRepo:      &UpdateRepoRepository{db: db},
 		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
 		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
@@ -973,19 +976,82 @@ func (r *TableRepository) Delete(ctx context.Context, id string) error {
 
 // RenameSection bulk-renames a section within a store (case-sensitive match).
 // If oldName is empty, it targets tables with NULL section (the default).
+// It also renames the matching row in table_sections so the catalog stays in sync.
 func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, newName string) error {
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
 		"UPDATE tables SET section = $1 WHERE store_id = $2 AND COALESCE(section, '') = COALESCE($3, '')",
-		newName, storeID, oldName)
-	return err
+		newName, storeID, oldName); err != nil {
+		return err
+	}
+
+	if oldName != "" {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE table_sections SET name = $1 WHERE store_id = $2 AND name = $3",
+			newName, storeID, oldName); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // DeleteSection clears the section on all tables in the given section,
-// effectively moving them back to the default (NULL) section.
+// effectively moving them back to the default (NULL) section, and removes the
+// section from the table_sections catalog.
 func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionName string) error {
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
 		"UPDATE tables SET section = NULL WHERE store_id = $1 AND COALESCE(section, '') = COALESCE($2, '')",
-		storeID, sectionName)
+		storeID, sectionName); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM table_sections WHERE store_id = $1 AND name = $2",
+		storeID, sectionName); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// GetSections returns all sections defined for a store from the table_sections catalog.
+func (r *TableRepository) GetSections(ctx context.Context, storeID string) ([]models.TableSection, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT id, store_id, name, created_at FROM table_sections WHERE store_id = $1 ORDER BY name", storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sections []models.TableSection
+	for rows.Next() {
+		var s models.TableSection
+		if err := rows.Scan(&s.ID, &s.StoreID, &s.Name, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		sections = append(sections, s)
+	}
+	return sections, nil
+}
+
+// CreateSection creates a section in the catalog so it can exist independently
+// of any table. Duplicate names for the same store are ignored.
+func (r *TableRepository) CreateSection(ctx context.Context, storeID, name string) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO table_sections (id, store_id, name) VALUES ($1, $2, $3) ON CONFLICT (store_id, name) DO NOTHING",
+		uuid.New().String(), storeID, name)
 	return err
 }
 
@@ -1862,6 +1928,36 @@ func (r *SupportConfigRepository) Save(ctx context.Context, req models.SupportCo
 	}
 
 	return tx.Commit()
+}
+
+// ==========================================
+// UPDATE REPO CONFIG REPOSITORY
+// ==========================================
+
+type UpdateRepoRepository struct {
+	db *sql.DB
+}
+
+// Get returns the configured GitHub repository (owner/repo) used for desktop app updates.
+func (r *UpdateRepoRepository) Get(ctx context.Context) (string, error) {
+	var repo string
+	err := r.db.QueryRowContext(ctx, "SELECT value FROM global_settings WHERE key = 'update_github_repo'").Scan(&repo)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return repo, nil
+}
+
+// Save persists the GitHub repository (owner/repo) used for desktop app updates.
+func (r *UpdateRepoRepository) Save(ctx context.Context, repo string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO global_settings (key, value) VALUES ('update_github_repo', $1)
+		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+	`, repo)
+	return err
 }
 
 // ==========================================

@@ -304,16 +304,27 @@ class ApiService {
     });
   }
 
-  // Table sections (bulk operations)
-  async renameTableSection(oldName: string, newName: string) {
-    return this.fetch('/tables/sections/rename', {
-      method: 'PUT',
-      body: JSON.stringify({ oldName, newName }),
+  // Table sections (catalog + bulk operations)
+  async getTableSections(storeId: string) {
+    return this.fetch(`/tables/sections?storeId=${storeId}`);
+  }
+
+  async createTableSection(storeId: string, name: string) {
+    return this.fetch('/tables/sections', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, name }),
     });
   }
 
-  async deleteTableSection(name: string) {
-    return this.fetch(`/tables/sections/${encodeURIComponent(name)}`, {
+  async renameTableSection(storeId: string, oldName: string, newName: string) {
+    return this.fetch('/tables/sections/rename', {
+      method: 'PUT',
+      body: JSON.stringify({ storeId, oldName, newName }),
+    });
+  }
+
+  async deleteTableSection(storeId: string, name: string) {
+    return this.fetch(`/tables/sections/${encodeURIComponent(name)}?storeId=${storeId}`, {
       method: 'DELETE',
     });
   }
@@ -458,6 +469,18 @@ class ApiService {
     return this.fetch('/app-update', {
       method: 'POST',
       body: JSON.stringify(config),
+    });
+  }
+
+  // Update Repository Configuration (superadmin only)
+  async getUpdateRepoConfig() {
+    return this.fetch('/system/update-config');
+  }
+
+  async updateUpdateRepoConfig(githubRepo: string) {
+    return this.fetch('/system/update-config', {
+      method: 'POST',
+      body: JSON.stringify({ githubRepo }),
     });
   }
 

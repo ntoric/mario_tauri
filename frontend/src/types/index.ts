@@ -98,6 +98,13 @@ export interface Table {
   section?: string;
 }
 
+export interface TableSection {
+  id: string;
+  storeId: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface OrderItem {
   itemId: string;
   item: Item;

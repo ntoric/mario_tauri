@@ -440,6 +440,7 @@ const ParcelOrderPage: React.FC = () => {
                 <div key={oi.itemId} className="order-item-compact">
                   <div className="order-item-info">
                     <div className="order-item-name">{oi.item.name}</div>
+                    <div className="order-item-category">{categories.find(c => c.id === oi.item.categoryId)?.name || ''}</div>
                     <div className="order-item-price">{formatCurrency(oi.item.price)} x {oi.quantity}</div>
                   </div>
                   <div className="order-item-actions">

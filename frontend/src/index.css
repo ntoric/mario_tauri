@@ -1690,6 +1690,118 @@ body {
   background: var(--gray-100);
 }
 
+/* Keyboard Shortcuts Help Overlay */
+.shortcuts-help-modal {
+  max-height: 85vh;
+}
+
+.shortcuts-help-body {
+  padding: 1rem 1.25rem;
+}
+
+.shortcuts-group {
+  margin-bottom: 1.1rem;
+}
+
+.shortcuts-group:last-of-type {
+  margin-bottom: 0.5rem;
+}
+
+.shortcuts-group-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+  margin: 0 0 0.5rem;
+}
+
+.shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 1.5rem;
+}
+
+@media (max-width: 540px) {
+  .shortcuts-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px dashed var(--gray-200);
+}
+
+.shortcuts-desc {
+  font-size: 0.85rem;
+  color: var(--gray-700);
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.15rem 0.45rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--dark);
+  background: var(--gray-100);
+  border: 1px solid var(--gray-300);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.shortcuts-footnote {
+  margin: 1rem 0 0;
+  font-size: 0.72rem;
+  color: var(--gray-500);
+  text-align: center;
+}
+
+.shortcuts-footnote .shortcut-key {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+}
+
+/* Selected/keyboard-focused table card & item card */
+.table-layout-card.kb-focused {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.item-card.kb-focused {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  background: rgba(var(--primary-rgb, 245, 130, 32), 0.08);
+}
+
+/* Order page bottom-bar hint chip */
+.shortcut-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  margin-left: 0.5rem;
+}
+
+.shortcut-hint .shortcut-key {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.3rem;
+}
+
 /* Order Modal Fixed */
 .order-modal {
   max-width: 1000px;
@@ -1875,6 +1987,17 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 0.125rem;
+}
+
+.order-item-compact .order-item-category {
+  font-size: 0.65rem;
+  color: var(--gray-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .order-item-compact .order-item-price {

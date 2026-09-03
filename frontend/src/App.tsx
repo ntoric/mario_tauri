@@ -13,6 +13,7 @@ import BusinessSettings from './components/BusinessSettings';
 import SystemReset from './components/SystemReset';
 import UpdateManagement from './components/UpdateManagement';
 import SupportSettings from './components/SupportSettings';
+import DeveloperSettings from './components/DeveloperSettings';
 import SupportPage from './components/SupportPage';
 import Reports from './components/Reports';
 import ReportsIndex from './components/ReportsIndex';
@@ -118,6 +119,7 @@ const AppRoutes: React.FC = () => {
         <Route path="stores" element={<Stores />} />
         <Route path="business-settings" element={<BusinessSettings />} />
         <Route path="support-settings" element={<SupportSettings />} />
+        <Route path="developer-settings" element={<DeveloperSettings />} />
         <Route path="system-reset" element={<SystemReset />} />
         <Route path="update-management" element={<UpdateManagement />} />
         <Route path="reports" element={<ReportsIndex />} />

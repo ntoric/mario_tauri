@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent } from 'lucide-react';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent, Package } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
+import SoftwareUpdates from './SoftwareUpdates';
 
 interface PrinterDevice {
   name: string;
@@ -31,7 +32,7 @@ const BusinessSettings: React.FC = () => {
   
   const currentStore = stores.find(s => s.id === currentStoreId);
   
-  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance' | 'software-updates'>('general');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -345,6 +346,13 @@ const BusinessSettings: React.FC = () => {
         >
           <Palette size={18} />
           Appearance
+        </button>
+        <button
+          className={`tab ${activeTab === 'software-updates' ? 'active' : ''}`}
+          onClick={() => setActiveTab('software-updates')}
+        >
+          <Package size={18} />
+          Software Updates
         </button>
       </div>
 
@@ -954,6 +962,8 @@ const BusinessSettings: React.FC = () => {
           </form>
         </div>
       )}
+
+      {activeTab === 'software-updates' && <SoftwareUpdates />}
     </div>
   );
 };

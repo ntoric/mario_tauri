@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
+import type { Category, Item, Table, TableSection, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
 
 interface DataState {
   // Data
@@ -10,6 +10,7 @@ interface DataState {
   categories: Category[];
   items: Item[];
   tables: Table[];
+  tableSections: TableSection[];
   orders: Order[];
   bills: Bill[];
   billQueue: BillQueueItem[];
@@ -50,9 +51,11 @@ interface DataState {
   
   // Tables
   fetchTables: () => Promise<void>;
+  fetchTableSections: () => Promise<void>;
   createTable: (table: Omit<Table, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Table, 'isActive'>>) => Promise<void>;
   updateTable: (id: string, table: Partial<Table>) => Promise<void>;
   deleteTable: (id: string) => Promise<void>;
+  createTableSection: (name: string) => Promise<void>;
   renameTableSection: (oldName: string, newName: string) => Promise<void>;
   deleteTableSection: (name: string) => Promise<void>;
   
@@ -99,6 +102,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   categories: [],
   items: [],
   tables: [],
+  tableSections: [],
   orders: [],
   bills: [],
   billQueue: [],
@@ -145,6 +149,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         get().fetchCategories(),
         get().fetchItems(),
         get().fetchTables(),
+        get().fetchTableSections(),
         get().fetchOrders(),
         get().fetchBills(),
         get().fetchUsers(),
@@ -334,6 +339,17 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
   },
 
+  fetchTableSections: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const sections = await api.getTableSections(currentStoreId);
+      set({ tableSections: sections || [] });
+    } catch (error) {
+      console.error('Failed to fetch table sections:', error);
+    }
+  },
+
   createTable: async (table) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
@@ -355,14 +371,31 @@ export const useDataStore = create<DataState>((set, get) => ({
     await get().fetchTables();
   },
 
+  createTableSection: async (name) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.createTableSection(currentStoreId, name);
+    await get().fetchTableSections();
+  },
+
   renameTableSection: async (oldName, newName) => {
-    await api.renameTableSection(oldName, newName);
-    await get().fetchTables();
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.renameTableSection(currentStoreId, oldName, newName);
+    await Promise.all([get().fetchTableSections(), get().fetchTables()]);
   },
 
   deleteTableSection: async (name) => {
-    await api.deleteTableSection(name);
-    await get().fetchTables();
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.deleteTableSection(currentStoreId, name);
+    await Promise.all([get().fetchTableSections(), get().fetchTables()]);
   },
 
   // Orders

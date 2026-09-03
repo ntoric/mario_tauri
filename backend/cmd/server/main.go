@@ -93,6 +93,7 @@ func main() {
 		r.Get("/api/support-config", h.GetSupportConfig)
 		r.Get("/api/app-update", h.GetAppUpdate)
 		r.Get("/api/app-updates", h.GetAllAppUpdates)
+		r.Get("/api/update/manifest", h.GetUpdateManifest)
 	})
 
 	// Protected Routes (JWT Auth required)
@@ -143,6 +144,8 @@ func main() {
 		r.Put("/api/tables/{id}", h.UpdateTable)
 		r.Delete("/api/tables/{id}", h.DeleteTable)
 		// Table sections (bulk operations)
+		r.Get("/api/tables/sections", h.GetSections)
+		r.Post("/api/tables/sections", h.CreateSection)
 		r.Put("/api/tables/sections/rename", h.RenameSection)
 		r.Delete("/api/tables/sections/{name}", h.DeleteSection)
 
@@ -174,6 +177,10 @@ func main() {
 
 		// Support Config (POST requires superadmin)
 		r.Post("/api/support-config", h.UpdateSupportConfig)
+
+		// Update Repo Config (superadmin only)
+		r.Get("/api/system/update-config", h.GetUpdateRepoConfig)
+		r.Post("/api/system/update-config", h.UpdateUpdateRepoConfig)
 
 		// Expense Categories
 		r.Get("/api/expense-categories", h.GetExpenseCategories)

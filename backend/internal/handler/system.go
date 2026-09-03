@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
@@ -307,4 +309,119 @@ func (h *Handler) UpdateSupportConfig(w http.ResponseWriter, r *http.Request) {
 			WhatsAppLink: req.WhatsAppLink,
 		},
 	})
+}
+
+// GetUpdateRepoConfig handles GET /api/system/update-config (superadmin only)
+func (h *Handler) GetUpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if claims.Role != "superadmin" {
+		h.writeError(w, http.StatusForbidden, "Access denied. Superadmin role required.")
+		return
+	}
+
+	repo, err := h.Repo.UpdateRepo.Get(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, models.UpdateRepoConfig{GitHubRepo: repo})
+}
+
+// UpdateUpdateRepoConfig handles POST /api/system/update-config (superadmin only)
+func (h *Handler) UpdateUpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if claims.Role != "superadmin" {
+		h.writeError(w, http.StatusForbidden, "Access denied. Superadmin role required.")
+		return
+	}
+
+	var req models.UpdateRepoConfigRequest
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	repo := strings.TrimSpace(req.GitHubRepo)
+	if repo == "" {
+		h.writeError(w, http.StatusBadRequest, "githubRepo is required")
+		return
+	}
+
+	// Basic validation: must be in owner/repo format
+	if strings.Count(repo, "/") != 1 || strings.HasPrefix(repo, "/") || strings.HasSuffix(repo, "/") {
+		h.writeError(w, http.StatusBadRequest, "githubRepo must be in 'owner/repo' format (e.g. ntoric/mario_tauri)")
+		return
+	}
+
+	if err := h.Repo.UpdateRepo.Save(r.Context(), repo); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Update repository configuration saved successfully",
+		"config": models.UpdateRepoConfig{
+			GitHubRepo: repo,
+		},
+	})
+}
+
+// GetUpdateManifest handles GET /api/update/manifest (public)
+// It proxies the latest.json manifest from the superadmin-configured GitHub repository
+// so the Tauri updater can dynamically check a configurable repo at runtime.
+func (h *Handler) GetUpdateManifest(w http.ResponseWriter, r *http.Request) {
+	repo, err := h.Repo.UpdateRepo.Get(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to read update repository configuration")
+		return
+	}
+
+	if repo == "" {
+		h.writeError(w, http.StatusNotFound, "Update repository is not configured")
+		return
+	}
+
+	manifestURL := "https://github.com/" + repo + "/releases/latest/download/latest.json"
+
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, manifestURL, nil)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to create manifest request")
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		h.writeError(w, http.StatusBadGateway, "Failed to fetch update manifest from GitHub")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		h.writeError(w, http.StatusNotFound, "No update manifest found for the configured repository")
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		h.writeError(w, http.StatusBadGateway, "GitHub returned non-200 status: "+resp.Status)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		// Best-effort copy; headers already written
+		return
+	}
 }

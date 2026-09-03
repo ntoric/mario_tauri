@@ -16,7 +16,7 @@
         "width": 1200,
         "height": 800,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": true
       }
     ],
     "security": {
@@ -55,7 +55,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5NjI2N0FBM0JEMUEzNDkKUldSSm85RTdxbWRpaVk3b2FXdjViN21BR0VXWldhekV1Y0xXQWJpUDREOWhNcWIyQ0prUVg1YlUK",
       "endpoints": [
-        "https://github.com/ntoric/mario_tauri/releases/latest/download/latest.json"
+        "https://mario-v2-backend.ntoric.com/api/update/manifest"
       ],
       "dialog": true,
       "windows": {
