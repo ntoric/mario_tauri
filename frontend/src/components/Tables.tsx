@@ -318,7 +318,7 @@ const Tables: React.FC = () => {
     const activeOrder = getActiveOrderByTable(table.id);
     if (activeOrder) {
       setPaymentMethod('upi');
-      handlePrintAndComplete(table);
+      setBillDialogTable(table);
     }
   };
 
