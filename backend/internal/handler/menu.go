@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -102,6 +103,7 @@ func (h *Handler) UpdateGeminiConfig(w http.ResponseWriter, r *http.Request) {
 
 	apiKey := strings.TrimSpace(req.APIKey)
 	model := strings.TrimSpace(req.Model)
+	model = strings.TrimPrefix(model, "models/")
 	if model == "" {
 		model = defaultGeminiModel
 	}
@@ -282,7 +284,13 @@ func (h *Handler) ParseMenuImage(w http.ResponseWriter, r *http.Request) {
 // callGeminiGenerateContent calls the Gemini generateContent endpoint with an
 // inline_data part (image/PDF) plus a text prompt, requesting JSON output.
 func callGeminiGenerateContent(ctx context.Context, apiKey, model, mimeType, base64Data, prompt string) (string, error) {
+	// Gemini's "list models" endpoint returns names prefixed with "models/"
+	// (e.g. "models/gemini-2.0-flash"). Strip it so we don't end up with a
+	// doubled "models/models/..." path in the request URL.
+	model = strings.TrimPrefix(model, "models/")
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", geminiBaseURL, model, apiKey)
+
+	log.Printf("[Gemini] model=%s mimeType=%s imageBytes=%d prompt:\n%s", model, mimeType, len(base64Data), prompt)
 
 	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
