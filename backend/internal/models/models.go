@@ -361,6 +361,10 @@ type ParsedMenuItem struct {
 	Price       float64 `json:"price"`
 	HSNCode     string  `json:"hsnCode"`
 	TaxPercent  float64 `json:"taxPercent"`
+	// MatchedItemID is set by the frontend when an existing item is matched
+	// by name. Used only for "merge" imports to update the existing item
+	// instead of creating a duplicate.
+	MatchedItemID string `json:"matchedItemId,omitempty"`
 }
 
 // ParsedMenuCategory is a category with its items extracted from an uploaded menu.
@@ -368,6 +372,10 @@ type ParsedMenuCategory struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
 	Items       []ParsedMenuItem `json:"items"`
+	// MatchedCategoryID is set by the frontend when an existing category is
+	// matched by name. Used only for "merge" imports to reuse the existing
+	// category instead of creating a duplicate.
+	MatchedCategoryID string `json:"matchedCategoryId,omitempty"`
 }
 
 // ParsedMenu is the standardized structure Gemini must return for a menu.
@@ -375,11 +383,22 @@ type ParsedMenu struct {
 	Categories []ParsedMenuCategory `json:"categories"`
 }
 
-// MenuParseRequest is the payload for POST /api/menu/parse.
-type MenuParseRequest struct {
-	StoreID     string `json:"storeId"`
+// MenuParseImage is a single image/PDF sent for parsing. Multiple images may
+// be supplied in a single parse request (e.g. a multi-page menu photographed
+// as several pictures).
+type MenuParseImage struct {
 	ImageBase64 string `json:"imageBase64"` // may include data:<mime>;base64, prefix
 	MimeType    string `json:"mimeType"`    // e.g. image/jpeg, application/pdf
+}
+
+// MenuParseRequest is the payload for POST /api/menu/parse.
+// Either a single ImageBase64/MimeType pair (legacy) or an Images array may be
+// supplied. When both are present, Images takes precedence.
+type MenuParseRequest struct {
+	StoreID     string           `json:"storeId"`
+	ImageBase64 string           `json:"imageBase64"` // legacy single-image field
+	MimeType    string           `json:"mimeType"`    // legacy single-image field
+	Images      []MenuParseImage `json:"images"`      // multi-image upload
 }
 
 // MenuParseResponse is returned to the frontend after parsing a menu image.
@@ -389,19 +408,36 @@ type MenuParseResponse struct {
 	Model       string     `json:"model"`
 }
 
+// BulkMenuImportMode controls how BulkMenuRequest is applied.
+//   - "add":    insert all parsed categories/items (legacy ReplaceExisting=false)
+//   - "replace": soft-delete the entire current menu, then insert (legacy ReplaceExisting=true)
+//   - "merge":  update matched items in place, add new items/categories, leave
+//     untouched items as-is.
+type BulkMenuImportMode string
+
+const (
+	BulkMenuModeAdd     BulkMenuImportMode = "add"
+	BulkMenuModeReplace BulkMenuImportMode = "replace"
+	BulkMenuModeMerge   BulkMenuImportMode = "merge"
+)
+
 // BulkMenuRequest is the payload for POST /api/menu/bulk.
-// When ReplaceExisting is true, all existing categories and items for the
-// store are soft-deleted before inserting the new menu.
+// Mode controls the import behaviour ("add", "replace" or "merge"). The legacy
+// ReplaceExisting bool is still honoured when Mode is empty: true maps to
+// "replace" and false maps to "add".
 type BulkMenuRequest struct {
 	StoreID         string               `json:"storeId"`
-	ReplaceExisting bool                 `json:"replaceExisting"`
+	Mode            BulkMenuImportMode   `json:"mode"`
+	ReplaceExisting bool                 `json:"replaceExisting"` // legacy
 	Categories      []ParsedMenuCategory `json:"categories"`
 }
 
 type BulkMenuResponse struct {
-	Message         string `json:"message"`
-	CategoriesAdded int    `json:"categoriesAdded"`
-	ItemsAdded      int    `json:"itemsAdded"`
+	Message          string `json:"message"`
+	CategoriesAdded  int    `json:"categoriesAdded"`
+	ItemsAdded       int    `json:"itemsAdded"`
+	ItemsUpdated     int    `json:"itemsUpdated"`
+	CategoriesReused int    `json:"categoriesReused"`
 }
 
 // ExpenseCategory represents expense category table schema and json dto

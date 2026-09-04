@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Sparkles, Loader2, AlertCircle, Check, FileText, ImageIcon, RefreshCw,
-  Code, Eye, Save, X, Plus, ArrowRight, Search,
+  Code, Eye, Save, X, Plus, ArrowRight, Search, Columns, List,
 } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -20,6 +20,7 @@ interface ParsedMenuItem {
   // frontend-only fields for diffing/editing
   _status?: 'new' | 'price-change' | 'match';
   _currentPrice?: number;
+  _matchedItemId?: string;   // id of the existing item matched by name (for merge mode)
 }
 
 interface ParsedMenuCategory {
@@ -27,6 +28,7 @@ interface ParsedMenuCategory {
   description: string;
   items: ParsedMenuItem[];
   _status?: 'new' | 'match';
+  _matchedCategoryId?: string; // id of the existing category matched by name (for merge mode)
 }
 
 interface ParsedMenu {
@@ -34,6 +36,15 @@ interface ParsedMenu {
 }
 
 type ItemStatus = 'new' | 'price-change' | 'match';
+type ImportMode = 'add' | 'replace' | 'merge';
+type ViewMode = 'inline' | 'split';
+
+interface MenuFile {
+  name: string;
+  base64: string;     // full data URL or raw base64
+  mimeType: string;
+  preview: string;    // data URL for images, '' for PDFs
+}
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -44,10 +55,7 @@ const MenuUpload: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedStoreId, setSelectedStoreId] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileBase64, setFileBase64] = useState('');
-  const [fileMimeType, setFileMimeType] = useState('');
-  const [filePreview, setFilePreview] = useState('');
+  const [files, setFiles] = useState<MenuFile[]>([]);
 
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -56,7 +64,8 @@ const MenuUpload: React.FC = () => {
   const [usedModel, setUsedModel] = useState('');
   const [showRaw, setShowRaw] = useState(false);
   const [showOnlyChanges, setShowOnlyChanges] = useState(false);
-  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [importMode, setImportMode] = useState<ImportMode>('merge');
+  const [viewMode, setViewMode] = useState<ViewMode>('inline');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -106,8 +115,8 @@ const MenuUpload: React.FC = () => {
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
 
     setError('');
     setSuccess('');
@@ -115,31 +124,33 @@ const MenuUpload: React.FC = () => {
     setParsedMenu(null);
     setRawResponse('');
 
-    const isImage = file.type.startsWith('image/');
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    if (!isImage && !isPdf) {
-      setError('Please upload an image (PNG/JPG) or a PDF file.');
-      return;
+    for (const file of selected) {
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isImage && !isPdf) {
+        setError('Please upload image (PNG/JPG) or PDF files only.');
+        continue;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        setError(`${file.name} is too large. Maximum size is 20MB per file.`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setFiles(prev => [
+          ...prev,
+          { name: file.name, base64: result, mimeType: isPdf ? 'application/pdf' : file.type, preview: isPdf ? '' : result },
+        ]);
+      };
+      reader.readAsDataURL(file);
     }
-    // 20MB limit to stay within Gemini inline data limits.
-    if (file.size > 20 * 1024 * 1024) {
-      setError('File is too large. Maximum size is 20MB.');
-      return;
-    }
+    // Reset the input so selecting the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      setFileBase64(result);
-      setFileMimeType(isPdf ? 'application/pdf' : file.type);
-      setFileName(file.name);
-      setFilePreview(isPdf ? '' : result);
-    };
-    if (isImage) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsDataURL(file);
-    }
+  const handleRemoveFile = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleParse = async () => {
@@ -147,8 +158,8 @@ const MenuUpload: React.FC = () => {
       setError('Please select a target store first.');
       return;
     }
-    if (!fileBase64) {
-      setError('Please upload a menu image or PDF first.');
+    if (files.length === 0) {
+      setError('Please upload at least one menu image or PDF first.');
       return;
     }
 
@@ -160,14 +171,15 @@ const MenuUpload: React.FC = () => {
     setRawResponse('');
 
     try {
-      const data = await api.parseMenuImage(selectedStoreId, fileBase64, fileMimeType);
+      const images = files.map(f => ({ imageBase64: f.base64, mimeType: f.mimeType }));
+      const data = await api.parseMenuImages(selectedStoreId, images);
       const menu: ParsedMenu = data.menu || { categories: [] };
       setRawResponse(data.rawResponse || '');
       setUsedModel(data.model || '');
       const diffed = applyDiff(menu, currentCategories, currentItems);
       setParsedMenu(diffed);
       const totalItems = diffed.categories.reduce((n, c) => n + c.items.length, 0);
-      setInfo(`Parsed ${diffed.categories.length} categories and ${totalItems} items using ${data.model || 'Gemini'}.`);
+      setInfo(`Parsed ${diffed.categories.length} categories and ${totalItems} items from ${files.length} file${files.length > 1 ? 's' : ''} using ${data.model || 'Gemini'}.`);
     } catch (err: any) {
       setError(err.message || 'Failed to parse menu with Gemini');
     } finally {
@@ -176,7 +188,9 @@ const MenuUpload: React.FC = () => {
   };
 
   // applyDiff compares the parsed menu against the store's current menu and
-  // annotates each category/item with a status used for highlighting.
+  // annotates each category/item with a status used for highlighting. It also
+  // records the matched DB ids (_matchedItemId / _matchedCategoryId) so that
+  // "merge" imports can update existing rows in place instead of duplicating.
   const applyDiff = (menu: ParsedMenu, cats: Category[], items: Item[]): ParsedMenu => {
     const catByName = new Map<string, Category>();
     cats.forEach(c => catByName.set(norm(c.name), c));
@@ -198,11 +212,11 @@ const MenuUpload: React.FC = () => {
             return { ...item, _status: 'new' as ItemStatus };
           }
           if (Math.abs((matched.price || 0) - (item.price || 0)) > 0.001) {
-            return { ...item, _status: 'price-change' as ItemStatus, _currentPrice: matched.price };
+            return { ...item, _status: 'price-change' as ItemStatus, _currentPrice: matched.price, _matchedItemId: matched.id };
           }
-          return { ...item, _status: 'match' as ItemStatus, _currentPrice: matched.price };
+          return { ...item, _status: 'match' as ItemStatus, _currentPrice: matched.price, _matchedItemId: matched.id };
         });
-        return { ...cat, _status: matchedCat ? 'match' : 'new', items };
+        return { ...cat, _status: matchedCat ? 'match' : 'new', _matchedCategoryId: matchedCat?.id, items };
       }),
     };
   };
@@ -270,10 +284,12 @@ const MenuUpload: React.FC = () => {
       return;
     }
 
-    const confirmMsg = replaceExisting
-      ? 'This will REPLACE the entire current menu of this store (existing categories and items will be deactivated) and import the parsed menu. Continue?'
-      : 'This will ADD the parsed categories and items to this store. Continue?';
-    if (!window.confirm(confirmMsg)) return;
+    const confirmMsg: Record<ImportMode, string> = {
+      replace: 'This will REPLACE the entire current menu of this store (existing categories and items will be deactivated) and import the parsed menu. Continue?',
+      add: 'This will ADD the parsed categories and items to this store (may create duplicates of matched items). Continue?',
+      merge: 'This will UPDATE matched items in place and ADD new items. Items not present in the parsed menu will be left untouched. Continue?',
+    };
+    if (!window.confirm(confirmMsg[importMode])) return;
 
     setIsImporting(true);
     setError('');
@@ -282,6 +298,7 @@ const MenuUpload: React.FC = () => {
       const payload = parsedMenu.categories.map(c => ({
         name: c.name.trim(),
         description: c.description,
+        matchedCategoryId: importMode === 'merge' ? c._matchedCategoryId : undefined,
         items: c.items
           .filter(i => i.name.trim() !== '')
           .map(i => ({
@@ -290,10 +307,14 @@ const MenuUpload: React.FC = () => {
             price: i.price,
             hsnCode: i.hsnCode,
             taxPercent: i.taxPercent,
+            matchedItemId: importMode === 'merge' ? i._matchedItemId : undefined,
           })),
       }));
-      const res = await api.bulkCreateMenu(selectedStoreId, payload, replaceExisting);
-      setSuccess(res.message || 'Menu imported successfully.');
+      const res = await api.bulkCreateMenu(selectedStoreId, payload, importMode === 'replace', importMode);
+      const summary = res.itemsUpdated
+        ? `${res.message || 'Menu imported.'} (${res.categoriesAdded} new + ${res.categoriesReused} reused categories, ${res.itemsAdded} new + ${res.itemsUpdated} updated items)`
+        : res.message || 'Menu imported successfully.';
+      setSuccess(summary);
       // Refresh the current menu view + bust the dataStore cache.
       cache.delete(cacheKeys.categories(selectedStoreId));
       cache.delete(cacheKeys.items(selectedStoreId));
@@ -311,10 +332,7 @@ const MenuUpload: React.FC = () => {
     setParsedMenu(null);
     setRawResponse('');
     setUsedModel('');
-    setFileBase64('');
-    setFileName('');
-    setFilePreview('');
-    setFileMimeType('');
+    setFiles([]);
     setError('');
     setSuccess('');
     setInfo('');
@@ -410,7 +428,7 @@ const MenuUpload: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>Menu Image or PDF</label>
+            <label>Menu Image(s) or PDF(s)</label>
             <div
               onClick={() => fileInputRef.current?.click()}
               style={{
@@ -423,21 +441,45 @@ const MenuUpload: React.FC = () => {
                 transition: 'border-color 0.2s',
               }}
             >
-              {filePreview ? (
+              {files.length === 0 ? (
                 <div>
-                  <img src={filePreview} alt="Menu preview" style={{ maxHeight: '240px', maxWidth: '100%', objectFit: 'contain', marginBottom: '0.75rem' }} />
-                  <div style={{ color: 'var(--gray-600)', fontSize: '0.875rem' }}>{fileName}</div>
-                </div>
-              ) : fileName ? (
-                <div>
-                  <FileText size={48} style={{ color: 'var(--gray-400)', marginBottom: '0.75rem' }} />
-                  <div style={{ color: 'var(--gray-600)', fontSize: '0.875rem' }}>{fileName}</div>
+                  <ImageIcon size={48} style={{ color: 'var(--gray-400)', marginBottom: '0.75rem' }} />
+                  <div style={{ color: 'var(--gray-600)' }}>Click to upload menu image(s) (PNG/JPG) or PDF(s)</div>
+                  <div style={{ color: 'var(--gray-400)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                    Multiple files supported - all parsed together as one menu. Max 20MB each.
+                  </div>
                 </div>
               ) : (
                 <div>
-                  <ImageIcon size={48} style={{ color: 'var(--gray-400)', marginBottom: '0.75rem' }} />
-                  <div style={{ color: 'var(--gray-600)' }}>Click to upload a menu image (PNG/JPG) or PDF</div>
-                  <div style={{ color: 'var(--gray-400)', fontSize: '0.8rem', marginTop: '0.25rem' }}>Max 20MB</div>
+                  <div style={{ color: 'var(--gray-600)', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+                    {files.length} file{files.length > 1 ? 's' : ''} selected - click to add more
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
+                    {files.map((f, idx) => (
+                      <div key={idx} style={{ position: 'relative', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '0.4rem', background: 'var(--surface, #fff)' }}>
+                        {f.preview ? (
+                          <img src={f.preview} alt={f.name} style={{ maxHeight: '120px', maxWidth: '160px', objectFit: 'contain', display: 'block' }} />
+                        ) : (
+                          <div style={{ width: '120px', height: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--gray-400)' }}>
+                            <FileText size={40} />
+                            <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', color: 'var(--gray-600)', wordBreak: 'break-all' }}>{f.name}</div>
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.7rem', color: 'var(--gray-500)', marginTop: '0.25rem', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemoveFile(idx); }}
+                          style={{
+                            position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%',
+                            background: 'var(--danger)', color: '#fff', border: 'none', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}
+                          title="Remove file"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -445,6 +487,7 @@ const MenuUpload: React.FC = () => {
               ref={fileInputRef}
               type="file"
               accept="image/*,application/pdf"
+              multiple
               onChange={handleFileSelect}
               style={{ display: 'none' }}
             />
@@ -454,16 +497,16 @@ const MenuUpload: React.FC = () => {
             <button
               className="btn btn-primary"
               onClick={handleParse}
-              disabled={isParsing || !fileBase64 || !selectedStoreId}
+              disabled={isParsing || files.length === 0 || !selectedStoreId}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               {isParsing ? (
                 <><Loader2 size={18} className="animate-spin" /> Parsing with Gemini...</>
               ) : (
-                <><Sparkles size={18} /> Parse Menu with Gemini</>
+                <><Sparkles size={18} /> Parse {files.length > 1 ? `${files.length} Files` : 'Menu'} with Gemini</>
               )}
             </button>
-            {(fileBase64 || parsedMenu) && (
+            {(files.length > 0 || parsedMenu) && (
               <button className="btn btn-outline" onClick={resetAll} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <RefreshCw size={18} /> Reset
               </button>
@@ -481,6 +524,22 @@ const MenuUpload: React.FC = () => {
               {usedModel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)', fontWeight: 'normal' }}>({usedModel})</span>}
             </span>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius)', overflow: 'hidden' }} title="Toggle inline vs side-by-side (Meld-style) diff view">
+                <button
+                  className={`btn ${viewMode === 'inline' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setViewMode('inline')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem', borderRadius: 0, border: 'none' }}
+                >
+                  <List size={14} /> Inline
+                </button>
+                <button
+                  className={`btn ${viewMode === 'split' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setViewMode('split')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem', borderRadius: 0, border: 'none' }}
+                >
+                  <Columns size={14} /> Split
+                </button>
+              </div>
               <button
                 className={`btn btn-outline ${showOnlyChanges ? 'btn-primary' : ''}`}
                 onClick={() => setShowOnlyChanges(!showOnlyChanges)}
@@ -540,6 +599,17 @@ const MenuUpload: React.FC = () => {
                   const hideCategory = showOnlyChanges && cat._status !== 'new' && visibleItems.length === 0;
                   if (hideCategory) return null;
 
+                  // Current items belonging to this category (by matched id or name).
+                  const currentCat = cat._matchedCategoryId
+                    ? currentCategories.find(c => c.id === cat._matchedCategoryId)
+                    : currentCategories.find(c => norm(c.name) === norm(cat.name));
+                  const currentCatItems = currentCat
+                    ? currentItems.filter(i => i.categoryId === currentCat.id)
+                    : [];
+                  // Parsed item names that match an existing item (for split pairing).
+                  const parsedNames = new Set(visibleItems.map(i => norm(i.name)));
+                  const onlyInCurrent = currentCatItems.filter(ci => !parsedNames.has(norm(ci.name)));
+
                   return (
                     <div key={catIdx} style={{
                       border: '1px solid var(--gray-200)',
@@ -585,10 +655,21 @@ const MenuUpload: React.FC = () => {
                         />
                       </div>
 
-                      {visibleItems.length === 0 ? (
+                      {visibleItems.length === 0 && (viewMode === 'inline' || currentCatItems.length === 0) ? (
                         <div style={{ padding: '0.75rem 1rem', color: 'var(--gray-400)', fontSize: '0.85rem' }}>
                           {showOnlyChanges ? 'No changes in this category.' : 'No items.'}
                         </div>
+                      ) : viewMode === 'split' ? (
+                        <SplitDiffView
+                          catIdx={catIdx}
+                          currentCatItems={currentCatItems}
+                          onlyInCurrent={onlyInCurrent}
+                          visibleItems={visibleItems}
+                          cat={cat}
+                          statusBadge={statusBadge}
+                          onEditItem={handleEditItem}
+                          onRemoveItem={handleRemoveItem}
+                        />
                       ) : (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
@@ -676,15 +757,31 @@ const MenuUpload: React.FC = () => {
           </div>
 
           <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)', flexWrap: 'wrap', gap: '1rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={replaceExisting}
-                onChange={(e) => setReplaceExisting(e.target.checked)}
-              />
-              Replace existing menu
-              <small style={{ color: 'var(--gray-500)' }}>(deactivates current categories & items before import)</small>
-            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Import mode</span>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {([
+                  { key: 'merge', label: 'Update matched', hint: 'Update existing items in place; add new ones; leave others untouched' },
+                  { key: 'add', label: 'Add all', hint: 'Insert everything (may create duplicates)' },
+                  { key: 'replace', label: 'Replace entire menu', hint: 'Deactivate current menu, then insert parsed menu' },
+                ] as { key: ImportMode; label: string; hint: string }[]).map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`btn ${importMode === opt.key ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => setImportMode(opt.key)}
+                    title={opt.hint}
+                    style={{ fontSize: '0.8rem', padding: '0.35rem 0.7rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <small style={{ color: 'var(--gray-500)', fontSize: '0.75rem' }}>
+                {importMode === 'merge' && 'Updates matched items in place and adds new items. Items not in the parsed menu stay as-is.'}
+                {importMode === 'add' && 'Inserts all parsed categories/items. Matched items will be duplicated.'}
+                {importMode === 'replace' && 'Deactivates the entire current menu before inserting the parsed one.'}
+              </small>
+            </div>
             <button
               className="btn btn-primary"
               onClick={handleImport}
@@ -694,7 +791,7 @@ const MenuUpload: React.FC = () => {
               {isImporting ? (
                 <><Loader2 size={18} className="animate-spin" /> Importing...</>
               ) : (
-                <><Save size={18} /> {replaceExisting ? 'Replace Menu' : 'Add to Store'} <ArrowRight size={16} /></>
+                <><Save size={18} /> {importMode === 'replace' ? 'Replace Menu' : importMode === 'merge' ? 'Update Menu' : 'Add to Store'} <ArrowRight size={16} /></>
               )}
             </button>
           </div>
@@ -811,6 +908,137 @@ const inputStyle: React.CSSProperties = {
   borderRadius: '4px',
   fontSize: '0.85rem',
   background: 'var(--surface, #fff)',
+};
+
+// ---- Split (Meld-style) diff view ----
+// Renders the current store items on the left and the parsed items on the
+// right, pairing matched items on the same row so price changes are easy to
+// spot. Items only on one side are shown alone with a NEW / REMOVED badge.
+
+interface SplitDiffViewProps {
+  catIdx: number;
+  currentCatItems: Item[];
+  onlyInCurrent: Item[];
+  visibleItems: ParsedMenuItem[];
+  cat: ParsedMenuCategory;
+  statusBadge: (status?: ItemStatus, currentPrice?: number) => React.ReactNode;
+  onEditItem: (catIdx: number, itemIdx: number, field: keyof ParsedMenuItem, value: string) => void;
+  onRemoveItem: (catIdx: number, itemIdx: number) => void;
+}
+
+const SplitDiffView: React.FC<SplitDiffViewProps> = ({
+  catIdx, currentCatItems, onlyInCurrent, visibleItems, cat, statusBadge, onEditItem, onRemoveItem,
+}) => {
+  // Build paired rows: for each parsed item, find the matching current item by name.
+  const usedCurrent = new Set<string>();
+  const rows: { parsed?: ParsedMenuItem; parsedActualIdx?: number; current?: Item }[] = [];
+  visibleItems.forEach(p => {
+    const actualIdx = cat.items.indexOf(p);
+    const cur = currentCatItems.find(c => norm(c.name) === norm(p.name));
+    if (cur) usedCurrent.add(cur.id);
+    rows.push({ parsed: p, parsedActualIdx: actualIdx, current: cur });
+  });
+  // Items that exist in the current menu but are absent from the parsed menu.
+  onlyInCurrent.forEach(c => {
+    if (!usedCurrent.has(c.id)) rows.push({ current: c });
+  });
+
+  const cellBase: React.CSSProperties = {
+    padding: '0.4rem 0.6rem', fontSize: '0.85rem', verticalAlign: 'middle', borderBottom: '1px solid var(--gray-100)',
+  };
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <thead>
+          <tr style={{ background: 'var(--gray-50)', textAlign: 'left' }}>
+            <th style={{ ...thStyle, width: '50%' }}>Current (in store)</th>
+            <th style={{ ...thStyle, width: '50%' }}>Parsed (from upload)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            const status = row.parsed?._status;
+            const leftBg = !row.current && row.parsed
+              ? 'transparent'
+              : row.parsed?._status === 'price-change'
+                ? 'rgba(245,158,11,0.08)'
+                : 'transparent';
+            const rightBg = status === 'new'
+              ? 'rgba(43,165,74,0.06)'
+              : status === 'price-change'
+                ? 'rgba(245,158,11,0.08)'
+                : 'transparent';
+            return (
+              <tr key={i}>
+                {/* Left: current item */}
+                <td style={{ ...cellBase, background: leftBg }}>
+                  {row.current ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 500 }}>{row.current.name}</span>
+                      <span style={{ color: 'var(--gray-500)' }}>₹{row.current.price}</span>
+                      {row.parsed?._status === 'price-change' && (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>CHANGED</span>
+                      )}
+                      {row.parsed?._status === 'match' && (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>unchanged</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span style={{ color: 'var(--gray-400)', fontStyle: 'italic' }}>
+                      {status === 'new' ? '(new item - not in store)' : '—'}
+                    </span>
+                  )}
+                </td>
+                {/* Right: parsed item (editable) */}
+                <td style={{ ...cellBase, background: rightBg }}>
+                  {row.parsed ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      {statusBadge(row.parsed._status, row.parsed._currentPrice)}
+                      <input
+                        value={row.parsed.name}
+                        onChange={(e) => onEditItem(catIdx, row.parsedActualIdx!, 'name', e.target.value)}
+                        style={{ ...inputStyle, flex: '1 1 140px', minWidth: '120px' }}
+                      />
+                      <input
+                        type="number"
+                        value={row.parsed.price}
+                        onChange={(e) => onEditItem(catIdx, row.parsedActualIdx!, 'price', e.target.value)}
+                        style={{ ...inputStyle, width: '80px' }}
+                        step="0.01"
+                      />
+                      <input
+                        type="number"
+                        value={row.parsed.taxPercent}
+                        onChange={(e) => onEditItem(catIdx, row.parsedActualIdx!, 'taxPercent', e.target.value)}
+                        style={{ ...inputStyle, width: '70px' }}
+                        step="0.01"
+                        title="Tax %"
+                      />
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => onRemoveItem(catIdx, row.parsedActualIdx!)}
+                        style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--danger)' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ color: 'var(--gray-400)', fontStyle: 'italic' }}>
+                      (only in store - will be left untouched)
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {rows.length === 0 && (
+            <tr><td colSpan={2} style={{ ...cellBase, color: 'var(--gray-400)' }}>No items.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 };
 
 export default MenuUpload;

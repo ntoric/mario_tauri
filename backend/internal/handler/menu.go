@@ -200,9 +200,12 @@ func (h *Handler) ListGeminiModels(w http.ResponseWriter, r *http.Request) {
 // ==========================================
 
 // ParseMenuImage handles POST /api/menu/parse (superadmin only)
-// It forwards the uploaded menu image/PDF (as base64) to Gemini with a strict
-// JSON prompt, parses the standardized response and returns both the structured
-// menu and the raw model output for debugging.
+// It forwards the uploaded menu image(s)/PDF(s) (as base64) to Gemini with a
+// strict JSON prompt, parses the standardized response and returns both the
+// structured menu and the raw model output for debugging. Multiple images may
+// be supplied in a single request (e.g. a multi-page menu photographed as
+// several pictures); they are sent as separate inline_data parts so Gemini can
+// parse them together as one menu.
 func (h *Handler) ParseMenuImage(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
@@ -224,24 +227,25 @@ func (h *Handler) ParseMenuImage(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "storeId is required")
 		return
 	}
-	if req.ImageBase64 == "" {
-		h.writeError(w, http.StatusBadRequest, "imageBase64 is required")
-		return
-	}
 
-	mimeType := strings.TrimSpace(req.MimeType)
-	cleanBase64 := req.ImageBase64
-	// Allow callers to pass a full data URL; strip the prefix if present.
-	if strings.HasPrefix(cleanBase64, "data:") {
-		if idx := strings.Index(cleanBase64, ";base64,"); idx != -1 {
-			if mimeType == "" {
-				mimeType = cleanBase64[len("data:"):idx]
-			}
-			cleanBase64 = cleanBase64[idx+len(";base64,"):]
+	// Collect images. The Images array takes precedence; fall back to the
+	// legacy single ImageBase64/MimeType fields for backward compatibility.
+	var images []geminiInlinePart
+	for _, img := range req.Images {
+		mt, data := normalizeImageData(img.ImageBase64, img.MimeType)
+		if data != "" {
+			images = append(images, geminiInlinePart{MimeType: mt, Data: data})
 		}
 	}
-	if mimeType == "" {
-		mimeType = "image/jpeg"
+	if len(images) == 0 && req.ImageBase64 != "" {
+		mt, data := normalizeImageData(req.ImageBase64, req.MimeType)
+		if data != "" {
+			images = append(images, geminiInlinePart{MimeType: mt, Data: data})
+		}
+	}
+	if len(images) == 0 {
+		h.writeError(w, http.StatusBadRequest, "at least one imageBase64/images entry is required")
+		return
 	}
 
 	apiKey, model, err := h.Repo.Gemini.Get(r.Context())
@@ -257,7 +261,7 @@ func (h *Handler) ParseMenuImage(w http.ResponseWriter, r *http.Request) {
 		model = defaultGeminiModel
 	}
 
-	raw, err := callGeminiGenerateContent(r.Context(), apiKey, model, mimeType, cleanBase64, menuParsePrompt)
+	raw, err := callGeminiGenerateContentMulti(r.Context(), apiKey, model, images, menuParsePrompt)
 	if err != nil {
 		h.writeError(w, http.StatusBadGateway, "Gemini request failed: "+err.Error())
 		return
@@ -281,27 +285,69 @@ func (h *Handler) ParseMenuImage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// callGeminiGenerateContent calls the Gemini generateContent endpoint with an
-// inline_data part (image/PDF) plus a text prompt, requesting JSON output.
+// normalizeImageData strips an optional data:<mime>;base64, prefix and defaults
+// the mime type to image/jpeg when missing.
+func normalizeImageData(raw, mimeType string) (string, string) {
+	mt := strings.TrimSpace(mimeType)
+	data := raw
+	if strings.HasPrefix(data, "data:") {
+		if idx := strings.Index(data, ";base64,"); idx != -1 {
+			if mt == "" {
+				mt = data[len("data:"):idx]
+			}
+			data = data[idx+len(";base64,"):]
+		}
+	}
+	if mt == "" {
+		mt = "image/jpeg"
+	}
+	return mt, data
+}
+
+// geminiInlinePart is a single inline_data part (image/PDF) sent to Gemini.
+type geminiInlinePart struct {
+	MimeType string
+	Data     string
+}
+
+// callGeminiGenerateContent calls the Gemini generateContent endpoint with a
+// single inline_data part (image/PDF) plus a text prompt, requesting JSON
+// output. Kept for backward compatibility.
 func callGeminiGenerateContent(ctx context.Context, apiKey, model, mimeType, base64Data, prompt string) (string, error) {
+	return callGeminiGenerateContentMulti(ctx, apiKey, model, []geminiInlinePart{{MimeType: mimeType, Data: base64Data}}, prompt)
+}
+
+// callGeminiGenerateContentMulti calls the Gemini generateContent endpoint with
+// one or more inline_data parts (images/PDFs) plus a text prompt, requesting
+// JSON output. All images are sent in a single request so Gemini can parse them
+// together as one menu.
+func callGeminiGenerateContentMulti(ctx context.Context, apiKey, model string, images []geminiInlinePart, prompt string) (string, error) {
 	// Gemini's "list models" endpoint returns names prefixed with "models/"
 	// (e.g. "models/gemini-2.0-flash"). Strip it so we don't end up with a
 	// doubled "models/models/..." path in the request URL.
 	model = strings.TrimPrefix(model, "models/")
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", geminiBaseURL, model, apiKey)
 
-	log.Printf("[Gemini] model=%s mimeType=%s imageBytes=%d prompt:\n%s", model, mimeType, len(base64Data), prompt)
+	totalBytes := 0
+	for _, im := range images {
+		totalBytes += len(im.Data)
+	}
+	log.Printf("[Gemini] model=%s images=%d totalBytes=%d prompt:\n%s", model, len(images), totalBytes, prompt)
+
+	parts := []map[string]interface{}{{"text": prompt}}
+	for _, im := range images {
+		parts = append(parts, map[string]interface{}{
+			"inline_data": map[string]interface{}{
+				"mime_type": im.MimeType,
+				"data":      im.Data,
+			},
+		})
+	}
 
 	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{
-				"parts": []map[string]interface{}{
-					{"text": prompt},
-					{"inline_data": map[string]interface{}{
-						"mime_type": mimeType,
-						"data":      base64Data,
-					}},
-				},
+				"parts": parts,
 			},
 		},
 		"generationConfig": map[string]interface{}{
@@ -455,9 +501,15 @@ func extractJSONObject(s string) string {
 // ==========================================
 
 // BulkCreateMenu handles POST /api/menu/bulk (superadmin only)
-// It inserts the provided categories and items for a store in a single
-// transaction. When replaceExisting is true, all existing categories and items
-// for the store are soft-deleted first.
+// It applies the provided categories and items for a store in a single
+// transaction. The Mode field controls the behaviour:
+//   - "add" (default):     insert all parsed categories/items.
+//   - "replace":           soft-delete the entire current menu, then insert.
+//   - "merge":             update matched items in place, add new items, and
+//     leave untouched items as-is.
+//
+// The legacy ReplaceExisting bool is honoured when Mode is empty: true maps to
+// "replace" and false maps to "add".
 func (h *Handler) BulkCreateMenu(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
@@ -484,15 +536,51 @@ func (h *Handler) BulkCreateMenu(w http.ResponseWriter, r *http.Request) {
 		req.Categories = []models.ParsedMenuCategory{}
 	}
 
-	catsAdded, itemsAdded, err := h.Repo.Menu.BulkCreate(r.Context(), storeID, req.ReplaceExisting, req.Categories)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	// Resolve the import mode, honouring the legacy ReplaceExisting field.
+	mode := req.Mode
+	if mode == "" {
+		if req.ReplaceExisting {
+			mode = models.BulkMenuModeReplace
+		} else {
+			mode = models.BulkMenuModeAdd
+		}
 	}
 
-	h.writeJSON(w, http.StatusOK, models.BulkMenuResponse{
-		Message:         "Menu imported successfully",
-		CategoriesAdded: catsAdded,
-		ItemsAdded:      itemsAdded,
-	})
+	switch mode {
+	case models.BulkMenuModeMerge:
+		catsAdded, catsReused, itemsAdded, itemsUpdated, err := h.Repo.Menu.BulkMerge(r.Context(), storeID, req.Categories)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.writeJSON(w, http.StatusOK, models.BulkMenuResponse{
+			Message:          "Menu merged successfully",
+			CategoriesAdded:  catsAdded,
+			CategoriesReused: catsReused,
+			ItemsAdded:       itemsAdded,
+			ItemsUpdated:     itemsUpdated,
+		})
+	case models.BulkMenuModeReplace:
+		catsAdded, itemsAdded, err := h.Repo.Menu.BulkCreate(r.Context(), storeID, true, req.Categories)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.writeJSON(w, http.StatusOK, models.BulkMenuResponse{
+			Message:         "Menu replaced successfully",
+			CategoriesAdded: catsAdded,
+			ItemsAdded:      itemsAdded,
+		})
+	default: // "add"
+		catsAdded, itemsAdded, err := h.Repo.Menu.BulkCreate(r.Context(), storeID, false, req.Categories)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.writeJSON(w, http.StatusOK, models.BulkMenuResponse{
+			Message:         "Menu imported successfully",
+			CategoriesAdded: catsAdded,
+			ItemsAdded:      itemsAdded,
+		})
+	}
 }

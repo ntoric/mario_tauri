@@ -2102,6 +2102,147 @@ func (r *MenuRepository) BulkCreate(ctx context.Context, storeID string, replace
 	return catsAdded, itemsAdded, nil
 }
 
+// BulkMerge applies a parsed menu on top of an existing store menu without
+// removing items that are absent from the parsed menu. For each category:
+//   - if MatchedCategoryID is provided, that existing category is reused;
+//   - otherwise an existing active category with the same (normalized) name is
+//     reused; if none exists a new category is created.
+//
+// For each item:
+//   - if MatchedItemID is provided, that existing item is updated in place;
+//   - otherwise a new item is inserted under the resolved category.
+//
+// Items that exist in the store but are not part of the parsed menu are left
+// untouched. The returned counts report categories added/reused and items
+// added/updated.
+func (r *MenuRepository) BulkMerge(ctx context.Context, storeID string, categories []models.ParsedMenuCategory) (catsAdded, catsReused, itemsAdded, itemsUpdated int, err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Load existing active categories for the store so we can reuse them by name.
+	existingCats, err := tx.QueryContext(ctx,
+		"SELECT id, name FROM categories WHERE store_id = $1 AND is_active = true", storeID)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	catByName := map[string]string{} // normalized name -> category id
+	for existingCats.Next() {
+		var id, name string
+		if err = existingCats.Scan(&id, &name); err != nil {
+			existingCats.Close()
+			return 0, 0, 0, 0, err
+		}
+		catByName[normName(name)] = id
+	}
+	existingCats.Close()
+	if err = existingCats.Err(); err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	for _, cat := range categories {
+		catName := strings.TrimSpace(cat.Name)
+		if catName == "" {
+			catName = "Uncategorized"
+		}
+
+		catID := strings.TrimSpace(cat.MatchedCategoryID)
+		if catID != "" {
+			// Verify the matched category belongs to this store and is active.
+			var active bool
+			err = tx.QueryRowContext(ctx,
+				"SELECT is_active FROM categories WHERE id = $1 AND store_id = $2", catID, storeID,
+			).Scan(&active)
+			if err != nil || !active {
+				catID = "" // fall back to name lookup / creation
+			} else {
+				// Update the category name/description to match the parsed menu.
+				if _, err = tx.ExecContext(ctx,
+					"UPDATE categories SET name = $1, description = $2 WHERE id = $3",
+					catName, cat.Description, catID,
+				); err != nil {
+					return 0, 0, 0, 0, err
+				}
+				catsReused++
+			}
+		}
+		if catID == "" {
+			if existingID, ok := catByName[normName(catName)]; ok {
+				catID = existingID
+				catsReused++
+			} else {
+				catID = uuid.New().String()
+				if _, err = tx.ExecContext(ctx,
+					"INSERT INTO categories (id, store_id, name, description) VALUES ($1, $2, $3, $4)",
+					catID, storeID, catName, cat.Description,
+				); err != nil {
+					return 0, 0, 0, 0, err
+				}
+				catsAdded++
+				catByName[normName(catName)] = catID
+			}
+		}
+
+		for _, item := range cat.Items {
+			itemName := strings.TrimSpace(item.Name)
+			if itemName == "" {
+				continue
+			}
+			matchedID := strings.TrimSpace(item.MatchedItemID)
+			if matchedID != "" {
+				// Verify the matched item belongs to this store and is active.
+				var active bool
+				err = tx.QueryRowContext(ctx,
+					"SELECT is_active FROM items WHERE id = $1 AND store_id = $2", matchedID, storeID,
+				).Scan(&active)
+				if err == nil && active {
+					if _, err = tx.ExecContext(ctx,
+						"UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6 WHERE id = $7",
+						catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent, matchedID,
+					); err != nil {
+						return 0, 0, 0, 0, err
+					}
+					itemsUpdated++
+					continue
+				}
+				// matched ID invalid -> create new below
+			}
+			itemID := uuid.New().String()
+			if _, err = tx.ExecContext(ctx,
+				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent,
+			); err != nil {
+				return 0, 0, 0, 0, err
+			}
+			itemsAdded++
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	if r.redis != nil {
+		r.redis.Delete(ctx, "categories:"+storeID)
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
+		r.redis.DeleteByPrefix(ctx, "items:")
+	}
+
+	return catsAdded, catsReused, itemsAdded, itemsUpdated, nil
+}
+
+// normName normalizes a category/item name for case- and whitespace-insensitive
+// matching during merge imports.
+func normName(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // ==========================================
 // EXPENSE CATEGORY REPOSITORY
 // ==========================================

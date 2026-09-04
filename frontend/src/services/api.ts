@@ -501,6 +501,7 @@ class ApiService {
   }
 
   // AI Menu Parsing (superadmin only)
+  // Supports either a single image (legacy) or multiple images in one request.
   async parseMenuImage(storeId: string, imageBase64: string, mimeType: string) {
     return this.fetch('/menu/parse', {
       method: 'POST',
@@ -508,10 +509,18 @@ class ApiService {
     });
   }
 
-  async bulkCreateMenu(storeId: string, categories: any[], replaceExisting: boolean) {
+  async parseMenuImages(storeId: string, images: { imageBase64: string; mimeType: string }[]) {
+    return this.fetch('/menu/parse', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, images }),
+    });
+  }
+
+  // mode: 'add' | 'replace' | 'merge'
+  async bulkCreateMenu(storeId: string, categories: any[], replaceExisting: boolean, mode?: 'add' | 'replace' | 'merge') {
     return this.fetch('/menu/bulk', {
       method: 'POST',
-      body: JSON.stringify({ storeId, categories, replaceExisting }),
+      body: JSON.stringify({ storeId, categories, replaceExisting, mode }),
     });
   }
 
