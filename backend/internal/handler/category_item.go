@@ -73,6 +73,7 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.IsActive = true
+	req.Enabled = true
 
 	if err := h.Repo.Category.Create(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -176,6 +177,7 @@ func (h *Handler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.IsActive = true
+	req.Enabled = true
 
 	if err := h.Repo.Item.Create(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())

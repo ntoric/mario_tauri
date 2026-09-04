@@ -90,7 +90,14 @@ const OrderModal: React.FC = () => {
 
   if (!isOpen || !table) return null;
 
+  // IDs of disabled categories — items belonging to these are hidden from ordering.
+  const disabledCategoryIds = new Set(
+    categories.filter(c => c.enabled === false).map(c => c.id)
+  );
+
   const filteredItems = items.filter(item => {
+    if (item.enabled === false) return false;
+    if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -399,8 +406,9 @@ const OrderModal: React.FC = () => {
 
   const total = calculateTotal() + calculateTax();
 
-  // Calculate visible and overflow categories
-  const allCategories = ['all', ...categories.map(cat => cat.id)];
+  // Calculate visible and overflow categories (exclude disabled categories)
+  const enabledCategories = categories.filter(c => c.enabled !== false);
+  const allCategories = ['all', ...enabledCategories.map(cat => cat.id)];
   const visibleCategories = allCategories.slice(0, visibleCategoryCount);
   const overflowCategories = allCategories.slice(visibleCategoryCount);
   const hasOverflow = overflowCategories.length > 0;

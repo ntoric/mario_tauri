@@ -85,7 +85,14 @@ const ParcelOrderPage: React.FC = () => {
     setSearchQuery('');
   }, []);
 
+  // IDs of disabled categories — items belonging to these are hidden from ordering.
+  const disabledCategoryIds = new Set(
+    categories.filter(c => c.enabled === false).map(c => c.id)
+  );
+
   const filteredItems = items.filter(item => {
+    if (item.enabled === false) return false;
+    if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const category = categories.find(cat => cat.id === item.categoryId);
     const categoryName = category?.name || '';
@@ -354,7 +361,7 @@ const ParcelOrderPage: React.FC = () => {
             >
               All Items
             </button>
-            {categories.map(cat => (
+            {categories.filter(c => c.enabled !== false).map(cat => (
               <button
                 key={cat.id}
                 className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}

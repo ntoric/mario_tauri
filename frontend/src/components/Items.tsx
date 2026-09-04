@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -399,6 +399,24 @@ const Items: React.FC = () => {
     }
   };
 
+  const handleToggleItem = async (item: Item) => {
+    setLoadingItemId(item.id);
+    try {
+      await updateItem(item.id, { ...item, enabled: !(item.enabled !== false) });
+    } finally {
+      setLoadingItemId(null);
+    }
+  };
+
+  const handleToggleCategory = async (category: Category) => {
+    setLoadingCategoryId(category.id);
+    try {
+      await updateCategory(category.id, { ...category, enabled: !(category.enabled !== false) });
+    } finally {
+      setLoadingCategoryId(null);
+    }
+  };
+
   const renderExpenseSummary = () => (
     <div style={{
       display: 'grid',
@@ -685,12 +703,15 @@ const Items: React.FC = () => {
                     <th>Profit</th>
                     <th>Profit %</th>
                     {taxEnabled && <th>Tax %</th>}
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedItems.map(item => (
-                  <tr key={item.id}>
+                  {paginatedItems.map(item => {
+                    const isEnabled = item.enabled !== false;
+                    return (
+                  <tr key={item.id} style={{ opacity: isEnabled ? 1 : 0.5 }}>
                     <td><strong>{item.name}</strong></td>
                     <td><span className="badge badge-primary">{getCategoryName(item.categoryId)}</span></td>
                     <td style={{ color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(item.price)}</td>
@@ -703,17 +724,35 @@ const Items: React.FC = () => {
                     <td style={{ color: getProfitColor(item), fontWeight: 600 }}>{formatProfitPercent(item)}</td>
                     {taxEnabled && <td>{item.taxPercent || 0}%</td>}
                     <td>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px',
+                        color: isEnabled ? 'var(--success)' : 'var(--gray-500)',
+                        background: isEnabled ? 'rgba(43,165,74,0.15)' : 'var(--gray-100)',
+                      }}>
+                        {isEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="action-btns">
+                        <button
+                          className="action-btn"
+                          onClick={() => handleToggleItem(item)}
+                          disabled={loadingItemId === item.id}
+                          title={isEnabled ? 'Disable item (hide from ordering)' : 'Enable item'}
+                          style={{ color: isEnabled ? 'var(--success)' : 'var(--gray-400)' }}
+                        >
+                          {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                        </button>
                         <button className="action-btn edit" onClick={() => openItemForm(item)} disabled={loadingItemId === item.id} title="Edit item">
                           <Edit2 size={14} />
                         </button>
                         <button className="action-btn delete" onClick={() => handleDeleteItem(item)} disabled={loadingItemId === item.id} title="Delete Item">
-                          {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -757,27 +796,48 @@ const Items: React.FC = () => {
                     <th>Category Name</th>
                     <th>Description</th>
                     <th>Items Count</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedCategories.map(category => (
-                  <tr key={category.id}>
+                  {paginatedCategories.map(category => {
+                    const isEnabled = category.enabled !== false;
+                    return (
+                  <tr key={category.id} style={{ opacity: isEnabled ? 1 : 0.5 }}>
                     <td><strong>{category.name}</strong></td>
                     <td style={{ color: 'var(--gray-600)' }}>{category.description || '-'}</td>
                     <td>{items.filter(i => i.categoryId === category.id).length}</td>
                     <td>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px',
+                        color: isEnabled ? 'var(--success)' : 'var(--gray-500)',
+                        background: isEnabled ? 'rgba(43,165,74,0.15)' : 'var(--gray-100)',
+                      }}>
+                        {isEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="action-btns">
+                        <button
+                          className="action-btn"
+                          onClick={() => handleToggleCategory(category)}
+                          disabled={loadingCategoryId === category.id}
+                          title={isEnabled ? 'Disable category (hide from ordering)' : 'Enable category'}
+                          style={{ color: isEnabled ? 'var(--success)' : 'var(--gray-400)' }}
+                        >
+                          {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                        </button>
                         <button className="action-btn edit" onClick={() => openCategoryForm(category)} disabled={loadingCategoryId === category.id}>
                           <Edit2 size={14} />
                         </button>
                         <button className="action-btn delete" onClick={() => handleDeleteCategory(category)} disabled={loadingCategoryId === category.id}>
-                          {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )})}
                 </tbody>
               </table>
             </div>

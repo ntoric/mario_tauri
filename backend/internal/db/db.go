@@ -315,6 +315,11 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			is_active BOOLEAN DEFAULT true,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		// Enable/disable flag for categories and items (separate from is_active
+		// which is used for soft-delete). Disabled categories and their items
+		// are hidden from order creation but still visible in management.
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true`,
+		`ALTER TABLE items ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true`,
 	}
 
 	for _, q := range alterQueries {

@@ -41,6 +41,7 @@ export interface Category {
   name: string;
   description?: string;
   isActive: boolean;
+  enabled?: boolean;
 }
 
 export interface Item {
@@ -54,6 +55,7 @@ export interface Item {
   hsnCode?: string;
   taxPercent: number;
   isActive: boolean;
+  enabled?: boolean;
   totalCost?: number;
   profit?: number;
   profitPercent?: number;

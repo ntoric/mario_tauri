@@ -55,6 +55,7 @@ type Category struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	IsActive    bool      `json:"isActive"`
+	Enabled     bool      `json:"enabled"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
 }
 
@@ -70,6 +71,7 @@ type Item struct {
 	HSNCode       string    `json:"hsnCode"`
 	TaxPercent    float64   `json:"taxPercent"`
 	IsActive      bool      `json:"isActive"`
+	Enabled       bool      `json:"enabled"`
 	CreatedAt     time.Time `json:"createdAt,omitempty"`
 	TotalCost     float64   `json:"totalCost,omitempty"`
 	Profit        float64   `json:"profit,omitempty"`

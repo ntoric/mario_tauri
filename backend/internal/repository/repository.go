@@ -520,7 +520,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 		}
 	}
 
-	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, name, description, is_active FROM categories WHERE store_id = $1 AND is_active = true ORDER BY name", storeID)
+	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, name, description, is_active, enabled FROM categories WHERE store_id = $1 AND is_active = true ORDER BY name", storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +530,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 	for rows.Next() {
 		var c models.Category
 		var desc sql.NullString
-		if err := rows.Scan(&c.ID, &c.StoreID, &c.Name, &desc, &c.IsActive); err != nil {
+		if err := rows.Scan(&c.ID, &c.StoreID, &c.Name, &desc, &c.IsActive, &c.Enabled); err != nil {
 			return nil, err
 		}
 		c.Description = desc.String
@@ -546,8 +546,8 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 }
 
 func (r *CategoryRepository) Create(ctx context.Context, c models.Category) error {
-	_, err := r.db.ExecContext(ctx, "INSERT INTO categories (id, store_id, name, description) VALUES ($1, $2, $3, $4)",
-		c.ID, c.StoreID, c.Name, c.Description)
+	_, err := r.db.ExecContext(ctx, "INSERT INTO categories (id, store_id, name, description, enabled) VALUES ($1, $2, $3, $4, $5)",
+		c.ID, c.StoreID, c.Name, c.Description, c.Enabled)
 	if err == nil && r.redis != nil {
 		r.redis.Delete(ctx, "categories:"+c.StoreID)
 	}
@@ -555,8 +555,8 @@ func (r *CategoryRepository) Create(ctx context.Context, c models.Category) erro
 }
 
 func (r *CategoryRepository) Update(ctx context.Context, c models.Category) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1, description = $2 WHERE id = $3",
-		c.Name, c.Description, c.ID)
+	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1, description = $2, enabled = $3 WHERE id = $4",
+		c.Name, c.Description, c.Enabled, c.ID)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, "categories:")
 	}
@@ -635,7 +635,7 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 	var sqlStr string
 	if hasItemExpenses {
 		sqlStr = `
-			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active, i.enabled,
 			       c.name as category_name,
 			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
 			FROM items i
@@ -646,7 +646,7 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 	} else {
 		// Legacy response shape for clients that do not request profit data
 		sqlStr = `
-			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active, i.enabled,
 			       c.name as category_name
 			FROM items i
 			LEFT JOIN categories c ON i.category_id = c.id
@@ -667,12 +667,12 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 		var desc, hsn, catName sql.NullString
 		if hasItemExpenses {
 			err = rows.Scan(
-				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive, &i.Enabled,
 				&catName, &i.TotalCost,
 			)
 		} else {
 			err = rows.Scan(
-				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive,
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive, &i.Enabled,
 				&catName,
 			)
 		}
@@ -697,8 +697,8 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 }
 
 func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
-	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent)
+	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, enabled) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled)
 	if err == nil && r.redis != nil {
 		r.invalidateCache(ctx, i.StoreID)
 	}
@@ -706,8 +706,8 @@ func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
 }
 
 func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
-	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6 WHERE id = $7"
-	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.ID)
+	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, enabled = $7 WHERE id = $8"
+	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.ID)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
