@@ -484,6 +484,37 @@ class ApiService {
     });
   }
 
+  // Gemini Configuration (superadmin only)
+  async getGeminiConfig() {
+    return this.fetch('/system/gemini-config');
+  }
+
+  async updateGeminiConfig(config: { apiKey: string; model?: string }) {
+    return this.fetch('/system/gemini-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async listGeminiModels() {
+    return this.fetch('/system/gemini-models');
+  }
+
+  // AI Menu Parsing (superadmin only)
+  async parseMenuImage(storeId: string, imageBase64: string, mimeType: string) {
+    return this.fetch('/menu/parse', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, imageBase64, mimeType }),
+    });
+  }
+
+  async bulkCreateMenu(storeId: string, categories: any[], replaceExisting: boolean) {
+    return this.fetch('/menu/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, categories, replaceExisting }),
+    });
+  }
+
   // Expense Categories
   async getExpenseCategories(storeId: string) {
     return this.fetch(`/expense-categories?storeId=${storeId}`);

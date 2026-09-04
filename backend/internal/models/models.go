@@ -316,9 +316,9 @@ type AppUpdateRequest struct {
 }
 
 type SupportConfig struct {
-	Email          string `json:"email"`
-	Phone          string `json:"phone"`
-	WhatsAppLink   string `json:"whatsappLink"`
+	Email        string `json:"email"`
+	Phone        string `json:"phone"`
+	WhatsAppLink string `json:"whatsappLink"`
 }
 
 type SupportConfigRequest struct {
@@ -336,6 +336,74 @@ type UpdateRepoConfigRequest struct {
 	GitHubRepo string `json:"githubRepo"`
 }
 
+// GeminiConfig holds the API key and model used for AI menu parsing.
+type GeminiConfig struct {
+	APIKey string `json:"apiKey"`
+	Model  string `json:"model"`
+}
+
+type GeminiConfigRequest struct {
+	APIKey string `json:"apiKey"`
+	Model  string `json:"model"`
+}
+
+// GeminiModel is a single entry returned by the Gemini "list models" endpoint.
+type GeminiModel struct {
+	Name                       string   `json:"name"`
+	DisplayName                string   `json:"displayName,omitempty"`
+	SupportedGenerationMethods []string `json:"supportedGenerationMethods,omitempty"`
+}
+
+// ParsedMenuItem is a single item extracted from an uploaded menu.
+type ParsedMenuItem struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Price       float64 `json:"price"`
+	HSNCode     string  `json:"hsnCode"`
+	TaxPercent  float64 `json:"taxPercent"`
+}
+
+// ParsedMenuCategory is a category with its items extracted from an uploaded menu.
+type ParsedMenuCategory struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Items       []ParsedMenuItem `json:"items"`
+}
+
+// ParsedMenu is the standardized structure Gemini must return for a menu.
+type ParsedMenu struct {
+	Categories []ParsedMenuCategory `json:"categories"`
+}
+
+// MenuParseRequest is the payload for POST /api/menu/parse.
+type MenuParseRequest struct {
+	StoreID     string `json:"storeId"`
+	ImageBase64 string `json:"imageBase64"` // may include data:<mime>;base64, prefix
+	MimeType    string `json:"mimeType"`    // e.g. image/jpeg, application/pdf
+}
+
+// MenuParseResponse is returned to the frontend after parsing a menu image.
+type MenuParseResponse struct {
+	Menu        ParsedMenu `json:"menu"`
+	RawResponse string     `json:"rawResponse"`
+	Model       string     `json:"model"`
+}
+
+// BulkMenuRequest is the payload for POST /api/menu/bulk.
+// When ReplaceExisting is true, all existing categories and items for the
+// store are soft-deleted before inserting the new menu.
+type BulkMenuRequest struct {
+	StoreID         string               `json:"storeId"`
+	ReplaceExisting bool                 `json:"replaceExisting"`
+	Categories      []ParsedMenuCategory `json:"categories"`
+}
+
+type BulkMenuResponse struct {
+	Message         string `json:"message"`
+	CategoriesAdded int    `json:"categoriesAdded"`
+	ItemsAdded      int    `json:"itemsAdded"`
+}
+
 // ExpenseCategory represents expense category table schema and json dto
 type ExpenseCategory struct {
 	ID          string    `json:"id"`
@@ -348,37 +416,37 @@ type ExpenseCategory struct {
 
 // Expense represents expense table schema and json dto
 type Expense struct {
-	ID               string          `json:"id"`
-	StoreID          string          `json:"storeId"`
-	CategoryID       string          `json:"categoryId"`
-	CategoryName     string          `json:"categoryName,omitempty"`
-	Title            string          `json:"title"`
-	Description      string          `json:"description"`
-	Amount           float64         `json:"amount"`
-	ExpenseDate      time.Time       `json:"expenseDate"`
-	PaymentMethod    string          `json:"paymentMethod"`
-	ReceiptNumber    string          `json:"receiptNumber"`
-	Vendor           string          `json:"vendor"`
-	Attachments      []string        `json:"attachments,omitempty"`
-	IsActive         bool            `json:"isActive"`
-	CreatedAt        time.Time       `json:"createdAt,omitempty"`
-	UpdatedAt        time.Time       `json:"updatedAt,omitempty"`
-	CreatedBy        string          `json:"createdBy"`
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	CategoryID    string    `json:"categoryId"`
+	CategoryName  string    `json:"categoryName,omitempty"`
+	Title         string    `json:"title"`
+	Description   string    `json:"description"`
+	Amount        float64   `json:"amount"`
+	ExpenseDate   time.Time `json:"expenseDate"`
+	PaymentMethod string    `json:"paymentMethod"`
+	ReceiptNumber string    `json:"receiptNumber"`
+	Vendor        string    `json:"vendor"`
+	Attachments   []string  `json:"attachments,omitempty"`
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt,omitempty"`
+	UpdatedAt     time.Time `json:"updatedAt,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
 }
 
 // ExpenseReport represents aggregated expense data for reports
 type ExpenseReport struct {
-	CategoryID       string  `json:"categoryId"`
-	CategoryName     string  `json:"categoryName"`
-	TotalAmount      float64 `json:"totalAmount"`
-	ExpenseCount     int     `json:"expenseCount"`
+	CategoryID   string  `json:"categoryId"`
+	CategoryName string  `json:"categoryName"`
+	TotalAmount  float64 `json:"totalAmount"`
+	ExpenseCount int     `json:"expenseCount"`
 }
 
 // ExpenseSummary represents daily/monthly expense summary
 type ExpenseSummary struct {
-	Date             string  `json:"date"`
-	TotalAmount      float64 `json:"totalAmount"`
-	ExpenseCount     int     `json:"expenseCount"`
+	Date         string  `json:"date"`
+	TotalAmount  float64 `json:"totalAmount"`
+	ExpenseCount int     `json:"expenseCount"`
 }
 
 // RevenueReport represents combined revenue, sales, and expense data

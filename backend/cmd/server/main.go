@@ -182,6 +182,13 @@ func main() {
 		r.Get("/api/system/update-config", h.GetUpdateRepoConfig)
 		r.Post("/api/system/update-config", h.UpdateUpdateRepoConfig)
 
+		// Gemini Config & AI Menu Parsing (superadmin only)
+		r.Get("/api/system/gemini-config", h.GetGeminiConfig)
+		r.Post("/api/system/gemini-config", h.UpdateGeminiConfig)
+		r.Get("/api/system/gemini-models", h.ListGeminiModels)
+		r.Post("/api/menu/parse", h.ParseMenuImage)
+		r.Post("/api/menu/bulk", h.BulkCreateMenu)
+
 		// Expense Categories
 		r.Get("/api/expense-categories", h.GetExpenseCategories)
 		r.Post("/api/expense-categories", h.CreateExpenseCategory)

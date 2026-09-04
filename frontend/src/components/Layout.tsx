@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -139,6 +139,10 @@ const LayoutContent: React.FC = () => {
               <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
                 <span className="nav-icon"><Building2 size={18} /></span>
                 {sidebarExpanded && <span>Manage Stores</span>}
+              </NavLink>
+              <NavLink to="/menu-upload" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="AI Menu Upload">
+                <span className="nav-icon"><Sparkles size={18} /></span>
+                {sidebarExpanded && <span>AI Menu Upload</span>}
               </NavLink>
               <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">
                 <span className="nav-icon"><Download size={18} /></span>

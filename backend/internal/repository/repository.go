@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,22 +72,24 @@ func (c *MemoryCache) DeleteAllWithPrefix(prefix string) {
 }
 
 type Repository struct {
-	Store              *StoreRepository
-	User               *UserRepository
-	Category           *CategoryRepository
-	Item               *ItemRepository
-	Table              *TableRepository
-	Order              *OrderRepository
-	Bill               *BillRepository
-	System             *SystemRepository
-	AppUpdate          *AppUpdateRepository
-	SupportConfig      *SupportConfigRepository
-	UpdateRepo         *UpdateRepoRepository
-	ExpenseCategory    *ExpenseCategoryRepository
-	Expense            *ExpenseRepository
-	ItemExpense        *ItemExpenseRepository
-	RevenueReport      *RevenueReportRepository
-	Cache              *MemoryCache
+	Store           *StoreRepository
+	User            *UserRepository
+	Category        *CategoryRepository
+	Item            *ItemRepository
+	Table           *TableRepository
+	Order           *OrderRepository
+	Bill            *BillRepository
+	System          *SystemRepository
+	AppUpdate       *AppUpdateRepository
+	SupportConfig   *SupportConfigRepository
+	UpdateRepo      *UpdateRepoRepository
+	Gemini          *GeminiConfigRepository
+	Menu            *MenuRepository
+	ExpenseCategory *ExpenseCategoryRepository
+	Expense         *ExpenseRepository
+	ItemExpense     *ItemExpenseRepository
+	RevenueReport   *RevenueReportRepository
+	Cache           *MemoryCache
 }
 
 func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
@@ -103,6 +106,8 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		AppUpdate:       &AppUpdateRepository{db: db},
 		SupportConfig:   &SupportConfigRepository{db: db},
 		UpdateRepo:      &UpdateRepoRepository{db: db},
+		Gemini:          &GeminiConfigRepository{db: db},
+		Menu:            &MenuRepository{db: db, redis: redisCache},
 		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
 		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
@@ -1064,7 +1069,7 @@ type OrderRepository struct {
 }
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
-		sqlStr := `
+	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
 		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
@@ -1786,7 +1791,7 @@ func (r *AppUpdateRepository) Get(ctx context.Context, platform string) (*AppUpd
 		FROM app_updates
 		WHERE platform = $1
 	`, platform).Scan(&update.ID, &update.Platform, &update.Enabled, &update.Version, &update.DownloadURL, &update.ReleaseNotes, &update.CreatedAt, &update.UpdatedAt)
-	
+
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1828,7 +1833,7 @@ func (r *AppUpdateRepository) CreateOrUpdate(ctx context.Context, update *AppUpd
 	// Check if an update already exists for this platform
 	var existingID string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM app_updates WHERE platform = $1", update.Platform).Scan(&existingID)
-	
+
 	if err == sql.ErrNoRows {
 		// Create new
 		update.ID = generateUUID()
@@ -1847,7 +1852,7 @@ func (r *AppUpdateRepository) CreateOrUpdate(ctx context.Context, update *AppUpd
 		`, update.Enabled, update.Version, update.DownloadURL, update.ReleaseNotes, existingID)
 		update.ID = existingID
 	}
-	
+
 	if err != nil {
 		return err
 	}
@@ -1958,6 +1963,143 @@ func (r *UpdateRepoRepository) Save(ctx context.Context, repo string) error {
 		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
 	`, repo)
 	return err
+}
+
+// ==========================================
+// GEMINI CONFIG REPOSITORY
+// ==========================================
+
+type GeminiConfigRepository struct {
+	db *sql.DB
+}
+
+// Get returns the stored Gemini API key and model. The API key may be empty.
+func (r *GeminiConfigRepository) Get(ctx context.Context) (apiKey, model string, err error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT key, value FROM global_settings
+		WHERE key IN ('gemini_api_key', 'gemini_model')
+	`)
+	if err != nil {
+		return "", "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return "", "", err
+		}
+		switch k {
+		case "gemini_api_key":
+			apiKey = v
+		case "gemini_model":
+			model = v
+		}
+	}
+	return apiKey, model, nil
+}
+
+// Save persists the Gemini API key and model in global_settings.
+func (r *GeminiConfigRepository) Save(ctx context.Context, apiKey, model string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO global_settings (key, value) VALUES ('gemini_api_key', $1)
+		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+	`, apiKey); err != nil {
+		return err
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO global_settings (key, value) VALUES ('gemini_model', $1)
+		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+	`, model); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ==========================================
+// MENU BULK REPOSITORY
+// ==========================================
+
+// MenuRepository handles transactional bulk import of a parsed menu
+// (categories + items) for a store.
+type MenuRepository struct {
+	db    *sql.DB
+	redis *RedisCache
+}
+
+// BulkCreate inserts the provided categories and items for a store in a single
+// transaction. When replaceExisting is true, all existing categories and items
+// for the store are soft-deleted first. Redis caches for the store are
+// invalidated on success.
+func (r *MenuRepository) BulkCreate(ctx context.Context, storeID string, replaceExisting bool, categories []models.ParsedMenuCategory) (catsAdded, itemsAdded int, err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if replaceExisting {
+		if _, err = tx.ExecContext(ctx, "UPDATE items SET is_active = false WHERE store_id = $1", storeID); err != nil {
+			return 0, 0, err
+		}
+		if _, err = tx.ExecContext(ctx, "UPDATE categories SET is_active = false WHERE store_id = $1", storeID); err != nil {
+			return 0, 0, err
+		}
+	}
+
+	for _, cat := range categories {
+		catName := strings.TrimSpace(cat.Name)
+		if catName == "" {
+			catName = "Uncategorized"
+		}
+		catID := uuid.New().String()
+		if _, err = tx.ExecContext(ctx,
+			"INSERT INTO categories (id, store_id, name, description) VALUES ($1, $2, $3, $4)",
+			catID, storeID, catName, cat.Description,
+		); err != nil {
+			return 0, 0, err
+		}
+		catsAdded++
+
+		for _, item := range cat.Items {
+			itemName := strings.TrimSpace(item.Name)
+			if itemName == "" {
+				continue // skip blank items
+			}
+			itemID := uuid.New().String()
+			if _, err = tx.ExecContext(ctx,
+				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent,
+			); err != nil {
+				return 0, 0, err
+			}
+			itemsAdded++
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+
+	// Invalidate caches for this store (mirrors Category/Item repositories).
+	if r.redis != nil {
+		r.redis.Delete(ctx, "categories:"+storeID)
+		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
+		r.redis.DeleteByPrefix(ctx, "items:")
+	}
+
+	return catsAdded, itemsAdded, nil
 }
 
 // ==========================================
@@ -2164,7 +2306,7 @@ func (r *ExpenseRepository) Create(ctx context.Context, e models.Expense) error 
 
 	sqlStr := `INSERT INTO expenses (id, store_id, category_id, title, description, amount, expense_date, payment_method, receipt_number, vendor, attachments, created_by)
 	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)`
-	
+
 	var categoryID, paymentMethod, receiptNumber, vendor, createdBy interface{}
 	if e.CategoryID != "" {
 		categoryID = e.CategoryID
@@ -2200,7 +2342,7 @@ func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error 
 	sqlStr := `UPDATE expenses SET category_id = $1, title = $2, description = $3, amount = $4, 
 	           expense_date = $5, payment_method = $6, receipt_number = $7, vendor = $8, 
 	           attachments = $9::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
-	
+
 	var categoryID, paymentMethod, receiptNumber, vendor interface{}
 	if e.CategoryID != "" {
 		categoryID = e.CategoryID
