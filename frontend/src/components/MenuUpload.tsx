@@ -114,7 +114,43 @@ const MenuUpload: React.FC = () => {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // compressImage resizes an image file to a max dimension and re-encodes it
+  // as JPEG with the given quality. This dramatically reduces the base64
+  // payload sent to the backend (e.g. a 5MB phone photo → ~200KB), avoiding
+  // 413 errors from reverse proxies with body size limits. Returns a data URL.
+  const compressImage = (file: File, maxDim = 1600, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height / width) * maxDim);
+              width = maxDim;
+            } else {
+              width = Math.round((width / height) * maxDim);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas not supported')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);
     if (selected.length === 0) return;
 
@@ -135,15 +171,29 @@ const MenuUpload: React.FC = () => {
         setError(`${file.name} is too large. Maximum size is 20MB per file.`);
         continue;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setFiles(prev => [
-          ...prev,
-          { name: file.name, base64: result, mimeType: isPdf ? 'application/pdf' : file.type, preview: isPdf ? '' : result },
-        ]);
-      };
-      reader.readAsDataURL(file);
+      try {
+        if (isImage) {
+          // Compress/resize images to keep the request payload small.
+          const compressed = await compressImage(file);
+          setFiles(prev => [
+            ...prev,
+            { name: file.name, base64: compressed, mimeType: 'image/jpeg', preview: compressed },
+          ]);
+        } else {
+          // PDFs can't be compressed client-side; send as-is.
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            setFiles(prev => [
+              ...prev,
+              { name: file.name, base64: result, mimeType: 'application/pdf', preview: '' },
+            ]);
+          };
+          reader.readAsDataURL(file);
+        }
+      } catch {
+        setError(`Failed to process ${file.name}.`);
+      }
     }
     // Reset the input so selecting the same file again still fires onChange.
     if (fileInputRef.current) fileInputRef.current.value = '';
