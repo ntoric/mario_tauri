@@ -50,13 +50,14 @@ type User struct {
 
 // Category represents category table schema and json dto
 type Category struct {
-	ID          string    `json:"id"`
-	StoreID     string    `json:"storeId"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	IsActive    bool      `json:"isActive"`
-	Enabled     bool      `json:"enabled"`
-	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	ID           string    `json:"id"`
+	StoreID      string    `json:"storeId"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	IsActive     bool      `json:"isActive"`
+	Enabled      bool      `json:"enabled"`
+	IsFavourite  bool      `json:"isFavourite"`
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
 }
 
 // Item represents item table schema and json dto
@@ -72,6 +73,7 @@ type Item struct {
 	TaxPercent    float64   `json:"taxPercent"`
 	IsActive      bool      `json:"isActive"`
 	Enabled       bool      `json:"enabled"`
+	IsFavourite   bool      `json:"isFavourite"`
 	CreatedAt     time.Time `json:"createdAt,omitempty"`
 	TotalCost     float64   `json:"totalCost,omitempty"`
 	Profit        float64   `json:"profit,omitempty"`

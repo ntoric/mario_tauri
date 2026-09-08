@@ -320,6 +320,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// are hidden from order creation but still visible in management.
 		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true`,
 		`ALTER TABLE items ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true`,
+		// Favourite flag for categories and items. Favourites are shown at the
+		// top of the categories and items sections on the order create/edit page.
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
+		`ALTER TABLE items ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
 	}
 
 	for _, q := range alterQueries {

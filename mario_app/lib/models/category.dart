@@ -4,6 +4,7 @@ class Category {
   final String name;
   final String? description;
   final bool isActive;
+  final bool isFavourite;
 
   Category({
     required this.id,
@@ -11,6 +12,7 @@ class Category {
     required this.name,
     this.description,
     required this.isActive,
+    this.isFavourite = false,
   });
 
   factory Category.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class Category {
       name: json['name'],
       description: json['description'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
+      isFavourite: json['isFavourite'] ?? json['is_favourite'] ?? false,
     );
   }
 
@@ -30,6 +33,7 @@ class Category {
       'name': name,
       'description': description,
       'isActive': isActive,
+      'isFavourite': isFavourite,
     };
   }
 }

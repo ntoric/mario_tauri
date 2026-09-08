@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Search, Printer, X, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Search, Printer, X, FileText, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -100,6 +100,11 @@ const ParcelOrderPage: React.FC = () => {
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       categoryName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
+  }).sort((a, b) => {
+    const af = a.isFavourite ? 1 : 0;
+    const bf = b.isFavourite ? 1 : 0;
+    if (af !== bf) return bf - af;
+    return a.name.localeCompare(b.name);
   });
 
   const addItemToOrder = (item: Item) => {
@@ -361,13 +366,21 @@ const ParcelOrderPage: React.FC = () => {
             >
               All Items
             </button>
-            {categories.filter(c => c.enabled !== false).map(cat => (
+            {categories.filter(c => c.enabled !== false).sort((a, b) => {
+              const af = a.isFavourite ? 1 : 0;
+              const bf = b.isFavourite ? 1 : 0;
+              if (af !== bf) return bf - af;
+              return a.name.localeCompare(b.name);
+            }).map(cat => (
               <button
                 key={cat.id}
                 className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
                 onClick={() => setSelectedCategory(cat.id)}
               >
-                {cat.name}
+                <span>{cat.name}</span>
+                {cat.isFavourite && (
+                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', marginLeft: 'auto', flexShrink: 0 }} />
+                )}
               </button>
             ))}
           </div>
@@ -402,6 +415,9 @@ const ParcelOrderPage: React.FC = () => {
                 data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
+                {item.isFavourite && (
+                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
+                )}
                 <div className="item-name">{item.name}</div>
                 <div className="item-price">{formatCurrency(item.price)}</div>
               </div>

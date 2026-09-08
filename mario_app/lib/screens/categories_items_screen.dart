@@ -426,7 +426,14 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
   // --- Categories List Panel ---
   Widget _buildCategoriesTab(DataProvider data, bool isStaff) {
-    final categories = data.categories;
+    final categories = data.categories
+        .toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     if (categories.isEmpty) {
       return RefreshIndicator(
@@ -522,6 +529,27 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (cat.isFavourite) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.star,
+                                size: 14,
+                                color: Colors.amber[600],
+                              ),
+                              const SizedBox(width: 2),
+                              const Text(
+                                'Favourite',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (cat.description != null &&
                             cat.description!.isNotEmpty) ...[
                           const SizedBox(height: 2),
@@ -558,7 +586,14 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
   // --- Items List Panel with Search & Filter ---
   Widget _buildItemsTab(DataProvider data, bool isStaff) {
-    final categories = data.categories;
+    final categories = data.categories
+        .toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
     final query = _itemSearchController.text.toLowerCase().trim();
 
     // Filter Items dynamically
@@ -570,7 +605,13 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
           item.categoryId == _selectedCategoryId;
 
       return matchesQuery && matchesCategory;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     return Column(
       children: [
@@ -763,6 +804,14 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                           ),
                           title: Row(
                             children: [
+                              if (item.isFavourite) ...[
+                                Icon(
+                                  Icons.star,
+                                  size: 16,
+                                  color: Colors.amber[600],
+                                ),
+                                const SizedBox(width: 4),
+                              ],
                               Expanded(
                                 child: Text(
                                   item.name,

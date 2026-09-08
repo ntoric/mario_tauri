@@ -246,14 +246,27 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
-    final categories = data.categories;
+    final categories = data.categories
+        .toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
     final items = data.items.where((item) {
       final matchesCategory =
           _selectedCategoryId == null || item.categoryId == _selectedCategoryId;
       final matchesSearch = _searchQuery.isEmpty ||
           item.name.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     final isTablet = ResponsiveHelper.isTablet(context) ||
         ResponsiveHelper.isDesktop(context);
@@ -937,6 +950,14 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
+                              if (item.isFavourite) ...[
+                                Icon(
+                                  Icons.star,
+                                  size: 16,
+                                  color: Colors.amber[600],
+                                ),
+                                const SizedBox(width: 6),
+                              ],
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,

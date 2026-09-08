@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -61,11 +61,13 @@ const Items: React.FC = () => {
     categoryId: '',
     hsnCode: '',
     taxPercent: '0',
+    isFavourite: false,
   });
 
   const [categoryForm, setCategoryForm] = useState({
     name: '',
     description: '',
+    isFavourite: false,
   });
 
   const [isItemSubmitting, setIsItemSubmitting] = useState(false);
@@ -104,7 +106,7 @@ const Items: React.FC = () => {
 
   const resetItemModal = () => {
     setItemModalTab('details');
-    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString() });
+    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false });
     resetExpenseForm();
     setItemExpenses([]);
     setDraftExpenses([]);
@@ -120,10 +122,11 @@ const Items: React.FC = () => {
         categoryId: item.categoryId,
         hsnCode: item.hsnCode || '',
         taxPercent: (item.taxPercent || 0).toString(),
+        isFavourite: !!item.isFavourite,
       });
       loadItemExpenses(item.id);
     } else {
-      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString() });
+      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false });
     }
     openItemModal(item);
   };
@@ -164,6 +167,7 @@ const Items: React.FC = () => {
       categoryId: itemForm.categoryId,
       hsnCode: itemForm.hsnCode,
       taxPercent: taxEnabled ? (parseFloat(itemForm.taxPercent) || 0) : 0,
+      isFavourite: itemForm.isFavourite,
     };
 
     try {
@@ -285,9 +289,10 @@ const Items: React.FC = () => {
       setCategoryForm({
         name: category.name,
         description: category.description || '',
+        isFavourite: !!category.isFavourite,
       });
     } else {
-      setCategoryForm({ name: '', description: '' });
+      setCategoryForm({ name: '', description: '', isFavourite: false });
     }
     openCategoryModal(category);
   };
@@ -298,6 +303,7 @@ const Items: React.FC = () => {
     const categoryData = {
       name: categoryForm.name,
       description: categoryForm.description,
+      isFavourite: categoryForm.isFavourite,
     };
     try {
       if (editingCategory) {
@@ -306,7 +312,7 @@ const Items: React.FC = () => {
         await createCategory(categoryData);
       }
       closeCategoryModal();
-      setCategoryForm({ name: '', description: '' });
+      setCategoryForm({ name: '', description: '', isFavourite: false });
     } finally {
       setIsCategorySubmitting(false);
     }
@@ -331,15 +337,31 @@ const Items: React.FC = () => {
     return 'var(--gray-600)';
   };
 
-  const filteredItems = useMemo(() => items.filter(item =>
-    item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
-    getCategoryName(item.categoryId).toLowerCase().includes(itemSearchQuery.toLowerCase())
-  ), [items, itemSearchQuery, categories]);
+  const filteredItems = useMemo(() => {
+    const matched = items.filter(item =>
+      item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
+      getCategoryName(item.categoryId).toLowerCase().includes(itemSearchQuery.toLowerCase())
+    );
+    return [...matched].sort((a, b) => {
+      const af = a.isFavourite ? 1 : 0;
+      const bf = b.isFavourite ? 1 : 0;
+      if (af !== bf) return bf - af;
+      return a.name.localeCompare(b.name);
+    });
+  }, [items, itemSearchQuery, categories]);
 
-  const filteredCategories = useMemo(() => categories.filter(category =>
-    category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
-    (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
-  ), [categories, categorySearchQuery]);
+  const filteredCategories = useMemo(() => {
+    const matched = categories.filter(category =>
+      category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
+      (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+    );
+    return [...matched].sort((a, b) => {
+      const af = a.isFavourite ? 1 : 0;
+      const bf = b.isFavourite ? 1 : 0;
+      if (af !== bf) return bf - af;
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories, categorySearchQuery]);
 
   const paginatedItems = useMemo(() => {
     const start = (itemPage - 1) * PAGE_SIZE;
@@ -408,10 +430,28 @@ const Items: React.FC = () => {
     }
   };
 
+  const handleToggleItemFavourite = async (item: Item) => {
+    setLoadingItemId(item.id);
+    try {
+      await updateItem(item.id, { ...item, isFavourite: !item.isFavourite });
+    } finally {
+      setLoadingItemId(null);
+    }
+  };
+
   const handleToggleCategory = async (category: Category) => {
     setLoadingCategoryId(category.id);
     try {
       await updateCategory(category.id, { ...category, enabled: !(category.enabled !== false) });
+    } finally {
+      setLoadingCategoryId(null);
+    }
+  };
+
+  const handleToggleCategoryFavourite = async (category: Category) => {
+    setLoadingCategoryId(category.id);
+    try {
+      await updateCategory(category.id, { ...category, isFavourite: !category.isFavourite });
     } finally {
       setLoadingCategoryId(null);
     }
@@ -643,6 +683,20 @@ const Items: React.FC = () => {
             rows={3}
           />
         </div>
+        <div className="form-group">
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+          >
+            <input
+              type="checkbox"
+              checked={itemForm.isFavourite}
+              onChange={e => setItemForm({ ...itemForm, isFavourite: e.target.checked })}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            <Star size={14} fill={itemForm.isFavourite ? 'currentColor' : 'none'} style={{ color: itemForm.isFavourite ? '#f5a623' : 'var(--gray-400)' }} />
+            Mark as favourite <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(shows at the top on the order page)</span>
+          </label>
+        </div>
       </div>
       <div className="modal-footer">
         <Button type="button" variant="secondary" onClick={closeItemModal} disabled={isItemSubmitting}>
@@ -736,6 +790,15 @@ const Items: React.FC = () => {
                       <div className="action-btns">
                         <button
                           className="action-btn"
+                          onClick={() => handleToggleItemFavourite(item)}
+                          disabled={loadingItemId === item.id}
+                          title={item.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
+                          style={{ color: item.isFavourite ? '#f5a623' : 'var(--gray-400)' }}
+                        >
+                          {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={item.isFavourite ? 'currentColor' : 'none'} />}
+                        </button>
+                        <button
+                          className="action-btn"
                           onClick={() => handleToggleItem(item)}
                           disabled={loadingItemId === item.id}
                           title={isEnabled ? 'Disable item (hide from ordering)' : 'Enable item'}
@@ -819,6 +882,15 @@ const Items: React.FC = () => {
                     </td>
                     <td>
                       <div className="action-btns">
+                        <button
+                          className="action-btn"
+                          onClick={() => handleToggleCategoryFavourite(category)}
+                          disabled={loadingCategoryId === category.id}
+                          title={category.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
+                          style={{ color: category.isFavourite ? '#f5a623' : 'var(--gray-400)' }}
+                        >
+                          {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={category.isFavourite ? 'currentColor' : 'none'} />}
+                        </button>
                         <button
                           className="action-btn"
                           onClick={() => handleToggleCategory(category)}
@@ -936,6 +1008,20 @@ const Items: React.FC = () => {
                     placeholder="Enter category description (optional)"
                     rows={3}
                   />
+                </div>
+                <div className="form-group">
+                  <label
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={categoryForm.isFavourite}
+                      onChange={e => setCategoryForm({ ...categoryForm, isFavourite: e.target.checked })}
+                      style={{ width: 'auto', margin: 0 }}
+                    />
+                    <Star size={14} fill={categoryForm.isFavourite ? 'currentColor' : 'none'} style={{ color: categoryForm.isFavourite ? '#f5a623' : 'var(--gray-400)' }} />
+                    Mark as favourite <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(shows at the top on the order page)</span>
+                  </label>
                 </div>
               </div>
               <div className="modal-footer">

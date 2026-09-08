@@ -255,14 +255,27 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
-    final categories = data.categories;
+    final categories = data.categories
+        .toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
     final items = data.items.where((item) {
       final matchesCategory = _selectedCategoryId == null ||
           item.categoryId == _selectedCategoryId;
       final matchesSearch = _searchQuery.isEmpty ||
           item.name.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     final isTablet = ResponsiveHelper.isTablet(context) || ResponsiveHelper.isDesktop(context);
 
@@ -662,6 +675,15 @@ class _OrderScreenState extends State<OrderScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              if (item.isFavourite)
+                                Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.amber[600],
+                                  ),
+                                ),
                               Text(
                                 item.name,
                                 style: const TextStyle(

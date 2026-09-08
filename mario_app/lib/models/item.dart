@@ -9,6 +9,7 @@ class Item {
   final String? hsnCode;
   final double? taxPercent;
   final bool isActive;
+  final bool isFavourite;
 
   Item({
     required this.id,
@@ -21,6 +22,7 @@ class Item {
     this.hsnCode,
     this.taxPercent,
     required this.isActive,
+    this.isFavourite = false,
   });
 
 
@@ -66,6 +68,11 @@ class Item {
           json['isActive'] ??
           json['is_active'] ??
           true,
+
+      isFavourite:
+          json['isFavourite'] ??
+          json['is_favourite'] ??
+          false,
     );
   }
 
@@ -81,6 +88,7 @@ class Item {
       'hsnCode': hsnCode,
       'taxPercent': taxPercent,
       'isActive': isActive,
+      'isFavourite': isFavourite,
     };
   }
 }

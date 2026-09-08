@@ -42,6 +42,7 @@ export interface Category {
   description?: string;
   isActive: boolean;
   enabled?: boolean;
+  isFavourite?: boolean;
 }
 
 export interface Item {
@@ -56,6 +57,7 @@ export interface Item {
   taxPercent: number;
   isActive: boolean;
   enabled?: boolean;
+  isFavourite?: boolean;
   totalCost?: number;
   profit?: number;
   profitPercent?: number;
