@@ -1,5 +1,15 @@
 import { create } from 'zustand';
 
+const OSK_STORAGE_KEY = 'onscreen-keyboard-enabled';
+
+const getInitialOskEnabled = () => {
+  try {
+    return localStorage.getItem(OSK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
 interface ModalState {
   isOpen: boolean;
   data?: any;
@@ -20,6 +30,9 @@ interface UIState {
 
   // Sidebar
   sidebarOpen: boolean;
+
+  // On-screen keyboard
+  onScreenKeyboardEnabled: boolean;
 
   // Notifications
   notifications: Array<{
@@ -50,6 +63,7 @@ interface UIState {
   openStoreSwitcher: () => void;
   closeStoreSwitcher: () => void;
   toggleSidebar: () => void;
+  toggleOnScreenKeyboard: () => void;
   addNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   removeNotification: (id: string) => void;
 }
@@ -66,6 +80,7 @@ export const useUIStore = create<UIState>((set) => ({
   expenseCategoryModal: { isOpen: false },
   storeSwitcherModal: false,
   sidebarOpen: true,
+  onScreenKeyboardEnabled: getInitialOskEnabled(),
   notifications: [],
 
   openOrderModal: (data) => set({ orderModal: { isOpen: true, data } }),
@@ -98,6 +113,16 @@ export const useUIStore = create<UIState>((set) => ({
   closeStoreSwitcher: () => set({ storeSwitcherModal: false }),
   
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+  toggleOnScreenKeyboard: () => set((state) => {
+    const next = !state.onScreenKeyboardEnabled;
+    try {
+      localStorage.setItem(OSK_STORAGE_KEY, String(next));
+    } catch {
+      // localStorage unavailable
+    }
+    return { onScreenKeyboardEnabled: next };
+  }),
   
   addNotification: (type, message) => {
     const id = Math.random().toString(36).substring(7);

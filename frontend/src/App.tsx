@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useDataStore } from './stores';
 import UpdateNotification from './components/UpdateNotification';
+import OnScreenKeyboard from './components/OnScreenKeyboard';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Tables from './components/Tables';
@@ -142,6 +143,7 @@ const App: React.FC = () => {
     <div className="app">
       <UpdateNotification />
       <AppRoutes />
+      <OnScreenKeyboard />
     </div>
   );
 };
