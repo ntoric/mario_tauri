@@ -23,7 +23,7 @@ use super::auth;
 use super::LocalBackend;
 
 /// Default cloud backend. Overridable via global_settings.cloud_base_url.
-const DEFAULT_CLOUD_BASE: &str = "https://mario-v2-backend.ntoric.com";
+const DEFAULT_CLOUD_BASE: &str = "https://mario-api.ntoric.com";
 const REQ_TIMEOUT: Duration = Duration::from_secs(8);
 const CYCLE_INTERVAL: Duration = Duration::from_secs(15);
 const MAX_PUSH_ATTEMPTS: i64 = 10;
@@ -624,6 +624,12 @@ async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
                         None => return, // can't re-auth — retry next cycle
                     }
                     continue;
+                }
+                Ok(r) if r.status().as_u16() == 404 => {
+                    // /sync/apply not deployed on the backend yet — leave the
+                    // batch pending (don't burn attempts) and retry next cycle.
+                    eprintln!("[sync] /sync/apply not available on backend — events stay queued");
+                    return;
                 }
                 Ok(_) => {
                     // Applied-but-failed or rejected — count the attempt; the

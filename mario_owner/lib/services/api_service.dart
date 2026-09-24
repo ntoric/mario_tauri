@@ -13,7 +13,7 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  String _baseUrl = 'https://mario-v2-backend.ntoric.com/api';
+  String _baseUrl = 'https://mario-api.ntoric.com/api';
   String? _token;
   String? _serverId;
 
