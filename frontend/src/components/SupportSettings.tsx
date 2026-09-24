@@ -36,15 +36,12 @@ const SupportSettings: React.FC = () => {
 
   const fetchSupportConfig = async () => {
     try {
-      const response = await fetch('/api/support-config');
-      if (response.ok) {
-        const data = await response.json();
-        setConfig({
-          email: data.email || '',
-          phone: data.phone || '',
-          whatsappLink: data.whatsappLink || '',
-        });
-      }
+      const data = await api.getSupportConfig();
+      setConfig({
+        email: data.email || '',
+        phone: data.phone || '',
+        whatsappLink: data.whatsappLink || '',
+      });
     } catch (err) {
       setError('Failed to load support configuration');
     } finally {
@@ -59,24 +56,11 @@ const SupportSettings: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/support-config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${api.getToken()}`,
-        },
-        body: JSON.stringify(config),
-      });
-
-      if (response.ok) {
-        setSaveMessage('Support configuration saved successfully!');
-        setTimeout(() => setSaveMessage(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to save configuration');
-      }
-    } catch (err) {
-      setError('Failed to save configuration. Please try again.');
+      await api.updateSupportConfig(config);
+      setSaveMessage('Support configuration saved successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save configuration. Please try again.');
     } finally {
       setIsSaving(false);
     }

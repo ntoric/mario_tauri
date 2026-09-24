@@ -56,6 +56,7 @@ func main() {
 	repo := repository.NewRepository(sqlDB, redisCache)
 	realtimeHub := realtime.NewHub()
 	h := handler.NewHandler(repo, cfg, realtimeHub)
+	syncH := handler.NewSyncHandler(sqlDB)
 
 	// 5. Setup Router & Middlewares
 	r := chi.NewRouter()
@@ -99,6 +100,12 @@ func main() {
 	// Protected Routes (JWT Auth required)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(sqlDB, cfg.JWTSecret))
+		// Record successful mutations into sync_events (cloud -> client feed).
+		r.Use(middleware.SyncLogMiddleware(sqlDB))
+
+		// Offline-first sync: apply client mutations + serve the change feed.
+		r.Post("/api/sync/apply", syncH.Apply)
+		r.Get("/api/sync/events", syncH.Events)
 
 		// Auth & Me
 		r.Get("/api/auth/me", h.Me)
@@ -210,6 +217,10 @@ func main() {
 		r.Get("/api/reports/revenue", h.GetRevenueReport)
 		r.Get("/api/reports/item-profit", h.GetItemProfitReport)
 	})
+
+	// Give the sync handler the built router so /api/sync/apply can replay
+	// client mutations through the full middleware+handler pipeline.
+	syncH.Router = r
 
 	// 6. Start HTTP Server with Graceful Shutdown
 	srv := &http.Server{

@@ -324,6 +324,23 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// top of the categories and items sections on the order create/edit page.
 		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
 		`ALTER TABLE items ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
+		// Sync feed: every mutating API call is recorded so offline-first
+		// clients can poll and replay changes (cloud -> local direction).
+		`CREATE TABLE IF NOT EXISTS sync_events (
+			seq BIGSERIAL PRIMARY KEY,
+			method VARCHAR(10) NOT NULL,
+			path TEXT NOT NULL,
+			body JSONB,
+			store_id VARCHAR(255),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sync_events_seq ON sync_events(seq)`,
+		// Dedupe for client-pushed mutations (local -> cloud direction):
+		// a replayed event_id is applied exactly once.
+		`CREATE TABLE IF NOT EXISTS processed_events (
+			event_id VARCHAR(255) PRIMARY KEY,
+			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range alterQueries {

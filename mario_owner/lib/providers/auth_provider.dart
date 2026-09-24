@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../backend/backend_service.dart';
 import '../models/user.dart';
+import '../services/discovery_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final BackendService _backend = BackendService();
@@ -12,6 +14,8 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   bool _isAuthenticated = false;
   bool _isBackendConnected = false;
+  bool _autoConnecting = false;
+  Timer? _reconnectTimer;
 
   User? get user => _user;
   Store? get currentStore => _currentStore;
@@ -57,6 +61,16 @@ class AuthProvider extends ChangeNotifier {
       }
     }
 
+    // If the saved host is unreachable (e.g. its IP changed), scan the LAN
+    // for the same serverId or the only available host.
+    if (!_isBackendConnected) {
+      await _autoDiscoverAndConnect();
+    }
+
+    // Keep retrying in the background so the app reconnects automatically
+    // when it joins the same network as the host machine.
+    _startAutoReconnect();
+
     final savedToken = prefs.getString('auth_token');
 
     if (_isBackendConnected && savedToken != null) {
@@ -97,6 +111,77 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       print('Failed to refresh user: $e');
     }
+  }
+
+  /// Scan the LAN for the last-used host (matched by serverId, immune to IP
+  /// changes) or the single available host, and connect automatically.
+  Future<bool> _autoDiscoverAndConnect() async {
+    if (_autoConnecting) return _isBackendConnected;
+    _autoConnecting = true;
+    try {
+      final servers =
+          await DiscoveryService.scan(timeout: const Duration(seconds: 2));
+      if (servers.isEmpty) return _isBackendConnected;
+
+      final savedId = _backend.lastServerId;
+      DiscoveredServer? target;
+      if (savedId != null) {
+        for (final s in servers) {
+          if (s.serverId == savedId) {
+            target = s;
+            break;
+          }
+        }
+      }
+      // If nothing was saved or it wasn't found, only auto-connect when the
+      // choice is unambiguous (exactly one host on the network).
+      target ??= servers.length == 1 ? servers.first : null;
+      if (target == null) return _isBackendConnected;
+
+      final connected = await _backend.connectToBackend(target.apiUrl);
+      if (connected != _isBackendConnected) {
+        _isBackendConnected = connected;
+        notifyListeners();
+      }
+      return connected;
+    } catch (e) {
+      print('Auto-discover failed: $e');
+      return _isBackendConnected;
+    } finally {
+      _autoConnecting = false;
+    }
+  }
+
+  /// Periodically retries the saved URL, then LAN discovery, while
+  /// disconnected — so the app reconnects by itself once it reaches the
+  /// host's network again.
+  void _startAutoReconnect() {
+    _reconnectTimer ??=
+        Timer.periodic(const Duration(seconds: 20), (_) async {
+      if (_autoConnecting) return;
+
+      // Detect a lost connection mid-session so we can reconnect below.
+      if (_isBackendConnected) {
+        try {
+          _isBackendConnected = await _backend.isConnected;
+          if (!_isBackendConnected) notifyListeners();
+        } catch (_) {
+          _isBackendConnected = false;
+          notifyListeners();
+        }
+        return;
+      }
+
+      // Cheap path first: retry the last known URL.
+      try {
+        if (await _backend.connectToBackend(_backend.api.baseUrl)) {
+          _isBackendConnected = true;
+          notifyListeners();
+          return;
+        }
+      } catch (_) {}
+      await _autoDiscoverAndConnect();
+    });
   }
 
   Future<bool> connectBackend(String baseUrl) async {

@@ -7,7 +7,7 @@ import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
-import { getTableStatusWsUrl } from '../services/realtime';
+import { listenTableStatusUpdates } from '../services/realtime';
 import { Button } from '../components/ui/Button';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -34,14 +34,12 @@ const Tables: React.FC = () => {
     fetchItems();
   }, [fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems]);
 
-  // Realtime updates via websocket
+  // Realtime updates via Tauri events emitted by the embedded local backend
   useEffect(() => {
     if (!currentStoreId) return;
 
-    let ws: WebSocket | null = null;
-    let retryTimer: number | null = null;
-    let isClosed = false;
     let isSyncing = false;
+    let unlisten: (() => void) | null = null;
 
     const syncTablesAndOrders = async () => {
       if (isSyncing) return;
@@ -56,44 +54,20 @@ const Tables: React.FC = () => {
       }
     };
 
-    const connect = () => {
-      const url = getTableStatusWsUrl(currentStoreId);
-      if (!url) return;
-
-      ws = new WebSocket(url);
-
-      ws.onopen = () => {
-        // Connection established
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg?.type === 'table_status_update') {
-            void syncTablesAndOrders();
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        if (isClosed) return;
-        retryTimer = window.setTimeout(connect, 2000);
-      };
-
-      ws.onerror = () => {
-        ws?.close();
-      };
-    };
-
-    connect();
-    return () => {
-      isClosed = true;
-      if (retryTimer) {
-        window.clearTimeout(retryTimer);
+    let cancelled = false;
+    listenTableStatusUpdates(currentStoreId, () => {
+      void syncTablesAndOrders();
+    }).then((un) => {
+      if (cancelled) {
+        un();
+      } else {
+        unlisten = un;
       }
-      ws?.close();
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
     };
   }, [currentStoreId, fetchOrders, fetchTables]);
 

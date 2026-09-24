@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Github, Loader2, AlertCircle, Check, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Save, Github, Loader2, AlertCircle, Check, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff, Smartphone, Copy } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import { invoke } from '@tauri-apps/api/core';
 
 interface GeminiModel {
   name: string;
@@ -20,6 +21,10 @@ const DeveloperSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
+
+  // LAN server info (for mobile apps on the same network)
+  const [lanInfo, setLanInfo] = useState<{ url: string; ip: string | null; port: number } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Gemini config
   const [geminiApiKey, setGeminiApiKey] = useState('');
@@ -47,6 +52,9 @@ const DeveloperSettings: React.FC = () => {
     }
     fetchConfig();
     fetchGeminiConfig();
+    invoke<{ url: string; ip: string | null; port: number }>('lan_server_info')
+      .then(setLanInfo)
+      .catch(() => setLanInfo(null));
   }, [user]);
 
   const fetchConfig = async () => {
@@ -215,9 +223,74 @@ const DeveloperSettings: React.FC = () => {
     </>
   );
 
+  const copyLanUrl = async () => {
+    if (!lanInfo?.url) return;
+    try {
+      await navigator.clipboard.writeText(lanInfo.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — user can select the text manually.
+    }
+  };
+
   return (
     <div>
       {renderBanner(saveMessage, error)}
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Smartphone size={18} />
+            Mobile App Connection (LAN)
+          </span>
+        </div>
+        <div className="card-body">
+          <div style={{
+            padding: '1rem',
+            background: 'var(--gray-50)',
+            borderRadius: 'var(--radius)',
+            marginBottom: '1.5rem',
+            border: '1px solid var(--gray-200)',
+          }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--gray-600)', margin: 0 }}>
+              <strong>Note:</strong> Mobile apps connect directly to this computer over the local
+              network — no internet required. On the mobile app's login screen, tap the server
+              row and choose <strong>"Find on this network"</strong>, or enter this address manually.
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label>Server Address</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={lanInfo?.url ?? ''}
+                readOnly
+                placeholder="LAN server starting…"
+                spellCheck={false}
+                style={{ flex: 1, fontFamily: 'monospace' }}
+              />
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={copyLanUrl}
+                disabled={!lanInfo?.url}
+                title="Copy address"
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
+              {lanInfo?.ip
+                ? `This computer is reachable at ${lanInfo.ip}:${lanInfo.port} on the local network.`
+                : 'Could not determine the local IP address.'}
+            </small>
+          </div>
+        </div>
+      </div>
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">

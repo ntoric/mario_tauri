@@ -8,6 +8,7 @@ import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'support_screen.dart';
 import '../widgets/animated_gradient_background.dart';
+import '../widgets/server_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -286,7 +287,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 16),
+                    const ServerConfigTile(),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),

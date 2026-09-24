@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
 import '../utils/constants.dart';
+import '../widgets/server_config.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -214,7 +215,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 16),
+                    const ServerConfigTile(),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),

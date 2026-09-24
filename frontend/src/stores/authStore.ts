@@ -155,6 +155,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Ends the cloud sync session server-side (best-effort, works offline).
+        api.logout().catch(() => {});
         get().clearAuth();
       },
 

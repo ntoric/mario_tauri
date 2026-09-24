@@ -10,7 +10,6 @@ import (
 
 	"cafe-backend/internal/config"
 
-	"github.com/google/uuid"
 )
 
 // BillData matches the JSON payload structure of enqueued bill data
@@ -139,11 +138,14 @@ func handleQueueItem(db *sql.DB, cfg *config.Config, item QueueItem) error {
 	}
 	defer tx.Rollback()
 
-	// 4. Create the bill
-	billID := uuid.New().String()
+	// 4. Create the bill — deterministic id (orderID + "-bill") so the local
+	// worker and this worker converge on the same bill row for an order, and
+	// ON CONFLICT makes retries idempotent.
+	billID := item.OrderID + "-bill"
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO bills (id, store_id, order_id, table_number, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, generated_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 ON CONFLICT (id) DO NOTHING`,
 		billID, item.StoreID, item.OrderID, data.TableNumber, data.InvoiceNo, data.Subtotal, data.TaxTotal, data.Discount, data.Total, data.PaymentMethod, data.CustomerName, data.GeneratedBy,
 	)
 	if err != nil {

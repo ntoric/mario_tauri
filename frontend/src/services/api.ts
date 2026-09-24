@@ -1,14 +1,14 @@
 /// <reference types="vite/client" />
 
-const API_URL = import.meta.env.VITE_BACKEND_URL ||
-  import.meta.env.VITE_API_URL ||
-  'https://mario-v2-backend.ntoric.com/api';
+import { invoke } from '@tauri-apps/api/core';
 
-// Log API URL for debugging
-console.log('API URL configured as:', API_URL);
-console.log('Window location:', window.location.href);
-console.log('Build mode:', import.meta.env.MODE);
+interface LocalApiResponse {
+  status: number;
+  body: any;
+}
 
+// All requests are served by the embedded local backend (SQLite) inside the
+// Tauri process — no network connection is required for POS operation.
 class ApiService {
   private token: string | null = null;
 
@@ -33,55 +33,41 @@ class ApiService {
   }
 
   private async fetch(endpoint: string, options: RequestInit = {}, skipAuthRedirect = false) {
-    const url = `${API_URL}${endpoint}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...options.headers as Record<string, string>,
-    };
-
     const token = this.getToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    const method = (options.method || 'GET').toUpperCase();
+
+    let body: any = null;
+    if (options.body) {
+      try {
+        body = JSON.parse(options.body as string);
+      } catch {
+        body = options.body;
+      }
     }
 
-    console.log(`Fetching: ${url}`);
-    console.log(`Token present: ${!!token}`);
-    console.log(`Token length: ${token?.length || 0}`);
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    let resp: LocalApiResponse;
+    try {
+      resp = await invoke<LocalApiResponse>('api_request', {
+        method,
+        path: endpoint,
+        body,
+        token,
+      });
+    } catch (e: any) {
+      console.error(`[API ERROR] Local backend call failed: ${method} ${endpoint}`, e);
+      throw new Error(e?.toString?.() || 'Local backend request failed');
+    }
 
-    console.log(`Response URL: ${response.url}`);
-    console.log(`Response status: ${response.status}`);
-
-    if (!response.ok) {
-      console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
-      if (response.status === 401 && !skipAuthRedirect) {
-        console.error('[API ERROR] 401 Unauthorized - clearing token and redirecting to login');
+    if (resp.status >= 400) {
+      console.error(`[API ERROR] ${method} ${endpoint} -> ${resp.status}`, resp.body);
+      if (resp.status === 401 && !skipAuthRedirect) {
         this.clearToken();
         window.location.replace('/#/login');
       }
-      const contentType = response.headers.get('content-type');
-      let error;
-      if (contentType && contentType.includes('application/json')) {
-        error = await response.json();
-      } else {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        error = { error: `Server returned non-JSON response (${response.status}): ${text.substring(0, 100)}` };
-      }
-      throw new Error(error.error || 'Request failed');
+      throw new Error(resp.body?.error || `Request failed (${resp.status})`);
     }
 
-    const text = await response.text();
-    console.log(`Response content-type: ${response.headers.get('content-type')}`);
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error('Failed to parse JSON response:', text.substring(0, 200));
-      throw new Error('Invalid JSON response from server');
-    }
+    return resp.body;
   }
 
   // Auth
@@ -102,11 +88,26 @@ class ApiService {
     }
   }
 
+  async logout() {
+    // Ends the server-side sync session (clears cached cloud credentials).
+    // Best-effort — the app must be able to log out while offline.
+    try {
+      await this.fetch('/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore — local logout proceeds regardless
+    }
+    this.clearToken();
+  }
+
   async getMe() {
     return this.fetch('/auth/me');
   }
 
   // Stores
+  async getDefaultStore() {
+    return this.fetch('/stores/default');
+  }
+
   async getStores() {
     return this.fetch('/stores');
   }
@@ -467,6 +468,18 @@ class ApiService {
     releaseNotes: string;
   }) {
     return this.fetch('/app-update', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  // Support Configuration
+  async getSupportConfig() {
+    return this.fetch('/support-config');
+  }
+
+  async updateSupportConfig(config: { email: string; phone: string; whatsappLink: string }) {
+    return this.fetch('/support-config', {
       method: 'POST',
       body: JSON.stringify(config),
     });

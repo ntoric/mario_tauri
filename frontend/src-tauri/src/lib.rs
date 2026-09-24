@@ -1,4 +1,9 @@
+mod local;
 mod printer;
+
+use local::api::{self, ApiRequest};
+use local::LocalBackend;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use printer::{PrinterService, PrintJob, Device, RawPrintRequest};
@@ -148,6 +153,34 @@ async fn print_job(print_data: serde_json::Value) -> Result<String, String> {
     }
 }
 
+/// LAN server info for the desktop UI (mobile devices connect to this URL).
+#[tauri::command]
+async fn lan_server_info(
+    state: tauri::State<'_, Arc<LocalBackend>>,
+) -> Result<serde_json::Value, String> {
+    Ok(local::lan_server::server_info(&state))
+}
+
+/// Generic API bridge — the frontend calls this instead of HTTP fetch.
+/// Dispatches method+path+body to the local backend handlers backed by SQLite.
+#[tauri::command]
+async fn api_request(
+    state: tauri::State<'_, Arc<LocalBackend>>,
+    app: tauri::AppHandle,
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+    token: Option<String>,
+) -> Result<api::ApiResponse, String> {
+    let req = ApiRequest {
+        method,
+        path,
+        body,
+        token,
+    };
+    Ok(api::dispatch(&**state, &app, req).await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -155,12 +188,36 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            use tauri::Manager;
+            let db_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+            let db_path = db_dir.join("mario_local.db");
+            let backend = Arc::new(LocalBackend::new(&db_path)?);
+            local::cleanup::start_cleanup_worker(backend.clone());
+            local::cleanup::start_bill_queue_worker(backend.clone());
+            local::sync::start(backend.clone(), app.handle().clone());
+            app.manage(backend.clone());
+
+            // LAN server for mobile apps on the same network + discovery responder.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(local::lan_server::serve(
+                backend.clone(),
+                handle,
+            ));
+            local::lan_server::start_discovery_responder(backend.lan_server_id.clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_printer_status,
             get_printers,
             print_job,
             debug_usb_devices,
-            save_csv_file
+            save_csv_file,
+            api_request,
+            lan_server_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

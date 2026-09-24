@@ -15,6 +15,7 @@ class ApiService {
 
   String _baseUrl = 'https://mario-v2-backend.ntoric.com/api';
   String? _token;
+  String? _serverId;
 
   void setBaseUrl(String url) {
     _baseUrl = url;
@@ -23,6 +24,13 @@ class ApiService {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token');
+    _serverId = prefs.getString('mario_server_id');
+    // Restore the previously configured server (e.g. a LAN host like
+    // http://192.168.1.10:8088/api) so the app reconnects on startup.
+    final savedUrl = prefs.getString('api_url');
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      _baseUrl = savedUrl;
+    }
     await prefs.setString('api_url', _baseUrl);
   }
 
@@ -33,6 +41,34 @@ class ApiService {
   }
 
   String get baseUrl => _baseUrl;
+
+  /// Stable identifier of the POS host last connected to — survives IP
+  /// changes, used to recognize the same machine during LAN discovery.
+  String? get serverId => _serverId;
+
+  Future<void> saveServerId(String? serverId) async {
+    _serverId = serverId;
+    final prefs = await SharedPreferences.getInstance();
+    if (serverId != null) {
+      await prefs.setString('mario_server_id', serverId);
+    } else {
+      await prefs.remove('mario_server_id');
+    }
+  }
+
+  /// Fetch the host identity from the public /api/lan-info endpoint.
+  Future<Map<String, dynamic>?> fetchLanInfo() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/lan-info'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic>) return data;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Map<String, String> get _headers {
     final headers = {
@@ -184,10 +220,12 @@ class ApiService {
   // Health Check
   Future<bool> checkHealth() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/health'),
-        headers: _headers,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/health'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (e) {
       return false;

@@ -21,8 +21,21 @@ class BackendService {
 
   Future<bool> connectToBackend(String baseUrl) async {
     await _api.saveBaseUrl(baseUrl);
-    return await _api.checkHealth();
+    final ok = await _api.checkHealth();
+    if (ok) {
+      // Remember which host this is so auto-reconnect can recognize it
+      // even if its IP changes on the network.
+      final info = await _api.fetchLanInfo();
+      final serverId = info?['serverId']?.toString();
+      if (serverId != null && serverId.isNotEmpty) {
+        await _api.saveServerId(serverId);
+      }
+    }
+    return ok;
   }
+
+  /// Stable identity of the last connected host (survives IP changes).
+  String? get lastServerId => _api.serverId;
 
   Future<void> disconnect() async {
     await _api.clearToken();

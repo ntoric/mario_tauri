@@ -61,7 +61,9 @@ func (h *Handler) CreateItemExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.ItemID = itemID
 	req.StoreID = targetStoreID
 	req.IsActive = true

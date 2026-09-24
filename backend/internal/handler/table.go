@@ -73,7 +73,9 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.StoreID = targetStoreID
 	req.IsActive = true
 	fmt.Println("CreateTable: prepared table =", req)

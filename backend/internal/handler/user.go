@@ -48,6 +48,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Dynamic body parser to read storeIds list
 	var raw struct {
+		ID       string   `json:"id"`
 		Username string   `json:"username"`
 		Password string   `json:"password"`
 		Name     string   `json:"name"`
@@ -86,8 +87,12 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := raw.ID
+	if userID == "" {
+		userID = uuid.New().String()
+	}
 	u := models.User{
-		ID:       uuid.New().String(),
+		ID:       userID,
 		Username: raw.Username,
 		Password: string(hashedPassword),
 		Name:     raw.Name,

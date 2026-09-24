@@ -111,7 +111,9 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 		req.TaxEnabled = true
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	if req.InvoiceSize == "" {
 		req.InvoiceSize = "3inch"
 	}

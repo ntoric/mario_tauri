@@ -40,7 +40,9 @@ func (h *Handler) CreateExpenseCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.IsActive = true
 	req.CreatedAt = time.Now()
 
@@ -152,7 +154,9 @@ func (h *Handler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		req.ExpenseDate = time.Now()
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.IsActive = true
 	req.CreatedAt = time.Now()
 	req.UpdatedAt = time.Now()

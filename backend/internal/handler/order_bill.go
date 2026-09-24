@@ -75,7 +75,9 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.StoreID = targetStoreID
 	req.CreatedBy = claims.ID
 	req.Status = "active"
@@ -283,7 +285,10 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orderID := uuid.New().String()
+	orderID := req.ID
+	if orderID == "" {
+		orderID = uuid.New().String()
+	}
 	invoiceNo := fmt.Sprintf("INV-%d", time.Now().Unix())
 	paymentMethod := req.PaymentMethod
 	if paymentMethod == "" {
@@ -322,7 +327,7 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 
 	// Create bill
 	bill := models.Bill{
-		ID:             uuid.New().String(),
+		ID:             orderID + "-bill",
 		StoreID:        targetStoreID,
 		OrderID:        orderID,
 		TableNumber:    req.TableNumber,
@@ -400,7 +405,7 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bill := models.Bill{
-		ID:             uuid.New().String(),
+		ID:             id + "-bill",
 		StoreID:        targetStoreID,
 		OrderID:        id,
 		TableNumber:    req.TableNumber,
@@ -444,6 +449,7 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		ID             string             `json:"id"`
 		StoreID        string             `json:"storeId"`
 		Items          []models.OrderItem `json:"items"`
 		TotalAmount    float64            `json:"totalAmount"`
@@ -467,7 +473,10 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orderID := uuid.New().String()
+	orderID := req.ID
+	if orderID == "" {
+		orderID = uuid.New().String()
+	}
 	invoiceNo := fmt.Sprintf("INV-%d", time.Now().Unix())
 
 	order := models.Order{
@@ -502,7 +511,7 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Create bill
 	bill := models.Bill{
-		ID:             uuid.New().String(),
+		ID:             orderID + "-bill",
 		StoreID:        targetStoreID,
 		OrderID:        orderID,
 		TableNumber:    0,
@@ -591,7 +600,9 @@ func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.ID = uuid.New().String()
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
 	req.StoreID = targetStoreID
 	req.GeneratedBy = claims.ID
 
@@ -650,6 +661,7 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Claims : ", claims)
 
 	var req struct {
+		ID            string  `json:"id"`
 		OrderID       string  `json:"orderId"`
 		TableNumber   int     `json:"tableNumber"`
 		InvoiceNo     string  `json:"invoiceNo"`
@@ -698,7 +710,10 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueID := uuid.New().String()
+	queueID := req.ID
+	if queueID == "" {
+		queueID = uuid.New().String()
+	}
 
 	// Build JSON representation matching database DTO
 	billDataMap := map[string]interface{}{

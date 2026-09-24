@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../stores';
+import { api } from '../services/api';
 import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -22,18 +23,8 @@ const Login: React.FC = () => {
   useEffect(() => {
     const fetchDefaultStore = async () => {
       try {
-        // Use direct fetch without any auth headers
-        const response = await fetch('/api/stores/default', {
-          headers: {
-            'Content-Type': 'application/json',
-            // Explicitly exclude Authorization header
-          },
-          credentials: 'omit', // Don't send cookies
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setDefaultStore(data);
-        }
+        const data = await api.getDefaultStore();
+        setDefaultStore(data);
       } catch (error) {
         // Silently fail - logo is optional
         console.log('Could not fetch store logo');
