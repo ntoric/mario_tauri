@@ -2,12 +2,17 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"time"
+
+	"cafe-backend/internal/syncutil"
+	"github.com/go-chi/chi/v5"
 )
 
 // SyncHandler exposes the bidirectional offline-sync protocol:
@@ -28,10 +33,11 @@ func NewSyncHandler(db *sql.DB) *SyncHandler {
 }
 
 type syncApplyRequest struct {
-	EventID string          `json:"eventId"`
-	Method  string          `json:"method"`
-	Path    string          `json:"path"`
-	Body    json.RawMessage `json:"body"`
+	EventID   string          `json:"eventId"`
+	Method    string          `json:"method"`
+	Path      string          `json:"path"`
+	Body      json.RawMessage `json:"body"`
+	CreatedAt string          `json:"createdAt"`
 }
 
 // Apply replays a single client mutation against this server's router.
@@ -60,21 +66,22 @@ func (s *SyncHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the replayed request: same auth + a marker so the change is not
-	// enqueued into sync_events (that would echo it back to the client).
-	path := req.Path
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	// Last-write-wins: skip replays older than the entity's most recent
+	// mutation (which may have been a cloud-side write). Without this,
+	// concurrent edits on both sides diverge permanently.
+	entityKey := syncutil.EntityKey(req.Path, req.Body)
+	eventTS := parseSyncTS(req.CreatedAt)
+	if entityKey != "" && !eventTS.IsZero() {
+		var lastTS time.Time
+		if err := s.DB.QueryRowContext(r.Context(),
+			"SELECT last_ts FROM sync_entity_ts WHERE entity_key = $1",
+			entityKey).Scan(&lastTS); err == nil && !eventTS.After(lastTS) {
+			writeSyncJSON(w, http.StatusOK, map[string]interface{}{"applied": false, "stale": true})
+			return
+		}
 	}
-	full := "/api" + path
 
-	var bodyReader *bytes.Reader
-	if len(req.Body) > 0 && string(req.Body) != "null" {
-		bodyReader = bytes.NewReader(req.Body)
-	} else {
-		bodyReader = bytes.NewReader(nil)
-	}
-	replay, err := http.NewRequestWithContext(r.Context(), req.Method, full, bodyReader)
+	replay, err := newReplayRequest(r.Context(), req.Method, req.Path, req.Body)
 	if err != nil {
 		s.unmarkProcessed(r, req.EventID)
 		writeSyncJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -97,7 +104,52 @@ func (s *SyncHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if entityKey != "" && !eventTS.IsZero() {
+		// Record the event's origin time so later pushes compare correctly.
+		_, _ = s.DB.ExecContext(r.Context(),
+			`INSERT INTO sync_entity_ts (entity_key, last_ts) VALUES ($1, $2)
+			 ON CONFLICT (entity_key) DO UPDATE SET last_ts = EXCLUDED.last_ts
+			 WHERE EXCLUDED.last_ts > sync_entity_ts.last_ts`,
+			entityKey, eventTS)
+	}
 	writeSyncJSON(w, http.StatusOK, map[string]interface{}{"applied": true, "status": rec.Code})
+}
+
+// parseSyncTS accepts RFC3339-ish timestamps ("2026-09-24T19:42:19.638066Z",
+// or the space-separated form Postgres drivers emit) and returns UTC.
+func parseSyncTS(s string) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano, "2006-01-02T15:04:05.999999Z07:00",
+		"2006-01-02 15:04:05.999999999", "2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
+}
+
+// newReplayRequest builds the in-process replay of a client mutation. The
+// parent request's chi RouteCtx is stripped first: chi's ServeHTTP reuses a
+// RouteCtx found on the request context (sub-route dispatch), which would keep
+// the parent's RouteMethod/RoutePath and route this replay as POST
+// /sync/apply — i.e. PUT/PATCH events would 405.
+func newReplayRequest(parent context.Context, method, path string, body []byte) (*http.Request, error) {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	var bodyReader *bytes.Reader
+	if len(body) > 0 && string(body) != "null" {
+		bodyReader = bytes.NewReader(body)
+	} else {
+		bodyReader = bytes.NewReader(nil)
+	}
+	ctx := context.WithValue(parent, chi.RouteCtxKey, nil)
+	return http.NewRequestWithContext(ctx, method, "/api"+path, bodyReader)
 }
 
 func (s *SyncHandler) unmarkProcessed(r *http.Request, eventID string) {
@@ -129,7 +181,7 @@ func (s *SyncHandler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.DB.QueryContext(r.Context(), `
-		SELECT seq, method, path, body, COALESCE(store_id, '')
+		SELECT seq, method, path, body, COALESCE(store_id, ''), created_at
 		FROM sync_events
 		WHERE seq > $1 AND (store_id = $2 OR store_id IS NULL OR store_id = '')
 		ORDER BY seq ASC
@@ -141,17 +193,18 @@ func (s *SyncHandler) Events(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type evt struct {
-		Seq     int64           `json:"seq"`
-		Method  string          `json:"method"`
-		Path    string          `json:"path"`
-		Body    json.RawMessage `json:"body"`
-		StoreID string          `json:"storeId"`
+		Seq       int64           `json:"seq"`
+		Method    string          `json:"method"`
+		Path      string          `json:"path"`
+		Body      json.RawMessage `json:"body"`
+		StoreID   string          `json:"storeId"`
+		CreatedAt time.Time       `json:"createdAt"`
 	}
 	events := []evt{}
 	for rows.Next() {
 		var e evt
 		var body []byte
-		if err := rows.Scan(&e.Seq, &e.Method, &e.Path, &body, &e.StoreID); err != nil {
+		if err := rows.Scan(&e.Seq, &e.Method, &e.Path, &body, &e.StoreID, &e.CreatedAt); err != nil {
 			continue
 		}
 		e.Body = body

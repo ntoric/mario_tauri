@@ -26,7 +26,7 @@ class ApiService {
     _token = prefs.getString('auth_token');
     _serverId = prefs.getString('mario_server_id');
     // Restore the previously configured server (e.g. a LAN host like
-    // http://192.168.1.10:8088/api) so the app reconnects on startup.
+    // http://192.168.1.10:13100/api) so the app reconnects on startup.
     final savedUrl = prefs.getString('api_url');
     if (savedUrl != null && savedUrl.isNotEmpty) {
       _baseUrl = savedUrl;

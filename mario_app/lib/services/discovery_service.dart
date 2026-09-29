@@ -49,7 +49,7 @@ class DiscoveryService {
           final ip = dg.address.address;
           found[ip] = DiscoveredServer(
             address: ip,
-            port: (data['port'] as num?)?.toInt() ?? 8088,
+            port: (data['port'] as num?)?.toInt() ?? 13100,
             name: data['name']?.toString() ?? 'Mario POS',
             serverId: data['serverId']?.toString(),
           );

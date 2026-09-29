@@ -85,7 +85,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
     super.dispose();
   }
 
-  /// Accepts "192.168.1.10", "192.168.1.10:8088", or a full URL and
+  /// Accepts "192.168.1.10", "192.168.1.10:13100", or a full URL and
   /// normalizes it to "http://host:port/api".
   static String? normalizeApiUrl(String input) {
     var s = input.trim();
@@ -95,7 +95,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
     }
     final uri = Uri.tryParse(s);
     if (uri == null || uri.host.isEmpty) return null;
-    final port = uri.hasPort ? uri.port : 8088;
+    final port = uri.hasPort ? uri.port : 13100;
     return 'http://${uri.host}:$port/api';
   }
 
@@ -143,7 +143,8 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
     final url = normalizeApiUrl(_hostController.text);
     if (url == null) {
       setState(() {
-        _message = 'Enter a valid host, e.g. 192.168.1.10 or 192.168.1.10:8088';
+        _message =
+            'Enter a valid host, e.g. 192.168.1.10 or 192.168.1.10:13100';
         _messageIsError = true;
       });
       return;
@@ -189,7 +190,10 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                       Flexible(child: Text(s.name)),
                       if (s.serverId != null &&
                           s.serverId ==
-                              context.read<AuthProvider>().backend.lastServerId) ...[
+                              context
+                                  .read<AuthProvider>()
+                                  .backend
+                                  .lastServerId) ...[
                         const SizedBox(width: 8),
                         Text(
                           'Last used',
@@ -213,8 +217,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text('or',
-                      style:
-                          TextStyle(fontSize: 12, color: AppColors.gray500)),
+                      style: TextStyle(fontSize: 12, color: AppColors.gray500)),
                 ),
                 Expanded(child: Divider(color: AppColors.gray300)),
               ],
@@ -224,7 +227,7 @@ class _ServerConfigDialogState extends State<ServerConfigDialog> {
               controller: _hostController,
               decoration: const InputDecoration(
                 labelText: 'Server address',
-                hintText: '192.168.1.10 or 192.168.1.10:8088',
+                hintText: '192.168.1.10 or 192.168.1.10:13100',
                 prefixIcon: Icon(Icons.computer_outlined),
                 isDense: true,
               ),

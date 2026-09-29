@@ -341,6 +341,14 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			event_id VARCHAR(255) PRIMARY KEY,
 			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		// Last-write-wins ordering: per-entity timestamp of the most recent
+		// mutation's ORIGIN time (when the user made the change, not when it
+		// synced). Written by SyncLogMiddleware for cloud-side mutations and
+		// by /sync/apply for client replays; stale events are skipped.
+		`CREATE TABLE IF NOT EXISTS sync_entity_ts (
+			entity_key TEXT PRIMARY KEY,
+			last_ts TIMESTAMP NOT NULL
+		)`,
 	}
 
 	for _, q := range alterQueries {

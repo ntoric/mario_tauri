@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
+
+	"cafe-backend/internal/syncutil"
 )
 
 // syncOriginHeader marks requests that were replayed from a client outbox via
@@ -79,6 +83,13 @@ func SyncLogMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 				}
 			}
 
+			// Path stored without the /api prefix (clients replay through
+			// their own router); the query string is preserved.
+			path := strings.TrimPrefix(r.URL.Path, "/api")
+			if r.URL.RawQuery != "" {
+				path += "?" + r.URL.RawQuery
+			}
+
 			storeID := r.URL.Query().Get("storeId")
 			if storeID == "" {
 				storeID = r.URL.Query().Get("store_id")
@@ -96,11 +107,12 @@ func SyncLogMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 				}
 			}
 
-			// Path stored without the /api prefix (clients replay through
-			// their own router); the query string is preserved.
-			path := strings.TrimPrefix(r.URL.Path, "/api")
-			if r.URL.RawQuery != "" {
-				path += "?" + r.URL.RawQuery
+			entityKey := syncutil.EntityKey(path, storedBody)
+			if storeID == "" && entityKey != "" {
+				// Resolve the mutated row's store (e.g. a superadmin whose
+				// token carries no store_id) so the event doesn't broadcast
+				// to every store's clients.
+				storeID = resolveStoreID(r, db, entityKey)
 			}
 
 			var bodyArg interface{}
@@ -112,12 +124,42 @@ func SyncLogMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 				storeArg = storeID
 			}
 
+			ts := time.Now().UTC()
 			if _, err := db.ExecContext(r.Context(),
-				"INSERT INTO sync_events (method, path, body, store_id) VALUES ($1, $2, $3, $4)",
-				m, path, bodyArg, storeArg); err != nil {
+				"INSERT INTO sync_events (method, path, body, store_id, created_at) VALUES ($1, $2, $3, $4, $5)",
+				m, path, bodyArg, storeArg, ts); err != nil {
 				// Never fail the request because of sync logging.
 				_ = err
 			}
+			if entityKey != "" {
+				markEntityTS(r, db, entityKey, ts)
+			}
 		})
 	}
+}
+
+// markEntityTS records the mutation's origin time for the entity, used by
+// /sync/apply to drop replays that are older than the row's last write.
+func markEntityTS(r *http.Request, db *sql.DB, entityKey string, ts time.Time) {
+	_, _ = db.ExecContext(r.Context(),
+		`INSERT INTO sync_entity_ts (entity_key, last_ts) VALUES ($1, $2)
+		 ON CONFLICT (entity_key) DO UPDATE SET last_ts = EXCLUDED.last_ts
+		 WHERE EXCLUDED.last_ts > sync_entity_ts.last_ts`,
+		entityKey, ts)
+}
+
+// resolveStoreID finds the store owning a mutated row ("<table>/<id>") so
+// sync_events stay store-scoped even when the caller's JWT has no store_id.
+func resolveStoreID(r *http.Request, db *sql.DB, entityKey string) string {
+	table, id, _ := strings.Cut(entityKey, "/")
+	if table == "stores" {
+		return id
+	}
+	var storeID string
+	if err := db.QueryRowContext(r.Context(),
+		fmt.Sprintf("SELECT store_id FROM %s WHERE id = $1", table), id,
+	).Scan(&storeID); err != nil {
+		return ""
+	}
+	return storeID
 }
