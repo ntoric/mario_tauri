@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   // Derive proxy target from VITE_API_URL (strip trailing /api if present)
-  const apiUrl = env.VITE_API_URL || 'http://localhost:8088/api'
+  const apiUrl = env.VITE_API_URL || 'http://localhost:13100/api'
   const proxyTarget = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl
 
   return {
@@ -29,7 +29,8 @@ export default defineConfig(({ mode }) => {
       logOverride: { 'this-is-undefined-in-esm': 'silent' },
     },
     server: {
-      port: 5173,
+      port: 1420,
+      strictPort: true,
       proxy: {
         '/api': {
           target: proxyTarget,

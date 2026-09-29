@@ -256,6 +256,14 @@ CREATE TABLE IF NOT EXISTS sync_outbox (
     created_at TEXT DEFAULT {ts}
 );
 CREATE INDEX IF NOT EXISTS idx_sync_outbox_pending ON sync_outbox(pushed, id);
+
+-- Last-write-wins ordering: per-entity timestamp of the most recent
+-- mutation's ORIGIN time. Written on local mutations (enqueue) and on
+-- replayed cloud events; stale incoming events are skipped.
+CREATE TABLE IF NOT EXISTS sync_entity_ts (
+    entity_key TEXT PRIMARY KEY,
+    last_ts TEXT NOT NULL
+);
 "#,
         ts = ts
     );

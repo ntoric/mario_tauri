@@ -30,7 +30,8 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
       const info = await updaterService.checkForUpdates();
       setUpdateInfo(info);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check for updates');
+      // Check failures stay silent (offline, manifest unreachable, etc.) —
+      // the banner only appears when an update is actually available.
       console.error('Update check failed:', err);
     } finally {
       setIsChecking(false);

@@ -2,8 +2,52 @@ use serde_json::{json, Value};
 
 use super::rows::{self, ItemsKind};
 use super::{
-    broadcast_table_status, created, err, now_ts, ok, target_store, entity_id, ApiResponse, Ctx,
+    broadcast_table_status, created, err, missing_ref, now_ts, ok, target_store, entity_id,
+    ApiResponse, Ctx,
 };
+
+/// Pre-validate the foreign keys an order write depends on so stale client
+/// state (menu resynced, local DB reset, table removed elsewhere) produces a
+/// clear, actionable error instead of a raw "FOREIGN KEY constraint failed".
+fn check_order_refs(
+    conn: &rusqlite::Connection,
+    store_id: Option<&str>,
+    table_id: Option<&str>,
+    items: &[Value],
+) -> Option<ApiResponse> {
+    if let Some(sid) = store_id {
+        if missing_ref(conn, "stores", sid) {
+            return Some(err(
+                400,
+                "Store is not synced on this device. Sign in again to resync.",
+            ));
+        }
+    }
+    if let Some(tid) = table_id.filter(|t| !t.is_empty()) {
+        if missing_ref(conn, "tables", tid) {
+            return Some(err(
+                400,
+                "The selected table no longer exists. Refresh and choose another table.",
+            ));
+        }
+    }
+    for item in items {
+        let iid = item["itemId"].as_str().unwrap_or("");
+        if missing_ref(conn, "items", iid) {
+            let msg = match item["item"]["name"].as_str().filter(|n| !n.is_empty()) {
+                Some(n) => format!(
+                    "Menu item '{n}' no longer exists locally. Refresh the menu and try again."
+                ),
+                None => {
+                    "A menu item in this order no longer exists locally. Refresh the menu and try again."
+                        .to_string()
+                }
+            };
+            return Some(err(400, msg));
+        }
+    }
+    None
+}
 
 /// Shared insert used by create/parcel/e-bill — mirrors OrderRepository.Create.
 fn insert_order(
@@ -190,6 +234,16 @@ pub fn create_order(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Err(r) => return r,
     };
 
+    let empty = Vec::new();
+    if let Some(r) = check_order_refs(
+        &ctx.conn,
+        Some(&target),
+        body["tableId"].as_str(),
+        body["items"].as_array().unwrap_or(&empty),
+    ) {
+        return r;
+    }
+
     let order_id = entity_id(&body);
     {
         let tx = match ctx.conn.transaction() {
@@ -238,6 +292,18 @@ pub fn update_order(ctx: &mut Ctx, id: &str, body: Value) -> ApiResponse {
     }
     let has_items = body["items"].is_array();
     let items = body["items"].as_array().cloned().unwrap_or_default();
+
+    // A stale client may hold an order that was completed/removed elsewhere —
+    // writing its items would hit the FK on orders(id). Check refs first.
+    if missing_ref(&ctx.conn, "orders", id) {
+        return err(
+            404,
+            "Order not found — it may have been completed or removed. Refresh and try again.",
+        );
+    }
+    if let Some(r) = check_order_refs(&ctx.conn, None, body["tableId"].as_str(), &items) {
+        return r;
+    }
 
     {
         let tx = match ctx.conn.transaction() {
@@ -386,6 +452,16 @@ pub fn save_ebill(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Err(r) => return r,
     };
 
+    let empty = Vec::new();
+    if let Some(r) = check_order_refs(
+        &ctx.conn,
+        Some(&target),
+        body["tableId"].as_str(),
+        body["items"].as_array().unwrap_or(&empty),
+    ) {
+        return r;
+    }
+
     let order_id = entity_id(&body);
     let invoice_no = format!("INV-{}", chrono::Utc::now().timestamp());
     let payment_method = {
@@ -513,6 +589,16 @@ pub fn create_parcel_order(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Ok(t) => t,
         Err(r) => return r,
     };
+
+    let empty = Vec::new();
+    if let Some(r) = check_order_refs(
+        &ctx.conn,
+        Some(&target),
+        None,
+        body["items"].as_array().unwrap_or(&empty),
+    ) {
+        return r;
+    }
 
     let order_id = entity_id(&body);
     let invoice_no = format!("INV-{}", chrono::Utc::now().timestamp());

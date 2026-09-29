@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::rows::{self, ItemsKind};
-use super::{created, err, now_ts, ok, target_store, entity_id, ApiResponse, Ctx};
+use super::{created, err, missing_ref, now_ts, ok, target_store, entity_id, ApiResponse, Ctx};
 
 fn attach_bill_items(conn: &rusqlite::Connection, bills: &mut Vec<Value>) {
     let order_ids: Vec<String> = bills
@@ -56,6 +56,17 @@ pub fn create_bill(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Ok(t) => t,
         Err(r) => return r,
     };
+
+    // Clear errors instead of a raw FK failure when the client references a
+    // store/order that isn't synced locally.
+    if missing_ref(&ctx.conn, "stores", &target) {
+        return err(400, "Store is not synced on this device. Sign in again to resync.");
+    }
+    if let Some(oid) = body["orderId"].as_str().filter(|s| !s.is_empty()) {
+        if missing_ref(&ctx.conn, "orders", oid) {
+            return err(404, "Order not found — it may have been removed. Refresh and try again.");
+        }
+    }
 
     let id = entity_id(&body);
     let pay: Option<String> = body["paymentMethod"]

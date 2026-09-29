@@ -108,6 +108,10 @@ pub async fn login_cloud_first(state: &LocalBackend, body: Value) -> ApiResponse
                 Ok(t) => t,
                 Err(e) => return err(500, format!("Failed to generate token: {}", e)),
             };
+            {
+                let conn = state.conn.lock().unwrap();
+                sync::save_session(&conn, &local_token, &user);
+            }
             return ok(json!({ "token": local_token, "user": user }));
         }
         // Cloud is authoritative: an explicit rejection means the login
@@ -156,9 +160,11 @@ fn local_login(
         Err(e) => return err(500, format!("Failed to generate token: {}", e)),
     };
 
+    let summary = user_summary(&user, stores);
+    sync::save_session(conn, &token, &summary);
     ok(json!({
         "token": token,
-        "user": user_summary(&user, stores),
+        "user": summary,
     }))
 }
 
@@ -168,9 +174,9 @@ pub fn login(ctx: &mut Ctx, body: Value) -> ApiResponse {
     local_login(&ctx.conn, ctx.jwt_secret(), username, password)
 }
 
-/// Manual logout ends the cloud sync session: the cached cloud credentials
-/// and token are wiped so the background worker stops pushing/pulling. Local
-/// user rows are kept so the next login can still authenticate offline.
+/// Manual logout ends the session completely: the persisted local session and
+/// the cached cloud credentials are wiped so nothing keeps the user signed in.
+/// Local user rows are kept so the next login can still authenticate offline.
 pub fn logout(ctx: &mut Ctx) -> ApiResponse {
     for key in ["cloud_token", "cloud_username", "cloud_password"] {
         let _ = ctx.conn.execute(
@@ -178,6 +184,7 @@ pub fn logout(ctx: &mut Ctx) -> ApiResponse {
             [key],
         );
     }
+    sync::clear_session(&ctx.conn);
     ok(json!({ "message": "Logged out" }))
 }
 

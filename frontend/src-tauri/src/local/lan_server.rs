@@ -44,12 +44,12 @@ struct LanState {
     broadcast: BroadcastFn,
 }
 
-/// Port the LAN API server binds to (default 8088, override via MARIO_LAN_PORT).
+/// Port the LAN API server binds to (default 13100, override via MARIO_LAN_PORT).
 pub fn lan_port() -> u16 {
     std::env::var("MARIO_LAN_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(8088)
+        .unwrap_or(13100)
 }
 
 /// Best-effort primary LAN IP of this machine (UDP route lookup, no packets sent).

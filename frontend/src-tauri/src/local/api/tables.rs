@@ -1,7 +1,7 @@
 use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
-use super::{broadcast_table_status, created, err, ok, target_store, entity_id, ApiResponse, Ctx};
+use super::{broadcast_table_status, created, err, missing_ref, ok, target_store, entity_id, ApiResponse, Ctx};
 
 fn table_json(r: &rusqlite::Row) -> Result<Value, rusqlite::Error> {
     let mut t = json!({
@@ -58,6 +58,10 @@ pub fn create_table(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Ok(t) => t,
         Err(r) => return r,
     };
+
+    if missing_ref(&ctx.conn, "stores", &target) {
+        return err(400, "Store is not synced on this device. Sign in again to resync.");
+    }
 
     let id = entity_id(&body);
     let section: Option<String> = body["section"]

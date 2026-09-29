@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { invoke } from '@tauri-apps/api/core';
+import toast from 'react-hot-toast';
 
 interface LocalApiResponse {
   status: number;
@@ -62,6 +63,7 @@ class ApiService {
       console.error(`[API ERROR] ${method} ${endpoint} -> ${resp.status}`, resp.body);
       if (resp.status === 401 && !skipAuthRedirect) {
         this.clearToken();
+        toast.error('Session expired. Please sign in again.');
         window.location.replace('/#/login');
       }
       throw new Error(resp.body?.error || `Request failed (${resp.status})`);
@@ -101,6 +103,17 @@ class ApiService {
 
   async getMe() {
     return this.fetch('/auth/me');
+  }
+
+  // Restore the persisted session from SQLite — lets the app re-authenticate
+  // on reopen even if webview storage was cleared. Returns null when logged out.
+  async getStoredSession(): Promise<{ token: string; user: any } | null> {
+    try {
+      const s = await invoke<{ token: string; user: any } | null>('get_stored_session');
+      return s && s.token ? s : null;
+    } catch {
+      return null;
+    }
   }
 
   // Stores

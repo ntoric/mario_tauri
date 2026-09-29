@@ -96,6 +96,20 @@ pub fn now_ts() -> String {
     super::db::now_ts()
 }
 
+/// Check whether a referenced row is missing — used to turn raw SQLite FK
+/// failures into clear, actionable errors. `table` is always a fixed literal
+/// from call sites (never user input), so interpolation is safe. A query
+/// error returns false so the real error surfaces at the write instead.
+pub fn missing_ref(conn: &rusqlite::Connection, table: &str, id: &str) -> bool {
+    conn.query_row(
+        &format!("SELECT COUNT(*) FROM {} WHERE id = ?1", table),
+        [id],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n == 0)
+    .unwrap_or(false)
+}
+
 /// Convert a serde_json::Value into a rusqlite bind parameter.
 pub fn json_to_sql(v: &Value) -> rusqlite::types::Value {
     match v {
@@ -285,6 +299,10 @@ pub async fn dispatch_impl_ex(
     broadcast: &(dyn Fn(&str, &str) + Send + Sync),
     suppress_outbox: bool,
 ) -> ApiResponse {
+    // If the DB file was deleted/replaced while running, reconnect to the
+    // on-disk file before serving the request (avoids writing to a dead inode).
+    state.ensure_db_current();
+
     let (path, query) = parse_query(&req.path);
     let path = path.trim_end_matches('/');
     let path = if path.is_empty() { "/" } else { path };
@@ -501,6 +519,71 @@ pub async fn dispatch_impl_ex(
     resp
 }
 
+/// Resolve the entity a mutation targets as "<table>/<id>" — the key used by
+/// `sync_entity_ts` for last-write-wins ordering on both sides of sync. The id
+/// comes from the second path segment when it looks like a client id, else
+/// from the body's `id` (creates carry stable client-generated ids).
+/// Returns None for list endpoints, actions, and non-entity paths.
+pub fn entity_key(segs: &[&str], body: &Value) -> Option<String> {
+    let table = match *segs.first()? {
+        "orders" => "orders",
+        "items" => "items",
+        "categories" => "categories",
+        "tables" => "tables",
+        "users" => "users",
+        "expenses" => "expenses",
+        "expense-categories" => "expense_categories",
+        "item-expenses" => "item_expenses",
+        "stores" => "stores",
+        "bills" => "bills",
+        _ => return None,
+    };
+    let id = segs
+        .get(1)
+        .filter(|s| looks_like_id(s))
+        .map(|s| s.to_string())
+        .or_else(|| {
+            body.get("id")
+                .and_then(|v| v.as_str())
+                .filter(|s| looks_like_id(s))
+                .map(str::to_string)
+        })?;
+    Some(format!("{table}/{id}"))
+}
+
+/// Ids are client-generated UUIDs (4 dashes); action segments ("parcel",
+/// "save-ebill", "sections", ...) are not.
+fn looks_like_id(s: &str) -> bool {
+    s.len() >= 20 && s.chars().filter(|c| *c == '-').count() >= 2
+}
+
+/// Record the origin timestamp of a mutation for last-write-wins ordering.
+/// `ts` is the event's own timestamp (now for local writes, the cloud event's
+/// createdAt for replays). Stored normalized so comparisons are chronological.
+pub fn mark_entity_ts(conn: &Connection, key: &str, ts: &str) {
+    let _ = conn.execute(
+        "INSERT INTO sync_entity_ts (entity_key, last_ts) VALUES (?1, ?2)
+         ON CONFLICT (entity_key) DO UPDATE SET last_ts = excluded.last_ts
+         WHERE excluded.last_ts > sync_entity_ts.last_ts",
+        rusqlite::params![key, normalize_ts(ts)],
+    );
+}
+
+/// Normalize RFC3339-ish timestamps ("2026-09-24T19:42:19.638066Z",
+/// "2026-09-24 19:42:19.638", ...) into a fixed-width sortable key
+/// "YYYYMMDDHHMMSSffffff" — lexical order then equals chronological order.
+pub fn normalize_ts(s: &str) -> String {
+    let s = s.trim().trim_end_matches('Z');
+    let (base, frac) = s.split_once('.').unwrap_or((s, ""));
+    let digits: String = base.chars().filter(|c| c.is_ascii_digit()).collect();
+    let mut frac: String = frac.chars().filter(|c| c.is_ascii_digit()).collect();
+    frac.truncate(6);
+    while frac.len() < 6 {
+        frac.push('0');
+    }
+    format!("{digits}{frac}")
+}
+
 /// Operations that must never be replicated to the cloud: session/auth calls,
 /// local-only actions (system reset, store switching), the AI parse call
 /// (its result `menu/bulk` is synced instead), and probes.
@@ -528,11 +611,16 @@ pub fn queue_sync_event(
     body: &Value,
     store_id: &str,
 ) {
+    let ts = now_ts();
     let _ = conn.execute(
         "INSERT INTO sync_outbox (event_id, method, path, body, store_id, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![uuid(), method, path, body.to_string(), store_id, now_ts()],
+        rusqlite::params![uuid(), method, path, body.to_string(), store_id, &ts],
     );
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    if let Some(key) = entity_key(&segs, body) {
+        mark_entity_ts(conn, &key, &ts);
+    }
 }
 
 /// Record a successful local mutation in the sync outbox so the background
@@ -570,6 +658,7 @@ fn enqueue_outbox(
         .or_else(|| ctx.claims.as_ref().map(|c| c.store_id.clone()))
         .unwrap_or_default();
 
+    let ts = now_ts();
     let _ = ctx.conn.execute(
         "INSERT INTO sync_outbox (event_id, method, path, body, store_id, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -583,9 +672,12 @@ fn enqueue_outbox(
                 Some(stored_body.to_string())
             },
             store_id,
-            now_ts(),
+            &ts,
         ],
     );
+    if let Some(key) = entity_key(segs, &stored_body) {
+        mark_entity_ts(&ctx.conn, &key, &ts);
+    }
     // Kick the sync worker so the push happens promptly when online.
     if let Some(kick) = ctx.outbox_kick {
         kick();

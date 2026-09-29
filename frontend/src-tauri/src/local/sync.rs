@@ -22,8 +22,19 @@ use super::api::{self, json_to_sql, ApiRequest};
 use super::auth;
 use super::LocalBackend;
 
-/// Default cloud backend. Overridable via global_settings.cloud_base_url.
+/// Default cloud backend. Overridable via the `MARIO_CLOUD_URL` env var
+/// (highest priority) or the `cloud_base_url` global setting.
 const DEFAULT_CLOUD_BASE: &str = "https://mario-api.ntoric.com";
+
+/// `MARIO_CLOUD_URL` env var — per-run override of the cloud backend.
+/// e.g. `MARIO_CLOUD_URL=http://localhost:8080 npm run tauri:dev`, or
+/// `MARIO_CLOUD_URL=local` for an offline-only run.
+fn env_cloud_url() -> Option<String> {
+    std::env::var("MARIO_CLOUD_URL")
+        .ok()
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+}
 const REQ_TIMEOUT: Duration = Duration::from_secs(8);
 const CYCLE_INTERVAL: Duration = Duration::from_secs(15);
 const MAX_PUSH_ATTEMPTS: i64 = 10;
@@ -51,6 +62,9 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) {
 }
 
 fn cloud_base(conn: &Connection) -> String {
+    if let Some(url) = env_cloud_url() {
+        return url;
+    }
     get_setting(conn, "cloud_base_url")
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| DEFAULT_CLOUD_BASE.to_string())
@@ -58,16 +72,51 @@ fn cloud_base(conn: &Connection) -> String {
         .to_string()
 }
 
+// ---------------------------------------------------------------------------
+// Local session persistence — the logged-in session lives in SQLite so the
+// desktop app can restore authentication on reopen even when the webview's
+// localStorage was cleared. Cleared only on explicit logout.
+// ---------------------------------------------------------------------------
+
+pub fn save_session(conn: &Connection, token: &str, user: &Value) {
+    set_setting(conn, "session_token", token);
+    set_setting(conn, "session_user", &user.to_string());
+}
+
+pub fn clear_session(conn: &Connection) {
+    for key in ["session_token", "session_user"] {
+        let _ = conn.execute("DELETE FROM global_settings WHERE key = ?1", [key]);
+    }
+}
+
+/// Read the persisted login session for the `get_stored_session` Tauri
+/// command. Returns null when there is no session or the token no longer
+/// verifies (e.g. after logout or a secret rotation).
+pub fn stored_session(state: &LocalBackend) -> Value {
+    state.ensure_db_current();
+    let conn = state.conn.lock().unwrap();
+    let token = get_setting(&conn, "session_token").unwrap_or_default();
+    let user_json = get_setting(&conn, "session_user").unwrap_or_default();
+    if token.is_empty() || user_json.is_empty() {
+        return Value::Null;
+    }
+    if auth::verify_token(&token, &state.jwt_secret).is_none() {
+        return Value::Null;
+    }
+    json!({
+        "token": token,
+        "user": serde_json::from_str::<Value>(&user_json).unwrap_or(Value::Null),
+    })
+}
+
 /// Local-only mode: `cloud_base_url` set to "local" (or off/none) disables the
 /// cloud backend entirely — login uses local credentials and the sync worker
 /// stays idle. The default deployment syncs with the real cloud.
 pub fn local_only_mode(conn: &Connection) -> bool {
-    matches!(
-        get_setting(conn, "cloud_base_url")
-            .unwrap_or_default()
-            .as_str(),
-        "local" | "local-only" | "off" | "none"
-    )
+    let value = env_cloud_url()
+        .or_else(|| get_setting(conn, "cloud_base_url"))
+        .unwrap_or_default();
+    matches!(value.as_str(), "local" | "local-only" | "off" | "none")
 }
 
 // ---------------------------------------------------------------------------
@@ -150,11 +199,27 @@ pub fn cache_cloud_session(
             upsert_row(conn, "stores", s, STORE_COLS, &[]);
         }
     }
+    // FK safety net: if user.stores didn't include the user's own store,
+    // insert a placeholder so the users row below can't fail on the FK.
+    let sid = user["storeId"].as_str().unwrap_or("");
+    if !sid.is_empty() {
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO stores (id, name) VALUES (?1, '')",
+            [sid],
+        );
+    }
 
     // Upsert the user; the password they just used is hashed locally so the
     // same credentials keep working when the cloud is unreachable.
     let id = user["id"].as_str().unwrap_or("");
     if !id.is_empty() {
+        // Free the username if a stale local row (different id) holds it —
+        // otherwise UNIQUE(username) silently kills the insert.
+        let _ = conn.execute(
+            "UPDATE users SET username = username || '__dup_' || substr(id, 1, 8)
+             WHERE username = ?1 AND id <> ?2",
+            rusqlite::params![user["username"].as_str().unwrap_or(username), id],
+        );
         let pw_hash = auth::hash_password(password);
         let _ = conn.execute(
             "INSERT INTO users (id, username, password, name, email, role, store_id, is_active, created_at)
@@ -307,6 +372,20 @@ const EXPENSE_COLS: ColMap = &[
 /// inject derived column values (e.g. tables' nested `position` object or a
 /// constant like users.password on insert).
 fn upsert_row(conn: &Connection, table: &str, row: &Value, map: ColMap, pre: &[(&str, Value)]) {
+    upsert_row_ex(conn, table, row, map, pre, &[])
+}
+
+/// Like `upsert_row` but columns named in `keep` are only set on INSERT —
+/// their existing values survive updates (e.g. users.password, which the
+/// cloud never sends but the local cache maintains for offline login).
+fn upsert_row_ex(
+    conn: &Connection,
+    table: &str,
+    row: &Value,
+    map: ColMap,
+    pre: &[(&str, Value)],
+    keep: &[&str],
+) {
     let Some(id) = row["id"].as_str() else { return };
     if id.is_empty() {
         return;
@@ -326,7 +405,7 @@ fn upsert_row(conn: &Connection, table: &str, row: &Value, map: ColMap, pre: &[(
     let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("?{}", i)).collect();
     let updates: Vec<String> = cols
         .iter()
-        .filter(|c| c.as_str() != "id")
+        .filter(|c| c.as_str() != "id" && !keep.contains(&c.as_str()))
         .map(|c| format!("{} = excluded.{}", c, c))
         .collect();
     let sql = format!(
@@ -391,10 +470,20 @@ fn upsert_bill(conn: &Connection, row: &Value) {
 }
 
 fn upsert_user(conn: &Connection, row: &Value) {
+    // A stale local row with the same username but a different id would break
+    // the UNIQUE(username) constraint — rename it so the authoritative cloud
+    // row wins. References to the old row (created_by etc.) stay intact.
+    if let (Some(id), Some(username)) = (row["id"].as_str(), row["username"].as_str()) {
+        let _ = conn.execute(
+            "UPDATE users SET username = username || '__dup_' || substr(id, 1, 8)
+             WHERE username = ?1 AND id <> ?2",
+            rusqlite::params![username, id],
+        );
+    }
     // password is never sent by the cloud — keep the local hash on update and
     // insert an empty one on first sight (offline login activates once the
     // user logs in via cloud, which caches the hash).
-    upsert_row(
+    upsert_row_ex(
         conn,
         "users",
         row,
@@ -404,6 +493,7 @@ fn upsert_user(conn: &Connection, row: &Value) {
             ("createdAt", "created_at"),
         ],
         &[("password", Value::String(String::new()))],
+        &["password"],
     );
     if let (Some(uid), Some(ids)) = (row["id"].as_str(), row["storeIds"].as_array()) {
         for s in ids {
@@ -557,12 +647,12 @@ fn urlencoding(s: &str) -> String {
 // ---------------------------------------------------------------------------
 
 async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
-    let rows: Vec<(i64, String, String, String, Option<String>)> = {
+    let rows: Vec<(i64, String, String, String, Option<String>, String)> = {
         let conn = state.conn.lock().unwrap();
         (|| {
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, event_id, method, path, body FROM sync_outbox
+                    "SELECT id, event_id, method, path, body, created_at FROM sync_outbox
                      WHERE pushed = 0 AND attempts < ?1 ORDER BY id ASC LIMIT 100",
                 )
                 .ok()?;
@@ -574,6 +664,7 @@ async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
                         r.get::<_, String>(2)?,
                         r.get::<_, String>(3)?,
                         r.get::<_, Option<String>>(4)?,
+                        r.get::<_, String>(5)?,
                     ))
                 })
                 .ok()?;
@@ -582,7 +673,7 @@ async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
         .unwrap_or_default()
     };
 
-    for (row_id, event_id, method, path, body) in rows {
+    for (row_id, event_id, method, path, body, created_at) in rows {
         let payload = json!({
             "eventId": event_id,
             "method": method,
@@ -591,6 +682,7 @@ async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
                 .as_deref()
                 .and_then(|s| serde_json::from_str::<Value>(s).ok())
                 .unwrap_or(Value::Null),
+            "createdAt": created_at,
         });
 
         let mut retried = false;
@@ -728,23 +820,70 @@ async fn pull_events(
         let method = ev["method"].as_str().unwrap_or("").to_string();
         let path = ev["path"].as_str().unwrap_or("").to_string();
         let ev_body = if ev["body"].is_null() { None } else { Some(ev["body"].clone()) };
+        let ev_ts = ev["createdAt"].as_str().unwrap_or("").to_string();
         if method.is_empty() || path.is_empty() {
             continue;
         }
 
-        let req = ApiRequest {
-            method,
-            path,
-            body: ev_body,
-            token: Some(local_token.clone()),
-        };
-        // suppress_outbox = true → the applied change is NOT re-pushed.
-        let resp = api::dispatch_impl_ex(state, req, &broadcast, true).await;
-        if resp.status >= 400 {
-            eprintln!(
-                "[sync] event seq={} replay failed ({}): {}",
-                seq, resp.status, resp.body
-            );
+        let segs: Vec<&str> = path
+            .split('?')
+            .next()
+            .unwrap_or("")
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
+        let ekey = api::entity_key(&segs, ev_body.as_ref().unwrap_or(&Value::Null));
+
+        // Last-write-wins: skip events older than this entity's most recent
+        // mutation — a local change may be newer than the cloud event.
+        let mut applied = false;
+        let mut stale = false;
+        if !ev_ts.is_empty() {
+            if let Some(key) = &ekey {
+                let conn = state.conn.lock().unwrap();
+                let last: Option<String> = conn
+                    .query_row(
+                        "SELECT last_ts FROM sync_entity_ts WHERE entity_key = ?1",
+                        [key],
+                        |r| r.get(0),
+                    )
+                    .ok();
+                if let Some(last) = last {
+                    if api::normalize_ts(&ev_ts) <= api::normalize_ts(&last) {
+                        stale = true;
+                    }
+                }
+            }
+        }
+
+        if !stale {
+            let req = ApiRequest {
+                method,
+                path,
+                body: ev_body,
+                token: Some(local_token.clone()),
+            };
+            // suppress_outbox = true → the applied change is NOT re-pushed.
+            let resp = api::dispatch_impl_ex(state, req, &broadcast, true).await;
+            if resp.status >= 400 {
+                eprintln!(
+                    "[sync] event seq={} replay failed ({}): {}",
+                    seq, resp.status, resp.body
+                );
+                if resp.status >= 500 {
+                    break; // transient — retry the batch next cycle
+                }
+            } else {
+                applied = true;
+            }
+        }
+        // Record the event's ORIGIN time so ordering compares when the change
+        // was made, not when it synced.
+        if applied && !ev_ts.is_empty() {
+            if let Some(key) = &ekey {
+                let conn = state.conn.lock().unwrap();
+                api::mark_entity_ts(&conn, key, &ev_ts);
+            }
         }
         if seq > 0 {
             let conn = state.conn.lock().unwrap();
@@ -763,6 +902,14 @@ async fn pull_events(
 /// broadcasts when cloud-originated events are replayed locally.
 pub fn start(state: Arc<LocalBackend>, app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
+        {
+            let conn = state.conn.lock().unwrap();
+            if local_only_mode(&conn) {
+                println!("[sync] local-only mode (MARIO_CLOUD_URL/cloud_base_url=local)");
+            } else {
+                println!("[sync] cloud backend: {}", cloud_base(&conn));
+            }
+        }
         // Initial refresh when the app opens with an existing session —
         // keeps local data current before the user touches anything.
         {
@@ -788,6 +935,7 @@ pub fn start(state: Arc<LocalBackend>, app: tauri::AppHandle) {
 }
 
 async fn sync_cycle(state: &Arc<LocalBackend>, app: &tauri::AppHandle) {
+    state.ensure_db_current();
     let (base, store_id, has_creds) = {
         let conn = state.conn.lock().unwrap();
         if local_only_mode(&conn) {

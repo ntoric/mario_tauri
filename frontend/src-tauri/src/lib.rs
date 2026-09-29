@@ -161,6 +161,16 @@ async fn lan_server_info(
     Ok(local::lan_server::server_info(&state))
 }
 
+/// Return the persisted login session (token + user) so the frontend can
+/// restore authentication on app reopen. Deliberately a Tauri command rather
+/// than an HTTP route so LAN/mobile clients cannot read the desktop session.
+#[tauri::command]
+async fn get_stored_session(
+    state: tauri::State<'_, Arc<LocalBackend>>,
+) -> Result<serde_json::Value, String> {
+    Ok(local::sync::stored_session(&state))
+}
+
 /// Generic API bridge — the frontend calls this instead of HTTP fetch.
 /// Dispatches method+path+body to the local backend handlers backed by SQLite.
 #[tauri::command]
@@ -217,7 +227,8 @@ pub fn run() {
             debug_usb_devices,
             save_csv_file,
             api_request,
-            lan_server_info
+            lan_server_info,
+            get_stored_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::{created, err, ok, target_store, entity_id, ApiResponse, Ctx};
+use super::{created, err, missing_ref, ok, target_store, entity_id, ApiResponse, Ctx};
 
 // ==========================================
 // CATEGORIES
@@ -53,6 +53,10 @@ pub fn create_category(ctx: &mut Ctx, body: Value) -> ApiResponse {
         Ok(t) => t,
         Err(r) => return r,
     };
+
+    if missing_ref(&ctx.conn, "stores", &target) {
+        return err(400, "Store is not synced on this device. Sign in again to resync.");
+    }
 
     let id = entity_id(&body);
     let enabled = if body.get("enabled").is_some() {
@@ -214,6 +218,14 @@ pub fn create_item(ctx: &mut Ctx, body: Value) -> ApiResponse {
         let c = body["categoryId"].as_str().unwrap_or("").to_string();
         if c.is_empty() { None } else { Some(c) }
     };
+    if missing_ref(&ctx.conn, "stores", &target) {
+        return err(400, "Store is not synced on this device. Sign in again to resync.");
+    }
+    if let Some(c) = &category {
+        if missing_ref(&ctx.conn, "categories", c) {
+            return err(400, "The selected category no longer exists. Refresh and try again.");
+        }
+    }
     let res = ctx.conn.execute(
         "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, enabled, is_favourite)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",

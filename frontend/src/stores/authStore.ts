@@ -23,6 +23,7 @@ interface AuthState {
   logout: () => void;
   clearAuth: () => void; // New action to completely clear auth state
   validateToken: () => Promise<boolean>; // Validate token on app load
+  restoreSession: () => Promise<boolean>; // Rehydrate persisted session on app load
   setUser: (user: User) => void;
   setCurrentStore: (storeId: string) => void;
   getCurrentStore: () => { id: string; name: string; branch?: string } | undefined;
@@ -119,10 +120,31 @@ export const useAuthStore = create<AuthState>()(
           // For network errors or server errors (5xx), keep the session intact
           // so role-based menus don't disappear on transient failures.
           if (!api.getToken()) {
-            get().clearAuth();
+            // The webview token is dead — try the persisted SQLite session
+            // (it may hold a newer token) before forcing a logout.
+            const restored = await get().restoreSession();
+            if (!restored) {
+              get().clearAuth();
+            }
+            return restored;
           }
           return false;
         }
+      },
+
+      // Restore the session persisted in SQLite (survives webview storage
+      // wipes) — the user stays logged in until they explicitly sign out.
+      restoreSession: async () => {
+        const s = await api.getStoredSession();
+        if (!s?.token || !s?.user) return false;
+        api.setToken(s.token);
+        set({
+          user: s.user,
+          token: s.token,
+          isAuthenticated: true,
+          currentStoreId: getDefaultStoreId(s.user),
+        });
+        return true;
       },
 
       checkStoreActive: () => {

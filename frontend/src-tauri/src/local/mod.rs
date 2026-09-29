@@ -12,6 +12,12 @@ use std::sync::Mutex;
 /// Holds the SQLite connection and the JWT signing secret.
 pub struct LocalBackend {
     pub conn: Mutex<Connection>,
+    /// Path of the SQLite file. Kept so we can detect the file being deleted
+    /// or replaced while the app is running — an open connection bound to an
+    /// unlinked inode silently loses every write.
+    pub db_path: std::path::PathBuf,
+    /// (st_dev, st_ino) of the file the current connection is bound to.
+    db_file_id: Mutex<Option<(u64, u64)>>,
     pub jwt_secret: String,
     /// Broadcast channel for LAN websocket clients (table status updates).
     pub lan_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
@@ -72,6 +78,8 @@ impl LocalBackend {
 
         Ok(LocalBackend {
             conn: Mutex::new(conn),
+            db_path: db_path.to_path_buf(),
+            db_file_id: Mutex::new(file_identity(db_path)),
             jwt_secret,
             lan_tx: tokio::sync::broadcast::channel(100).0,
             lan_server_id,
@@ -79,6 +87,63 @@ impl LocalBackend {
             sync_notify: std::sync::Arc::new(tokio::sync::Notify::new()),
         })
     }
+
+    /// Detects the DB file being deleted or replaced underneath this process.
+    /// The open connection stays bound to the dead inode — reads keep serving
+    /// stale data while every write is silently lost — so we reconnect to
+    /// whatever is on disk instead (init_db recreates schema + seeds on a
+    /// fresh/empty file). Called once per API request and per sync cycle.
+    pub fn ensure_db_current(&self) {
+        if file_identity(&self.db_path) == *self.db_file_id.lock().unwrap() {
+            return;
+        }
+        let mut conn = self.conn.lock().unwrap();
+        // Re-check under the write lock — another thread may have reconnected.
+        let id = file_identity(&self.db_path);
+        let mut cur = self.db_file_id.lock().unwrap();
+        if *cur == id {
+            return;
+        }
+        match db::init_db(&self.db_path) {
+            Ok(new_conn) => {
+                eprintln!(
+                    "[local] database file was replaced or deleted — reconnected to the on-disk DB"
+                );
+                *conn = new_conn;
+                // Keep token signing consistent: this process's secret wins
+                // (also fixes a fresh DB that never had one written).
+                let _ = conn.execute(
+                    "INSERT INTO global_settings (key, value) VALUES ('jwt_secret', ?1)
+                     ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                    [&self.jwt_secret],
+                );
+                *cur = file_identity(&self.db_path);
+            }
+            Err(e) => eprintln!("[local] failed to reopen database file: {e}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn file_identity(path: &std::path::Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+
+/// Windows has no portable inode number — the volume serial + file index
+/// serve the same purpose.
+#[cfg(windows)]
+fn file_identity(path: &std::path::Path) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    std::fs::metadata(path)
+        .ok()
+        .map(|m| (m.volume_serial_number(), m.file_index()))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn file_identity(path: &std::path::Path) -> Option<(u64, u64)> {
+    // Existence-only fallback — still catches deletion.
+    std::fs::metadata(path).ok().map(|_| (0, 0))
 }
 
 #[cfg(test)]
@@ -486,5 +551,186 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sync_outbox", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1); // suppressed replay added nothing
+    }
+
+    /// If the DB file is deleted/replaced while the app is running, the next
+    /// request must reconnect to the on-disk file instead of writing into a
+    /// dead inode.
+    #[test]
+    fn db_reconnects_after_file_replacement() {
+        let path = temp_db();
+        let be = LocalBackend::new(&path).unwrap();
+        force_offline_cloud(&be);
+
+        // Login + remember the token.
+        let b: &(dyn Fn(&str, &str) + Send + Sync) = &|_s: &str, _r: &str| {};
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/auth/login",
+                Some(json!({"username": "superadmin", "password": "superadmin123"})),
+                None,
+            ),
+        );
+        assert_eq!(r.status, 200, "{:?}", r.body);
+
+        // Simulate the app-data dir being wiped: delete the file and let a
+        // fresh one take its place (different inode). The fresh DB starts
+        // empty — mark it local-only so the login below stays offline.
+        std::fs::remove_file(&path).unwrap();
+        let fresh = LocalBackend::new(&path).unwrap();
+        force_offline_cloud(&fresh);
+        drop(fresh);
+
+        // The next request reconnects — the fresh DB has no session, so the
+        // seeded superadmin must still authenticate on it.
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/auth/login",
+                Some(json!({"username": "superadmin", "password": "superadmin123"})),
+                None,
+            ),
+        );
+        assert_eq!(r.status, 200, "{:?}", r.body);
+        let token = r.body["token"].as_str().unwrap().to_string();
+
+        // A write after the swap lands in the on-disk file, not a dead inode.
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/categories",
+                Some(json!({"name": "Drinks", "storeId": "1"})),
+                Some(token.as_str()),
+            ),
+        );
+        assert!(r.status == 200 || r.status == 201, "{:?}", r.body);
+
+        // Verify with an independent connection to the file on disk.
+        let check = rusqlite::Connection::open(&path).unwrap();
+        let n: i64 = check
+            .query_row(
+                "SELECT COUNT(*) FROM categories WHERE name = 'Drinks'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "write must land in the on-disk DB file");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Orders referencing rows that aren't synced locally return a clear
+    /// actionable error instead of a raw FK violation.
+    #[test]
+    fn order_refs_are_validated() {
+        let be = LocalBackend::new(&temp_db()).unwrap();
+        force_offline_cloud(&be);
+        let b: &(dyn Fn(&str, &str) + Send + Sync) = &|_s: &str, _r: &str| {};
+
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/auth/login",
+                Some(json!({"username": "superadmin", "password": "superadmin123"})),
+                None,
+            ),
+        );
+        let token = r.body["token"].as_str().unwrap().to_string();
+        let t = Some(token.as_str());
+
+        // Missing item → 400 with a clear message (was: 500 FK error).
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/orders",
+                Some(json!({
+                    "storeId": "1",
+                    "items": [{"itemId": "ghost-item", "quantity": 1, "unitPrice": 1.0}]
+                })),
+                t,
+            ),
+        );
+        assert_eq!(r.status, 400, "{:?}", r.body);
+        assert!(r.body["error"]
+            .as_str()
+            .unwrap()
+            .contains("no longer exists"));
+
+        // Missing table → 400.
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/orders",
+                Some(json!({
+                    "storeId": "1", "tableId": "ghost-table",
+                    "items": [{"itemId": "x", "quantity": 1, "unitPrice": 1.0}]
+                })),
+                t,
+            ),
+        );
+        assert_eq!(r.status, 400, "{:?}", r.body);
+        assert!(r.body["error"]
+            .as_str()
+            .unwrap()
+            .contains("table no longer exists"));
+
+        // Missing store → 400.
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/orders",
+                Some(json!({
+                    "storeId": "ghost-store",
+                    "items": [{"itemId": "x", "quantity": 1, "unitPrice": 1.0}]
+                })),
+                t,
+            ),
+        );
+        assert_eq!(r.status, 400, "{:?}", r.body);
+        assert!(r.body["error"].as_str().unwrap().contains("not synced"));
+
+        // Update on a non-existent order → 404 instead of an FK error.
+        let r = run(
+            &be,
+            b,
+            req(
+                "PUT",
+                "/orders/ghost-order",
+                Some(json!({"totalAmount": 5.0})),
+                t,
+            ),
+        );
+        assert_eq!(r.status, 404, "{:?}", r.body);
+
+        // Item create with a missing category → 400.
+        let r = run(
+            &be,
+            b,
+            req(
+                "POST",
+                "/items",
+                Some(json!({"name": "X", "price": 1.0, "categoryId": "ghost-cat", "storeId": "1"})),
+                t,
+            ),
+        );
+        assert_eq!(r.status, 400, "{:?}", r.body);
+        assert!(r.body["error"]
+            .as_str()
+            .unwrap()
+            .contains("category no longer exists"));
     }
 }
