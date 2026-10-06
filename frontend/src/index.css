@@ -689,6 +689,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.navbar-osk-toggle.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--light);
+}
+
+.navbar-osk-toggle.active:hover {
+  background: #e0731a;
+  border-color: #e0731a;
+  color: var(--light);
 }
 
 .navbar-page-info {

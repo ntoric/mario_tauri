@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles } from 'lucide-react';
-import { useAuthStore, useDataStore } from '../stores';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, HelpCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
 import UpdateBanner from './UpdateBanner';
@@ -11,6 +12,8 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
   const { stores } = useDataStore();
+  const oskEnabled = useUIStore((state) => state.onScreenKeyboardEnabled);
+  const toggleOsk = useUIStore((state) => state.toggleOnScreenKeyboard);
   const { headerContent } = usePageHeader();
   const navigate = useNavigate();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -46,6 +49,12 @@ const LayoutContent: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleToggleOsk = () => {
+    const next = !oskEnabled;
+    toggleOsk();
+    toast.success(next ? 'On-screen keyboard enabled' : 'On-screen keyboard disabled', { duration: 1500 });
   };
 
   const getInitials = (name: string) => {
@@ -384,6 +393,15 @@ const LayoutContent: React.FC = () => {
           </div>
           
           <div className="navbar-right">
+            <button
+              type="button"
+              className={`btn btn-outline btn-icon navbar-osk-toggle ${oskEnabled ? 'active' : ''}`}
+              onClick={handleToggleOsk}
+              title={oskEnabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
+              aria-label="Toggle on-screen keyboard"
+            >
+              <HelpCircle size={18} />
+            </button>
             {headerContent.actions && (
               <div className="navbar-actions">
                 {headerContent.actions}

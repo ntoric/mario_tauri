@@ -10,7 +10,7 @@ import {
   ArrowBigUpDash,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useUIStore } from '../stores';
+import { useAuthStore, useUIStore } from '../stores';
 
 type TargetElement = HTMLInputElement | HTMLTextAreaElement;
 type LayoutName = 'alpha' | 'symbols' | 'numpad';
@@ -71,6 +71,9 @@ const NUMPAD_ROWS: string[][] = [
 const OnScreenKeyboard: React.FC = () => {
   const enabled = useUIStore((state) => state.onScreenKeyboardEnabled);
   const toggle = useUIStore((state) => state.toggleOnScreenKeyboard);
+  // The enable/disable toggle lives in the header bar after login; the FAB
+  // remains on the login screen so touch-only devices can enter credentials.
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [visible, setVisible] = useState(false);
   const [shift, setShift] = useState(false);
   const [layout, setLayout] = useState<LayoutName>('alpha');
@@ -249,16 +252,18 @@ const OnScreenKeyboard: React.FC = () => {
 
   return (
     <>
-      <button
-        type="button"
-        className={`osk-fab ${enabled ? 'osk-fab--active' : ''} ${visible ? 'osk-fab--raised' : ''} ${visible && layout === 'numpad' ? 'osk-fab--raised-compact' : ''}`}
-        onPointerDown={handleToggle}
-        title={enabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
-        aria-label="Toggle on-screen keyboard"
-        tabIndex={-1}
-      >
-        <Keyboard size={22} />
-      </button>
+      {!isAuthenticated && (
+        <button
+          type="button"
+          className={`osk-fab ${enabled ? 'osk-fab--active' : ''} ${visible ? 'osk-fab--raised' : ''} ${visible && layout === 'numpad' ? 'osk-fab--raised-compact' : ''}`}
+          onPointerDown={handleToggle}
+          title={enabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
+          aria-label="Toggle on-screen keyboard"
+          tabIndex={-1}
+        >
+          <Keyboard size={22} />
+        </button>
+      )}
 
       {enabled && visible && (
         <div className="onscreen-keyboard" onPointerDown={(e) => e.preventDefault()}>

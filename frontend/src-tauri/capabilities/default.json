@@ -9,6 +9,11 @@
     "opener:default",
     "dialog:default",
     "updater:default",
+    "allow-get-printer-status",
+    "allow-get-printers",
+    "allow-print-job",
+    "allow-debug-usb-devices",
+    "allow-save-csv-file",
     "allow-app-version",
     "allow-check-for-updates",
     "allow-download-and-install-update"

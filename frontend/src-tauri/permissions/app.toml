@@ -1,4 +1,29 @@
 [[permission]]
+identifier = "allow-get-printer-status"
+description = "Allow checking the printer service status"
+commands.allow = ["get_printer_status"]
+
+[[permission]]
+identifier = "allow-get-printers"
+description = "Allow listing available printers"
+commands.allow = ["get_printers"]
+
+[[permission]]
+identifier = "allow-print-job"
+description = "Allow submitting print jobs"
+commands.allow = ["print_job"]
+
+[[permission]]
+identifier = "allow-debug-usb-devices"
+description = "Allow listing USB devices for printer debugging"
+commands.allow = ["debug_usb_devices"]
+
+[[permission]]
+identifier = "allow-save-csv-file"
+description = "Allow saving exported CSV files"
+commands.allow = ["save_csv_file"]
+
+[[permission]]
 identifier = "allow-app-version"
 description = "Allow reading the Mario Juicy desktop app version"
 commands.allow = ["app_version"]
