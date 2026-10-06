@@ -48,7 +48,10 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
     }
   },
   "plugins": {
@@ -57,7 +60,6 @@
       "endpoints": [
         "https://mario-v2-backend.ntoric.com/api/update/manifest"
       ],
-      "dialog": true,
       "windows": {
         "installMode": "passive"
       }

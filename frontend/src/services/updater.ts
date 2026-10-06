@@ -1,8 +1,28 @@
-import { check, Update } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { api } from './api';
+
+export const UPDATE_PROGRESS_EVENT = 'desktop-update-progress';
 
 function isTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+}
+
+interface DesktopUpdateCheckResult {
+  available: boolean;
+  currentVersion: string;
+  version: string | null;
+  notes: string | null;
+  date: string | null;
+}
+
+type DesktopUpdateProgressStatus = 'downloading' | 'installing';
+
+interface DesktopUpdateProgress {
+  status: DesktopUpdateProgressStatus;
+  downloaded: number;
+  contentLength: number | null;
+  percent: number | null;
 }
 
 export interface UpdateInfo {
@@ -14,16 +34,13 @@ export interface UpdateInfo {
 }
 
 export interface UpdateProgress {
+  status: DesktopUpdateProgressStatus;
   total: number;
   downloaded: number;
   percentage: number;
 }
 
 class UpdaterService {
-  private update: Update | null = null;
-  private isDownloading = false;
-  private isInstalling = false;
-
   /**
    * Check for available updates
    */
@@ -32,22 +49,13 @@ class UpdaterService {
       return { available: false, currentVersion: 'unknown' };
     }
     try {
-      const update = await check();
-      
-      if (update) {
-        this.update = update;
-        return {
-          available: true,
-          currentVersion: update.version,
-          latestVersion: update.version,
-          body: update.body,
-          date: update.date,
-        };
-      }
-
+      const result = await invoke<DesktopUpdateCheckResult>('check_for_updates');
       return {
-        available: false,
-        currentVersion: await this.getCurrentVersion(),
+        available: result.available,
+        currentVersion: result.currentVersion,
+        latestVersion: result.version ?? undefined,
+        body: result.notes ?? undefined,
+        date: result.date ?? undefined,
       };
     } catch (error) {
       console.error('Failed to check for updates:', error);
@@ -56,97 +64,45 @@ class UpdaterService {
   }
 
   /**
-   * Download the update
+   * Download and install the update, then restart the app.
+   * The invoke promise only resolves on failure — on success the app restarts.
+   * Download/install progress is delivered via subscribeToProgress().
    */
-  async downloadUpdate(onProgress?: (progress: UpdateProgress) => void): Promise<void> {
-    if (!this.update) {
-      throw new Error('No update available. Call checkForUpdates first.');
+  async downloadAndInstall(): Promise<void> {
+    if (!isTauri()) {
+      throw new Error('Updates are only available in the desktop app.');
     }
-
-    if (this.isDownloading) {
-      throw new Error('Update is already downloading.');
-    }
-
-    let total = 0;
-    let downloaded = 0;
-
     try {
-      this.isDownloading = true;
-      
-      await this.update.download((event) => {
-        switch (event.event) {
-          case 'Started':
-            total = event.data.contentLength ?? 0;
-            break;
-          case 'Progress':
-            downloaded += event.data.chunkLength ?? 0;
-            if (onProgress) {
-              const percentage = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
-              onProgress({
-                total,
-                downloaded,
-                percentage,
-              });
-            }
-            break;
-          case 'Finished':
-            if (onProgress) {
-              onProgress({
-                total,
-                downloaded: total,
-                percentage: 100,
-              });
-            }
-            break;
-        }
-      });
-
-      this.isDownloading = false;
+      await invoke('download_and_install_update');
     } catch (error) {
-      this.isDownloading = false;
-      console.error('Failed to download update:', error);
-      throw new Error(`Failed to download update: ${error}`);
-    }
-  }
-
-  /**
-   * Install the downloaded update and relaunch
-   */
-  async installAndRelaunch(): Promise<void> {
-    if (!this.update) {
-      throw new Error('No update available. Call checkForUpdates first.');
-    }
-
-    if (this.isInstalling) {
-      throw new Error('Update is already installing.');
-    }
-
-    try {
-      this.isInstalling = true;
-      
-      await this.update.install();
-      await relaunch();
-      
-      this.isInstalling = false;
-    } catch (error) {
-      this.isInstalling = false;
       console.error('Failed to install update:', error);
       throw new Error(`Failed to install update: ${error}`);
     }
   }
 
   /**
-   * Close the updater (cancel current operation)
+   * Subscribe to download/install progress emitted by the Rust updater.
    */
-  async closeUpdater(): Promise<void> {
-    try {
-      this.update = null;
-      this.isDownloading = false;
-      this.isInstalling = false;
-    } catch (error) {
-      console.error('Failed to close updater:', error);
-      throw new Error(`Failed to close updater: ${error}`);
+  async subscribeToProgress(onProgress: (progress: UpdateProgress) => void): Promise<UnlistenFn> {
+    if (!isTauri()) {
+      return () => {};
     }
+    return listen<DesktopUpdateProgress>(UPDATE_PROGRESS_EVENT, (event) => {
+      const p = event.payload;
+      const total = p.contentLength ?? 0;
+      const percentage =
+        p.percent != null
+          ? Math.min(100, Math.round(p.percent))
+          : total > 0
+            ? Math.min(100, Math.round((p.downloaded / total) * 100))
+            : 0;
+      onProgress({
+        status: p.status,
+        total,
+        downloaded: p.downloaded,
+        percentage,
+      });
+    });
   }
 
   /**
@@ -157,8 +113,7 @@ class UpdaterService {
       return 'unknown';
     }
     try {
-      const { getVersion } = await import('@tauri-apps/api/app');
-      return await getVersion();
+      return await invoke<string>('app_version');
     } catch (error) {
       console.error('Failed to get current version:', error);
       return 'unknown';
@@ -166,24 +121,20 @@ class UpdaterService {
   }
 
   /**
-   * Check if currently downloading
+   * Report the running desktop app version to the backend (per-store telemetry).
+   * Fire-and-forget — silently skipped in the browser.
    */
-  getIsDownloading(): boolean {
-    return this.isDownloading;
-  }
-
-  /**
-   * Check if currently installing
-   */
-  getIsInstalling(): boolean {
-    return this.isInstalling;
-  }
-
-  /**
-   * Get current update manifest if available
-   */
-  getCurrentUpdate(): Update | null {
-    return this.update;
+  async reportAppVersion(storeId?: string): Promise<void> {
+    if (!isTauri()) {
+      return;
+    }
+    try {
+      const version = await this.getCurrentVersion();
+      if (!version || version === 'unknown') return;
+      await api.reportAppVersion(version, storeId);
+    } catch (error) {
+      console.debug('App version report skipped:', error);
+    }
   }
 }
 

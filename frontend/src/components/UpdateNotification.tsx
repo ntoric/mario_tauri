@@ -14,8 +14,7 @@ const UpdateNotification: React.FC = () => {
     downloadProgress,
     error,
     checkForUpdates,
-    downloadUpdate,
-    installAndRelaunch,
+    downloadAndInstall,
     dismissUpdate,
   } = useUpdater(true, 3600000);
 
@@ -78,8 +77,7 @@ const UpdateNotification: React.FC = () => {
             style={styles.btnPrimary}
             onClick={async () => {
               try {
-                await downloadUpdate();
-                await installAndRelaunch();
+                await downloadAndInstall();
               } catch {
                 // Error is already set in the hook state
               }

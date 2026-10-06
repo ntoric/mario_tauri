@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, X, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
+import { updaterService } from '../services/updater';
 
 interface AppUpdate {
   id: string;
@@ -13,7 +14,7 @@ interface AppUpdate {
   updatedAt: string | null;
 }
 
-const CURRENT_APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.2.2';
+const FALLBACK_APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.2.2';
 
 const UpdateBanner: React.FC = () => {
   const [update, setUpdate] = useState<AppUpdate | null>(null);
@@ -26,8 +27,12 @@ const UpdateBanner: React.FC = () => {
 
   const checkForUpdates = async () => {
     try {
+      // Prefer the real desktop app version; fall back to the build-time env.
+      const appVersion = await updaterService.getCurrentVersion();
+      const currentVersion =
+        appVersion !== 'unknown' ? appVersion : FALLBACK_APP_VERSION;
       const data = await api.getAppUpdate('desktop');
-      if (data && data.enabled && isNewerVersion(CURRENT_APP_VERSION, data.version)) {
+      if (data && data.enabled && isNewerVersion(currentVersion, data.version)) {
         setUpdate(data);
       }
     } catch (err) {

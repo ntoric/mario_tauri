@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Building2, MapPin, Phone, Receipt, Loader2, Power } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Building2, MapPin, Phone, Receipt, Loader2, Power, Monitor } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { Button } from '../components/ui/Button';
@@ -212,6 +212,19 @@ const Stores: React.FC = () => {
                     <Receipt size={14} style={{ color: 'var(--gray-400)' }} />
                     <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
                       {store.invoiceSize || '3inch'} printer
+                    </span>
+                  </div>
+                )}
+                {user?.role === 'superadmin' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <Monitor size={14} style={{ color: store.appVersion ? 'var(--primary)' : 'var(--gray-400)' }} />
+                    <span style={{ fontSize: '0.8rem', color: store.appVersion ? 'var(--gray-700)' : 'var(--gray-400)' }}>
+                      {store.appVersion
+                        ? `Desktop app v${store.appVersion}` +
+                          (store.appVersionSeenAt
+                            ? ` · last seen ${new Date(store.appVersionSeenAt).toLocaleString()}`
+                            : '')
+                        : 'Desktop app: no version reported yet'}
                     </span>
                   </div>
                 )}

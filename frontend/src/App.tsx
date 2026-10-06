@@ -28,6 +28,7 @@ import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
 import { api } from './services/api';
+import { updaterService } from './services/updater';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -63,6 +64,19 @@ const AppRoutes: React.FC = () => {
       initialize();
     }
   }, [isAuthenticated, initialize]);
+
+  // Report the running desktop app version for the active store (fire-and-forget;
+  // no-ops in the browser and on older backends that lack the endpoint).
+  // Re-reports hourly so "last seen" reflects a currently-running app.
+  useEffect(() => {
+    if (!isAuthenticated || !currentStoreId) return;
+    updaterService.reportAppVersion(currentStoreId);
+    const interval = setInterval(
+      () => updaterService.reportAppVersion(currentStoreId),
+      3600000,
+    );
+    return () => clearInterval(interval);
+  }, [isAuthenticated, currentStoreId]);
 
   useEffect(() => {
     if (isAuthenticated && user) {

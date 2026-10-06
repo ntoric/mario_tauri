@@ -472,6 +472,14 @@ class ApiService {
     });
   }
 
+  // App version telemetry — the desktop app reports its running version per store
+  async reportAppVersion(version: string, storeId?: string) {
+    return this.fetch('/auth/app-version', {
+      method: 'POST',
+      body: JSON.stringify({ version, storeId }),
+    });
+  }
+
   // Update Repository Configuration (superadmin only)
   async getUpdateRepoConfig() {
     return this.fetch('/system/update-config');

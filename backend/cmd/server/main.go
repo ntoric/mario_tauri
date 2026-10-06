@@ -102,6 +102,7 @@ func main() {
 
 		// Auth & Me
 		r.Get("/api/auth/me", h.Me)
+		r.Post("/api/auth/app-version", h.ReportAppVersion)
 
 		// Stores
 		r.Get("/api/stores", h.GetStores)

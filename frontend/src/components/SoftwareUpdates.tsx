@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2, Monitor, Package } from 'lucide-react';
 import { useUpdater } from '../hooks/useUpdater';
+import { updaterService } from '../services/updater';
 
 function isTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
@@ -15,13 +16,20 @@ const SoftwareUpdates: React.FC = () => {
     downloadProgress,
     error,
     checkForUpdates,
-    downloadUpdate,
-    installAndRelaunch,
+    downloadAndInstall,
     dismissUpdate,
   } = useUpdater(false);
 
   const [hasChecked, setHasChecked] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  // Show the real desktop app version (from the Tauri binary) on mount.
+  useEffect(() => {
+    updaterService.getCurrentVersion().then((v) => {
+      if (v !== 'unknown') setAppVersion(v);
+    });
+  }, []);
 
   const handleCheck = async () => {
     setHasChecked(true);
@@ -32,8 +40,7 @@ const SoftwareUpdates: React.FC = () => {
   const handleDownloadAndInstall = async () => {
     setInstallError(null);
     try {
-      await downloadUpdate();
-      await installAndRelaunch();
+      await downloadAndInstall();
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : 'Failed to install update');
     }
@@ -133,7 +140,7 @@ const SoftwareUpdates: React.FC = () => {
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Current Version</div>
             <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-              {updateInfo?.currentVersion || '—'}
+              {updateInfo?.currentVersion || appVersion || '—'}
             </div>
           </div>
         </div>

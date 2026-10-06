@@ -12,25 +12,27 @@ type Position struct {
 
 // Store represents store table schema and json dto
 type Store struct {
-	ID                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	Branch               string    `json:"branch"`
-	Location             string    `json:"location"`
-	GSTIN                string    `json:"gstin"`
-	FSSAINo              string    `json:"fssaiNo"`
-	Phone                string    `json:"phone"`
-	PrinterName          string    `json:"printerName"`
-	PrinterVendorID      string    `json:"printerVendorId"`
-	PrinterProductID     string    `json:"printerProductId"`
-	InvoiceSize          string    `json:"invoiceSize"`
-	KOTPrintEnabled      bool      `json:"kotPrintEnabled"`
-	RemoteBillingEnabled bool      `json:"remoteBillingEnabled"`
-	LogoURL              string    `json:"logoUrl"`
-	ThemeColor           string    `json:"themeColor"`
-	TaxEnabled           bool      `json:"taxEnabled"`
-	DefaultTaxPercent    float64   `json:"defaultTaxPercent"`
-	IsActive             bool      `json:"isActive"`
-	CreatedAt            time.Time `json:"createdAt"`
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	Branch               string     `json:"branch"`
+	Location             string     `json:"location"`
+	GSTIN                string     `json:"gstin"`
+	FSSAINo              string     `json:"fssaiNo"`
+	Phone                string     `json:"phone"`
+	PrinterName          string     `json:"printerName"`
+	PrinterVendorID      string     `json:"printerVendorId"`
+	PrinterProductID     string     `json:"printerProductId"`
+	InvoiceSize          string     `json:"invoiceSize"`
+	KOTPrintEnabled      bool       `json:"kotPrintEnabled"`
+	RemoteBillingEnabled bool       `json:"remoteBillingEnabled"`
+	LogoURL              string     `json:"logoUrl"`
+	ThemeColor           string     `json:"themeColor"`
+	TaxEnabled           bool       `json:"taxEnabled"`
+	DefaultTaxPercent    float64    `json:"defaultTaxPercent"`
+	IsActive             bool       `json:"isActive"`
+	AppVersion           string     `json:"appVersion,omitempty"`
+	AppVersionSeenAt     *time.Time `json:"appVersionSeenAt,omitempty"`
+	CreatedAt            time.Time  `json:"createdAt"`
 }
 
 // User represents user table schema and json dto
@@ -50,14 +52,14 @@ type User struct {
 
 // Category represents category table schema and json dto
 type Category struct {
-	ID           string    `json:"id"`
-	StoreID      string    `json:"storeId"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	IsActive     bool      `json:"isActive"`
-	Enabled      bool      `json:"enabled"`
-	IsFavourite  bool      `json:"isFavourite"`
-	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	ID          string    `json:"id"`
+	StoreID     string    `json:"storeId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsActive    bool      `json:"isActive"`
+	Enabled     bool      `json:"enabled"`
+	IsFavourite bool      `json:"isFavourite"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
 }
 
 // Item represents item table schema and json dto

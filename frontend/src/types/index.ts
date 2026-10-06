@@ -32,6 +32,8 @@ export interface Store {
   taxEnabled?: boolean;
   defaultTaxPercent?: number;
   isActive: boolean;
+  appVersion?: string;
+  appVersionSeenAt?: string;
   createdAt?: string;
 }
 

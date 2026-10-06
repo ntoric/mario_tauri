@@ -9,8 +9,7 @@ export interface UseUpdaterReturn {
   downloadProgress: UpdateProgress | null;
   error: string | null;
   checkForUpdates: () => Promise<void>;
-  downloadUpdate: () => Promise<void>;
-  installAndRelaunch: () => Promise<void>;
+  downloadAndInstall: () => Promise<void>;
   dismissUpdate: () => void;
 }
 
@@ -22,10 +21,32 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
   const [downloadProgress, setDownloadProgress] = useState<UpdateProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Download/install progress arrives as events from the Rust updater.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    updaterService
+      .subscribeToProgress((progress) => {
+        if (progress.status === 'downloading') {
+          setIsDownloading(true);
+          setIsInstalling(false);
+        } else {
+          setIsDownloading(false);
+          setIsInstalling(true);
+        }
+        setDownloadProgress(progress);
+      })
+      .then((u) => {
+        unlisten = u;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   const checkForUpdates = useCallback(async () => {
     setIsChecking(true);
     setError(null);
-    
+
     try {
       const info = await updaterService.checkForUpdates();
       setUpdateInfo(info);
@@ -37,35 +58,24 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
     }
   }, []);
 
-  const downloadUpdate = useCallback(async () => {
+  const downloadAndInstall = useCallback(async () => {
     setIsDownloading(true);
+    setIsInstalling(false);
     setError(null);
     setDownloadProgress(null);
-    
-    try {
-      await updaterService.downloadUpdate((progress) => {
-        setDownloadProgress(progress);
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to download update';
-      setError(msg);
-      console.error('Update download failed:', err);
-      throw err;
-    } finally {
-      setIsDownloading(false);
-    }
-  }, []);
 
-  const installAndRelaunch = useCallback(async () => {
-    setIsInstalling(true);
-    setError(null);
-    
     try {
-      await updaterService.installAndRelaunch();
-    } catch (err) {
+      await updaterService.downloadAndInstall();
+      // Resolves only on failure — on success the app restarts.
+      setIsDownloading(false);
       setIsInstalling(false);
-      setError(err instanceof Error ? err.message : 'Failed to install update');
-      console.error('Update installation failed:', err);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to install update';
+      setIsDownloading(false);
+      setIsInstalling(false);
+      setError(msg);
+      console.error('Update install failed:', err);
+      throw err;
     }
   }, []);
 
@@ -101,8 +111,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
     downloadProgress,
     error,
     checkForUpdates,
-    downloadUpdate,
-    installAndRelaunch,
+    downloadAndInstall,
     dismissUpdate,
   };
 };

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
@@ -189,22 +190,22 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 	// Convert camelCase JSON tags to snake_case column names
 	updates := make(map[string]interface{})
 	keyMapping := map[string]string{
-		"name":              "name",
-		"branch":            "branch",
-		"location":          "location",
-		"gstin":             "gstin",
-		"fssaiNo":           "fssai_no",
-		"phone":             "phone",
-		"printerName":       "printer_name",
-		"printerVendorId":   "printer_vendor_id",
-		"printerProductId":  "printer_product_id",
-		"invoiceSize":       "invoice_size",
-		"kotPrintEnabled":   "kot_print_enabled",
+		"name":                 "name",
+		"branch":               "branch",
+		"location":             "location",
+		"gstin":                "gstin",
+		"fssaiNo":              "fssai_no",
+		"phone":                "phone",
+		"printerName":          "printer_name",
+		"printerVendorId":      "printer_vendor_id",
+		"printerProductId":     "printer_product_id",
+		"invoiceSize":          "invoice_size",
+		"kotPrintEnabled":      "kot_print_enabled",
 		"remoteBillingEnabled": "remote_billing_enabled",
-		"isActive":          "is_active",
-		"themeColor":        "theme_color",
-		"taxEnabled":        "tax_enabled",
-		"defaultTaxPercent": "default_tax_percent",
+		"isActive":             "is_active",
+		"themeColor":           "theme_color",
+		"taxEnabled":           "tax_enabled",
+		"defaultTaxPercent":    "default_tax_percent",
 	}
 
 	for jsonKey, sqlCol := range keyMapping {
@@ -378,4 +379,72 @@ func (h *Handler) DeleteLogo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// ReportAppVersion handles POST /api/auth/app-version — records which desktop
+// app version the caller's store is running. Older servers return 404, which
+// newer clients ignore — backward compatible both ways.
+func (h *Handler) ReportAppVersion(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Version string `json:"version"`
+		StoreID string `json:"storeId"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	version := strings.TrimSpace(req.Version)
+	if version == "" {
+		h.writeError(w, http.StatusBadRequest, "version is required")
+		return
+	}
+	if len(version) > 64 {
+		version = version[:64]
+	}
+
+	// Resolve the store to stamp: the JWT store_id by default, or an explicit
+	// storeId when the caller is allowed to act on behalf of that store
+	// (superadmin: any; business_owner: an owned store; others: only their own).
+	storeID := claims.StoreID
+	if req.StoreID != "" && req.StoreID != storeID {
+		allowed := false
+		switch claims.Role {
+		case "superadmin":
+			allowed = true
+		case "business_owner":
+			stores, err := h.Repo.User.GetUserStores(r.Context(), claims.ID)
+			if err != nil {
+				h.writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			for _, s := range stores {
+				if s.ID == req.StoreID {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+			return
+		}
+		storeID = req.StoreID
+	}
+	if storeID == "" {
+		h.writeError(w, http.StatusBadRequest, "No active store")
+		return
+	}
+
+	if err := h.Repo.Store.UpdateAppVersion(r.Context(), storeID, version); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }

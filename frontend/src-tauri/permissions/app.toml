@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-app-version"
+description = "Allow reading the Mario Juicy desktop app version"
+commands.allow = ["app_version"]
+
+[[permission]]
+identifier = "allow-check-for-updates"
+description = "Allow checking for Mario Juicy desktop updates"
+commands.allow = ["check_for_updates"]
+
+[[permission]]
+identifier = "allow-download-and-install-update"
+description = "Allow downloading and installing Mario Juicy desktop updates"
+commands.allow = ["download_and_install_update"]

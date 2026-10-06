@@ -1,4 +1,5 @@
 mod printer;
+mod updater;
 
 use serde::{Deserialize, Serialize};
 use printer::{PrinterService, PrintJob, Device, RawPrintRequest};
@@ -154,14 +155,23 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             get_printer_status,
             get_printers,
             print_job,
             debug_usb_devices,
-            save_csv_file
+            save_csv_file,
+            updater::app_version,
+            updater::check_for_updates,
+            updater::download_and_install_update
         ])
+        .setup(|app| {
+            // Quiet startup update check (release builds only) — native dialog prompt.
+            if !cfg!(debug_assertions) {
+                updater::spawn_startup_check(app.handle().clone());
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

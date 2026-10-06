@@ -11,11 +11,11 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
- 
+
 func InitDB(cfg *config.Config) (*sql.DB, error) {
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable default_query_exec_mode=simple_protocol",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
- 
+
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("error opening db connection: %w", err)
@@ -324,6 +324,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// top of the categories and items sections on the order create/edit page.
 		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
 		`ALTER TABLE items ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
+		// Desktop app version telemetry — the Tauri app reports its version so
+		// superadmins can see which release each store is running.
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version VARCHAR(64)`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version_seen_at TIMESTAMP`,
 	}
 
 	for _, q := range alterQueries {

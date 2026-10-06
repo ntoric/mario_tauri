@@ -5,9 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:event:default",
     "opener:default",
+    "dialog:default",
     "updater:default",
-    "updater:allow-download-and-install",
-    "process:allow-restart"
+    "allow-app-version",
+    "allow-check-for-updates",
+    "allow-download-and-install-update"
   ]
 }
