@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, Keyboard, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, HelpCircle, Star } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -88,7 +88,7 @@ const OrderPage: React.FC = () => {
       actions: (
         <>
           <button className="btn btn-secondary" onClick={() => setShowShortcutsHelp(true)} title="Keyboard shortcuts (?)">
-            <Keyboard size={16} />
+            <HelpCircle size={16} />
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/')}>
             <ArrowLeft size={16} />

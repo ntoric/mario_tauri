@@ -8,12 +8,9 @@ function isTauri(): boolean {
 const UpdateNotification: React.FC = () => {
   const {
     updateInfo,
-    isChecking,
     isDownloading,
     isInstalling,
     downloadProgress,
-    error,
-    checkForUpdates,
     downloadAndInstall,
     dismissUpdate,
   } = useUpdater(true, 3600000);
@@ -34,18 +31,9 @@ const UpdateNotification: React.FC = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div style={styles.banner}>
-        <span style={styles.bannerText}>Update error: {error}</span>
-        <button style={styles.btnSmall} onClick={checkForUpdates} disabled={isChecking}>
-          Retry
-        </button>
-        <button style={styles.btnSmall} onClick={dismissUpdate}>Dismiss</button>
-      </div>
-    );
-  }
-
+  // Check/install errors are intentionally not shown here — they surface on
+  // the Software Updates page only, so a transient failure never alarms
+  // operators on the main screen.
   if (!updateInfo?.available) {
     return null;
   }
@@ -82,7 +70,6 @@ const UpdateNotification: React.FC = () => {
                 // Error is already set in the hook state
               }
             }}
-            disabled={isChecking}
           >
             Download & Install
           </button>

@@ -129,9 +129,61 @@ fn build_updater<R: Runtime>(
     builder.build().map_err(|e| e.to_string())
 }
 
+/// Unwrap the error source chain so the real transport cause (DNS, connect
+/// refused, TLS, timeout) reaches the UI instead of bare "error sending
+/// request for url (...)".
+fn describe_update_error(err: tauri_plugin_updater::Error) -> String {
+    use std::error::Error as _;
+    let mut msg = err.to_string();
+    let mut source = err.source();
+    while let Some(src) = source {
+        let text = src.to_string();
+        if !text.is_empty() && !msg.contains(&text) {
+            msg.push_str(": ");
+            msg.push_str(&text);
+        }
+        source = src.source();
+    }
+    msg
+}
+
+const UPDATE_CHECK_TIMEOUT_SECS: u64 = 45;
+const UPDATE_CHECK_ATTEMPTS: u32 = 2;
+const UPDATE_CHECK_RETRY_DELAY_SECS: u64 = 4;
+
 async fn fetch_update<R: Runtime>(app: &AppHandle<R>) -> Result<Option<Update>, String> {
     let updater = build_updater(app)?;
-    updater.check().await.map_err(|e| e.to_string())
+    let mut last_error: Option<tauri_plugin_updater::Error> = None;
+    let mut timed_out = false;
+
+    for attempt in 1..=UPDATE_CHECK_ATTEMPTS {
+        let check = tokio::time::timeout(
+            std::time::Duration::from_secs(UPDATE_CHECK_TIMEOUT_SECS),
+            updater.check(),
+        );
+        match check.await {
+            Ok(Ok(update)) => return Ok(update),
+            Ok(Err(err)) => {
+                eprintln!("update check attempt {attempt}/{UPDATE_CHECK_ATTEMPTS} failed: {err}");
+                last_error = Some(err);
+            }
+            Err(_) => {
+                eprintln!("update check attempt {attempt}/{UPDATE_CHECK_ATTEMPTS} timed out");
+                timed_out = true;
+            }
+        }
+        if attempt < UPDATE_CHECK_ATTEMPTS {
+            tokio::time::sleep(std::time::Duration::from_secs(UPDATE_CHECK_RETRY_DELAY_SECS)).await;
+        }
+    }
+
+    Err(match last_error {
+        Some(err) => describe_update_error(err),
+        None if timed_out => {
+            format!("update check timed out after {UPDATE_CHECK_TIMEOUT_SECS}s")
+        }
+        None => "update check failed".to_string(),
+    })
 }
 
 #[tauri::command]

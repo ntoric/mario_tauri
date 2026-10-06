@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, HelpCircle } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import StoreSelector from './StoreSelector';
@@ -400,7 +400,7 @@ const LayoutContent: React.FC = () => {
               title={oskEnabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
               aria-label="Toggle on-screen keyboard"
             >
-              <HelpCircle size={18} />
+              <Keyboard size={18} />
             </button>
             {headerContent.actions && (
               <div className="navbar-actions">

@@ -31,6 +31,14 @@ const SoftwareUpdates: React.FC = () => {
     });
   }, []);
 
+  // Check once when this page opens — update errors surface here only.
+  useEffect(() => {
+    if (isTauri()) {
+      setHasChecked(true);
+      checkForUpdates();
+    }
+  }, [checkForUpdates]);
+
   const handleCheck = async () => {
     setHasChecked(true);
     setInstallError(null);
