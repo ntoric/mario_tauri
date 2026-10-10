@@ -213,7 +213,7 @@ class _OrderScreenState extends State<OrderScreen> {
         // }
 
         if (order != null) {
-          _showFeedback('Order created for Table ${widget.table.number}');
+          _showFeedback('Order created for Table ${widget.table.label}');
           if (mounted) {
             Navigator.pop(context);
           }
@@ -282,8 +282,8 @@ class _OrderScreenState extends State<OrderScreen> {
     return Scaffold(
       appBar: AppHeader(
         title: widget.isNewOrder
-            ? 'New Order - Table ${widget.table.number}'
-            : 'Edit Order - Table ${widget.table.number}',
+            ? 'New Order - Table ${widget.table.label}'
+            : 'Edit Order - Table ${widget.table.label}',
         actions: [
           TextButton.icon(
             onPressed: _isSaving ? null : _saveOrder,

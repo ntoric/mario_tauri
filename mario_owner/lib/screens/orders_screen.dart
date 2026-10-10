@@ -78,8 +78,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final matchesTable = o.tableNumber.toString() == query ||
-            'table ${o.tableNumber}'.toLowerCase().contains(query);
+        final matchesTable = o.tableLabel.toLowerCase() == query ||
+            'table ${o.tableLabel}'.toLowerCase().contains(query) ||
+            o.tableNumber.toString() == query;
         final matchesItems = o.items.any(
             (item) => item.item.name.toLowerCase().contains(query));
         if (!matchesTable && !matchesItems) return false;
@@ -265,7 +266,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               child: Text(
                 order.tableNumber == 0
                     ? 'Parcel Order'
-                    : 'Table ${order.tableNumber}',
+                    : 'Table ${order.tableLabel}',
                 style: const TextStyle(
                     fontWeight: FontWeight.w700, fontSize: 15),
               ),

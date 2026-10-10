@@ -44,6 +44,8 @@ class _BillScreenState extends State<BillScreen> {
       final billData = {
         'orderId': widget.order.id,
         'tableNumber': widget.order.tableNumber,
+        if (widget.order.tableName != null)
+          'tableName': widget.order.tableName,
         'invoiceNo': invoiceNo,
         'items': widget.order.items
             .map((i) => {
@@ -156,7 +158,7 @@ class _BillScreenState extends State<BillScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'Table ${order.tableNumber}',
+                      'Table ${order.tableLabel}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
@@ -62,6 +63,27 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("CreateTable: targetStoreID =", targetStoreID)
 
+	// Normalize the optional alphanumeric name (e.g. "1A", "4AA").
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		if trimmed == "" {
+			req.Name = nil
+		} else {
+			req.Name = &trimmed
+		}
+	}
+
+	// Clients may create a table with only a name — assign the next free
+	// internal number so numeric flows (sorting, old clients) keep working.
+	if req.Number <= 0 {
+		next, err := h.Repo.Table.NextNumber(r.Context(), targetStoreID)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		req.Number = next
+	}
+
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.IsActive = true
@@ -95,6 +117,11 @@ func (h *Handler) UpdateTable(w http.ResponseWriter, r *http.Request) {
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
+	}
+
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		req.Name = &trimmed
 	}
 
 	req.ID = id

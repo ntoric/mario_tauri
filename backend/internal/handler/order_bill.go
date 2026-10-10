@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"cafe-backend/internal/middleware"
@@ -128,6 +129,7 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		tableID, _ := val.(string)
 		if tableID == "" {
 			updates["table_id"] = nil
+			updates["table_name"] = nil
 		} else {
 			// The target table must belong to the same store as the order,
 			// otherwise the order would surface in another store's table view.
@@ -135,6 +137,21 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			updates["table_id"] = tableID
+			// Keep the table_name snapshot in sync with the new table.
+			if tbl, err := h.Repo.Table.GetByID(r.Context(), tableID); err == nil && tbl != nil {
+				if tbl.Name != nil && *tbl.Name != "" {
+					updates["table_name"] = *tbl.Name
+				} else {
+					updates["table_name"] = nil
+				}
+			}
+		}
+	}
+	if val, exists := raw["tableName"]; exists {
+		if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
+			updates["table_name"] = strings.TrimSpace(s)
+		} else {
+			updates["table_name"] = nil
 		}
 	}
 	if val, exists := raw["tableNumber"]; exists {
@@ -361,6 +378,7 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		StoreID:        targetStoreID,
 		TableID:        req.TableID,
 		TableNumber:    req.TableNumber,
+		TableName:      req.TableName,
 		Status:         "active",
 		OrderType:      "dine_in",
 		CustomerName:   req.CustomerName,
@@ -392,6 +410,7 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		StoreID:        targetStoreID,
 		OrderID:        orderID,
 		TableNumber:    req.TableNumber,
+		TableName:      req.TableName,
 		InvoiceNo:      invoiceNo,
 		Subtotal:       req.TotalAmount,
 		TaxTotal:       req.TaxAmount,
@@ -466,6 +485,7 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 		StoreID:        targetStoreID,
 		OrderID:        id,
 		TableNumber:    req.TableNumber,
+		TableName:      req.TableName,
 		InvoiceNo:      invoiceNo,
 		Subtotal:       req.Subtotal,
 		TaxTotal:       req.TaxTotal,
@@ -712,6 +732,7 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OrderID       string  `json:"orderId"`
 		TableNumber   int     `json:"tableNumber"`
+		TableName     string  `json:"tableName"`
 		InvoiceNo     string  `json:"invoiceNo"`
 		Subtotal      float64 `json:"subtotal"`
 		TaxTotal      float64 `json:"taxTotal"`
@@ -763,6 +784,7 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	billDataMap := map[string]interface{}{
 		"orderId":       req.OrderID,
 		"tableNumber":   req.TableNumber,
+		"tableName":     req.TableName,
 		"invoiceNo":     req.InvoiceNo,
 		"subtotal":      req.Subtotal,
 		"taxTotal":      req.TaxTotal,

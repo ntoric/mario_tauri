@@ -236,6 +236,7 @@ class DataProvider extends ChangeNotifier {
           storeId: _orders[index].storeId,
           tableId: _orders[index].tableId,
           tableNumber: _orders[index].tableNumber,
+          tableName: _orders[index].tableName,
           items: _orders[index].items,
           status: 'completed',
           totalAmount: _orders[index].totalAmount,
@@ -391,6 +392,7 @@ class DataProvider extends ChangeNotifier {
     return a.id == b.id &&
         a.storeId == b.storeId &&
         a.number == b.number &&
+        a.name == b.name &&
         a.seats == b.seats &&
         a.isActive == b.isActive;
   }
@@ -400,6 +402,7 @@ class DataProvider extends ChangeNotifier {
         a.storeId != b.storeId ||
         a.tableId != b.tableId ||
         a.tableNumber != b.tableNumber ||
+        a.tableName != b.tableName ||
         a.status != b.status ||
         a.totalAmount != b.totalAmount ||
         a.taxAmount != b.taxAmount ||

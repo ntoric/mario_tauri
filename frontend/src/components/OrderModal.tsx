@@ -199,7 +199,7 @@ const OrderModal: React.FC = () => {
               },
               kot: {
                 order_id: parseInt(newOrder.id.slice(-6), 36) || 0,
-                table_number: String(table.number),
+                table_number: table.name || String(table.number),
                 waiter_name: '',
                 date: new Date().toLocaleString('en-IN'),
                 items: orderItems.map(oi => ({
@@ -419,7 +419,7 @@ const OrderModal: React.FC = () => {
       <div className="modal order-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>
-            {viewOnly ? 'View Order' : existingOrder ? 'Edit Order' : 'New Order'} - Table {table.number}
+            {viewOnly ? 'View Order' : existingOrder ? 'Edit Order' : 'New Order'} - Table {table.name || table.number}
           </h2>
           <button className="close-btn" onClick={closeOrderModal}>
             <X size={24} />

@@ -5,6 +5,7 @@ class Order {
   final String storeId;
   final String tableId;
   final int tableNumber;
+  final String? tableName;
   final List<OrderItem> items;
   final String status;
   final double totalAmount;
@@ -22,6 +23,7 @@ class Order {
     required this.storeId,
     required this.tableId,
     required this.tableNumber,
+    this.tableName,
     required this.items,
     required this.status,
     required this.totalAmount,
@@ -85,6 +87,7 @@ class Order {
             json['table_id']?.toString() ??
             '',
         tableNumber: _parseInt(json['tableNumber'] ?? json['table_number']),
+        tableName: (json['tableName'] ?? json['table_name'])?.toString(),
         items: (json['items'] as List?)
                 ?.map((i) => OrderItem.fromJson(i))
                 .toList() ??
@@ -119,6 +122,7 @@ class Order {
       'storeId': storeId,
       'tableId': tableId,
       'tableNumber': tableNumber,
+      if (tableName != null) 'tableName': tableName,
       'items': items.map((i) => i.toJson()).toList(),
       'status': status,
       'totalAmount': totalAmount,
@@ -136,6 +140,10 @@ class Order {
   bool get isActive => status == 'active';
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
+
+  // Display label: alphanumeric table name when set, else the table number.
+  String get tableLabel =>
+      (tableName != null && tableName!.isNotEmpty) ? tableName! : '$tableNumber';
 
   double get subtotal => totalAmount - taxAmount + discountAmount;
 }

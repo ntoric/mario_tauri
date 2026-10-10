@@ -92,8 +92,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       // 3. Search Query Filter
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final matchesTable = o.tableNumber.toString() == query ||
-            'table ${o.tableNumber}'.toLowerCase().contains(query);
+        final matchesTable = o.tableLabel.toLowerCase() == query ||
+            'table ${o.tableLabel}'.toLowerCase().contains(query) ||
+            o.tableNumber.toString() == query;
         final matchesItems =
             o.items.any((item) => item.item.name.toLowerCase().contains(query));
 
@@ -316,7 +317,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               Text(
                                 order.tableNumber == 0
                                     ? 'Parcel Order'
-                                    : 'Table ${order.tableNumber}',
+                                    : 'Table ${order.tableLabel}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
@@ -505,7 +506,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                               title:
                                                   const Text('Cancel Order?'),
                                               content: Text(
-                                                'Are you sure you want to cancel this completed order for ${order.tableNumber == 0 ? 'Parcel Order' : 'Table ${order.tableNumber}'}?',
+                                                'Are you sure you want to cancel this completed order for ${order.tableNumber == 0 ? 'Parcel Order' : 'Table ${order.tableLabel}'}?',
                                               ),
                                               actions: [
                                                 TextButton(

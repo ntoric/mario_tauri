@@ -997,7 +997,7 @@ type TableRepository struct {
 }
 
 func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.Table, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active, section FROM tables WHERE store_id = $1 AND is_active = true ORDER BY number", storeID)
+	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, number, name, seats, position_x, position_y, is_active, section FROM tables WHERE store_id = $1 AND is_active = true ORDER BY number", storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,8 +1006,12 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 	var tables []models.Table
 	for rows.Next() {
 		var t models.Table
-		if err := rows.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
+		var name sql.NullString
+		if err := rows.Scan(&t.ID, &t.StoreID, &t.Number, &name, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
 			return nil, err
+		}
+		if name.Valid && name.String != "" {
+			t.Name = &name.String
 		}
 		tables = append(tables, t)
 	}
@@ -1016,31 +1020,50 @@ func (r *TableRepository) GetAll(ctx context.Context, storeID string) ([]models.
 }
 
 func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
-	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d seats=%d pos=(%d,%d) section=%v\n",
-		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section)
-	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, seats, position_x, position_y, section) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-		t.ID, t.StoreID, t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section)
+	fmt.Printf("TableRepository.Create: id=%s store_id=%s number=%d name=%v seats=%d pos=(%d,%d) section=%v\n",
+		t.ID, t.StoreID, t.Number, t.Name, t.Seats, t.Position.X, t.Position.Y, t.Section)
+	var name interface{}
+	if t.Name != nil && *t.Name != "" {
+		name = *t.Name
+	}
+	_, err := r.db.ExecContext(ctx, "INSERT INTO tables (id, store_id, number, name, seats, position_x, position_y, section) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		t.ID, t.StoreID, t.Number, name, t.Seats, t.Position.X, t.Position.Y, t.Section)
 	if err != nil {
 		fmt.Println("TableRepository.Create: exec error -", err)
 	}
 	return err
 }
 
+// NextNumber returns the next free table number for a store. Used to assign an
+// internal number when a client creates a table with only an alphanumeric name.
+func (r *TableRepository) NextNumber(ctx context.Context, storeID string) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(number), 0) + 1 FROM tables WHERE store_id = $1", storeID).Scan(&n)
+	return n, err
+}
+
 func (r *TableRepository) GetByID(ctx context.Context, id string) (*models.Table, error) {
-	row := r.db.QueryRowContext(ctx, "SELECT id, store_id, number, seats, position_x, position_y, is_active, section FROM tables WHERE id = $1", id)
+	row := r.db.QueryRowContext(ctx, "SELECT id, store_id, number, name, seats, position_x, position_y, is_active, section FROM tables WHERE id = $1", id)
 	var t models.Table
-	if err := row.Scan(&t.ID, &t.StoreID, &t.Number, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
+	var name sql.NullString
+	if err := row.Scan(&t.ID, &t.StoreID, &t.Number, &name, &t.Seats, &t.Position.X, &t.Position.Y, &t.IsActive, &t.Section); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if name.Valid && name.String != "" {
+		t.Name = &name.String
+	}
 	return &t, nil
 }
 
 func (r *TableRepository) Update(ctx context.Context, t models.Table) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4, section = $5, modified_by = $6 WHERE id = $7",
-		t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section, t.ModifiedBy, t.ID)
+	// name uses COALESCE so a NULL param (field absent in the request JSON)
+	// preserves the existing value — old clients can't wipe a name they
+	// don't know about.
+	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4, section = $5, name = COALESCE($6, name), modified_by = $7 WHERE id = $8",
+		t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section, t.Name, t.ModifiedBy, t.ID)
 	return err
 }
 
@@ -1140,7 +1163,7 @@ type OrderRepository struct {
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
 	sqlStr := `
-		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
+		SELECT o.id, o.store_id, o.table_id, o.table_number, o.table_name, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
 		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
@@ -1190,11 +1213,11 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+		var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
 		var cancelledAt sql.NullTime
 		var itemsBytes []byte
 		err := rows.Scan(
-			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
+			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &tableName, &o.Status, &orderType, &customerName, &customerMobile,
 			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
 			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 			&itemsBytes,
@@ -1203,6 +1226,7 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 			return nil, err
 		}
 		o.TableID = tableID.String
+		o.TableName = tableName.String
 		o.PaymentMethod = method.String
 		o.PaymentStatus = statusPay.String
 		o.CreatedBy = createdBy.String
@@ -1230,7 +1254,7 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 
 func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.Order, error) {
 	sqlStr := `
-		SELECT o.id, o.store_id, o.table_id, o.table_number, o.status, o.order_type, o.customer_name, o.customer_mobile,
+		SELECT o.id, o.store_id, o.table_id, o.table_number, o.table_name, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
 		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
@@ -1260,11 +1284,11 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	row := r.db.QueryRowContext(ctx, sqlStr, orderID)
 
 	var o models.Order
-	var tableID, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+	var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
 	var cancelledAt sql.NullTime
 	var itemsBytes []byte
 	err := row.Scan(
-		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &o.Status, &orderType, &customerName, &customerMobile,
+		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &tableName, &o.Status, &orderType, &customerName, &customerMobile,
 		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
 		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 		&itemsBytes,
@@ -1276,6 +1300,7 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 		return nil, err
 	}
 	o.TableID = tableID.String
+	o.TableName = tableName.String
 	o.PaymentMethod = method.String
 	o.PaymentStatus = statusPay.String
 	o.CreatedBy = createdBy.String
@@ -1306,9 +1331,11 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	}
 	defer tx.Rollback()
 
-	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, status, order_type, customer_name, customer_mobile, total_amount, tax_amount, discount_amount, payment_method, created_by)
-	           VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, $12)`
-	var payMethod, orderType, customerName, customerMobile, tableID interface{}
+	// table_name falls back to the referenced table's name so clients that
+	// only send tableId still get the alphanumeric label snapshotted.
+	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, table_name, status, order_type, customer_name, customer_mobile, total_amount, tax_amount, discount_amount, payment_method, created_by)
+	           VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT t.name FROM tables t WHERE t.id = $3)), 'active', $6, $7, $8, $9, $10, $11, $12, $13)`
+	var payMethod, orderType, customerName, customerMobile, tableID, tableName interface{}
 	if o.PaymentMethod != "" {
 		payMethod = o.PaymentMethod
 	}
@@ -1324,9 +1351,12 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	if o.TableID != "" {
 		tableID = o.TableID
 	}
+	if o.TableName != "" {
+		tableName = o.TableName
+	}
 
 	_, err = tx.ExecContext(ctx, sqlStr,
-		o.ID, o.StoreID, tableID, o.TableNumber, orderType, customerName, customerMobile, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy,
+		o.ID, o.StoreID, tableID, o.TableNumber, tableName, orderType, customerName, customerMobile, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy,
 	)
 	if err != nil {
 		return err
@@ -1456,7 +1486,7 @@ type BillRepository struct {
 
 func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.Bill, error) {
 	sqlStr := `
-		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
+		SELECT b.id, b.store_id, b.order_id, b.table_number, b.table_name, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
 		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.status, b.generated_at, b.generated_by,
 		       COALESCE(
 		         json_agg(
@@ -1492,16 +1522,17 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 	var bills []models.Bill
 	for rows.Next() {
 		var b models.Bill
-		var method, customer, customerMobile, generatedBy, billStatus sql.NullString
+		var tableName, method, customer, customerMobile, generatedBy, billStatus sql.NullString
 		var itemsBytes []byte
 		err := rows.Scan(
-			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
+			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &tableName, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
 			&method, &customer, &customerMobile, &b.IsPrinted, &billStatus, &b.GeneratedAt, &generatedBy,
 			&itemsBytes,
 		)
 		if err != nil {
 			return nil, err
 		}
+		b.TableName = tableName.String
 		b.PaymentMethod = method.String
 		b.CustomerName = customer.String
 		b.CustomerMobile = customerMobile.String
@@ -1527,9 +1558,10 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 }
 
 func (r *BillRepository) Create(ctx context.Context, b models.Bill) error {
+	// table_name falls back to the order's snapshot when the client doesn't send it.
 	sqlStr := `
-		INSERT INTO bills (id, store_id, order_id, table_number, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, customer_mobile, generated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO bills (id, store_id, order_id, table_number, table_name, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, customer_mobile, generated_by)
+		VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT o.table_name FROM orders o WHERE o.id = $3)), $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 	var payMethod, custName, custMobile interface{}
 	if b.PaymentMethod != "" {
@@ -1543,7 +1575,7 @@ func (r *BillRepository) Create(ctx context.Context, b models.Bill) error {
 	}
 
 	_, err := r.db.ExecContext(ctx, sqlStr,
-		b.ID, b.StoreID, b.OrderID, b.TableNumber, b.InvoiceNo, b.Subtotal, b.TaxTotal, b.Discount, b.Total, payMethod, custName, custMobile, b.GeneratedBy,
+		b.ID, b.StoreID, b.OrderID, b.TableNumber, b.TableName, b.InvoiceNo, b.Subtotal, b.TaxTotal, b.Discount, b.Total, payMethod, custName, custMobile, b.GeneratedBy,
 	)
 	return err
 }
@@ -2804,7 +2836,7 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 
 	// Fetch individual bills (revenue entries) with items
 	billsSQL := `
-		SELECT b.id, b.store_id, b.order_id, b.table_number, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
+		SELECT b.id, b.store_id, b.order_id, b.table_number, b.table_name, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
 		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
 		       COALESCE(
 		         json_agg(
@@ -2856,16 +2888,17 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	var bills []models.Bill
 	for billRows.Next() {
 		var b models.Bill
-		var method, customer, customerMobile, generatedBy sql.NullString
+		var tableName, method, customer, customerMobile, generatedBy sql.NullString
 		var itemsBytes []byte
 		err := billRows.Scan(
-			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
+			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &tableName, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
 			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
 			&itemsBytes,
 		)
 		if err != nil {
 			return nil, err
 		}
+		b.TableName = tableName.String
 		b.PaymentMethod = method.String
 		b.CustomerName = customer.String
 		b.CustomerMobile = customerMobile.String

@@ -3,6 +3,7 @@ class Bill {
   final String storeId;
   final String orderId;
   final int tableNumber;
+  final String? tableName;
   final String? invoiceNo;
   final List<BillItem> items;
   final double subtotal;
@@ -20,6 +21,7 @@ class Bill {
     required this.storeId,
     required this.orderId,
     required this.tableNumber,
+    this.tableName,
     this.invoiceNo,
     required this.items,
     required this.subtotal,
@@ -58,6 +60,7 @@ class Bill {
       storeId: json['storeId'] ?? json['store_id'],
       orderId: json['orderId'] ?? json['order_id'],
       tableNumber: _parseInt(json['tableNumber'] ?? json['table_number']),
+      tableName: (json['tableName'] ?? json['table_name'])?.toString(),
       invoiceNo: json['invoiceNo'] ?? json['invoice_no'],
       items: (json['items'] as List?)
               ?.map((i) => BillItem.fromJson(i))
@@ -81,6 +84,7 @@ class Bill {
       'storeId': storeId,
       'orderId': orderId,
       'tableNumber': tableNumber,
+      if (tableName != null) 'tableName': tableName,
       'invoiceNo': invoiceNo,
       'items': items.map((i) => i.toJson()).toList(),
       'subtotal': subtotal,
@@ -94,6 +98,10 @@ class Bill {
       'generatedBy': generatedBy,
     };
   }
+
+  // Display label: alphanumeric table name when set, else the table number.
+  String get tableLabel =>
+      (tableName != null && tableName!.isNotEmpty) ? tableName! : '$tableNumber';
 }
 
 class BillItem {

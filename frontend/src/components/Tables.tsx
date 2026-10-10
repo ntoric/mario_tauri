@@ -208,7 +208,7 @@ const Tables: React.FC = () => {
   }, [currentStoreId, currentStore?.remoteBillingEnabled, currentStore, fetchBillQueue, fetchOrders]);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newTable, setNewTable] = useState({ number: '', seats: 4, section: '' });
+  const [newTable, setNewTable] = useState({ number: '', name: '', seats: 4, section: '' });
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
@@ -252,6 +252,9 @@ const Tables: React.FC = () => {
   }>({ show: false, message: '' });
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'business_owner' || user?.role === 'business_admin';
+
+  // Display label: alphanumeric name when set, otherwise the numeric table number.
+  const tableLabel = (t: Table) => t.name || String(t.number);
 
   // Set page header
   useEffect(() => {
@@ -466,6 +469,7 @@ const Tables: React.FC = () => {
       await createBill({
         orderId: activeOrder.id,
         tableNumber: targetTable.number,
+        tableName: targetTable.name,
         invoiceNo,
         subtotal,
         taxTotal: tax,
@@ -488,18 +492,21 @@ const Tables: React.FC = () => {
 
   const handleAddTable = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTable.number) return;
+    const trimmedName = newTable.name.trim();
+    if (!newTable.number && !trimmedName) return;
 
     setIsAddingTable(true);
     try {
       await createTable({
-        number: parseInt(newTable.number),
+        // 0 lets the backend auto-assign the next internal number.
+        number: parseInt(newTable.number) || 0,
+        ...(trimmedName ? { name: trimmedName } : {}),
         seats: newTable.seats,
         position: { x: 0, y: 0 },
         ...(newTable.section ? { section: newTable.section } : {}),
       });
       setShowAddModal(false);
-      setNewTable({ number: '', seats: 4, section: '' });
+      setNewTable({ number: '', name: '', seats: 4, section: '' });
     } catch (error) {
       console.error('Failed to add table:', error);
       setErrorDialog({ show: true, message: (error as Error).message || 'Failed to add table. Please try again.' });
@@ -884,7 +891,7 @@ const Tables: React.FC = () => {
                       {activeOrder && (
                         <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
                       )}
-                      <div className="table-layout-number">{table.number}</div>
+                      <div className="table-layout-number">{tableLabel(table)}</div>
                       <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
                         {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
                       </div>
@@ -920,7 +927,7 @@ const Tables: React.FC = () => {
                       >
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <strong>Table {table.number}</strong>
+                            <strong>Table {tableLabel(table)}</strong>
                             {checkingTableId === table.id && (
                               <Loader2 size={14} className="animate-spin" style={{ color: 'var(--primary)' }} />
                             )}
@@ -1011,16 +1018,26 @@ const Tables: React.FC = () => {
               <div className="modal-body">
                 <div className="form-row">
                   <div className="form-group">
+                    <label>Table Name</label>
+                    <input
+                      type="text"
+                      value={newTable.name}
+                      onChange={e => setNewTable({ ...newTable, name: e.target.value })}
+                      placeholder="e.g., 1A, 2C, 4AA"
+                    />
+                  </div>
+                  <div className="form-group">
                     <label>Table Number</label>
                     <input
                       type="number"
                       min="1"
                       value={newTable.number}
                       onChange={e => setNewTable({ ...newTable, number: e.target.value })}
-                      placeholder="e.g., 1"
-                      required
+                      placeholder="Auto if empty"
                     />
                   </div>
+                </div>
+                <div className="form-row">
                   <div className="form-group">
                     <label>Seats</label>
                     <input
@@ -1062,7 +1079,7 @@ const Tables: React.FC = () => {
         <div className="modal-overlay" onClick={() => !isPrinting && setBillDialogTable(null)}>
           <div className="modal bill-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Print Bill - Table {billDialogTable.number}</h2>
+              <h2>Print Bill - Table {tableLabel(billDialogTable)}</h2>
               <button 
                 className="close-btn" 
                 onClick={() => !isPrinting && setBillDialogTable(null)}
@@ -1121,7 +1138,7 @@ const Tables: React.FC = () => {
       <ConfirmDialog
         isOpen={!!deleteConfirmTable}
         title="Delete Table"
-        message={`Are you sure you want to delete Table ${deleteConfirmTable?.number}? This action cannot be undone.`}
+        message={`Are you sure you want to delete Table ${deleteConfirmTable ? tableLabel(deleteConfirmTable) : ''}? This action cannot be undone.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="danger"
@@ -1141,7 +1158,7 @@ const Tables: React.FC = () => {
             </div>
             <div className="modal-body">
               <p style={{ marginBottom: '1rem', color: 'var(--gray-600)' }}>
-                Select a table to move the order from <strong>Table {changeTableDialog.fromTable.number}</strong>:
+                Select a table to move the order from <strong>Table {tableLabel(changeTableDialog.fromTable)}</strong>:
               </p>
               <div className="change-table-grid">
                 {tables
@@ -1153,7 +1170,7 @@ const Tables: React.FC = () => {
                       className="change-table-option"
                       onClick={() => handleTableSelect(table)}
                     >
-                      <span className="change-table-number">{table.number}</span>
+                      <span className="change-table-number">{tableLabel(table)}</span>
                       <span className="change-table-seats">{table.seats} seats</span>
                     </button>
                   ))}
@@ -1197,10 +1214,10 @@ const Tables: React.FC = () => {
                 <ArrowRightLeft size={32} style={{ color: 'var(--info)' }} />
               </div>
               <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
-                Move order from <strong>Table {changeTableDialog.fromTable.number}</strong> to <strong>Table {confirmTableChange.number}</strong>?
+                Move order from <strong>Table {tableLabel(changeTableDialog.fromTable)}</strong> to <strong>Table {tableLabel(confirmTableChange)}</strong>?
               </p>
               <p style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>
-                This will release Table {changeTableDialog.fromTable.number} and assign the order to Table {confirmTableChange.number}.
+                This will release Table {tableLabel(changeTableDialog.fromTable)} and assign the order to Table {tableLabel(confirmTableChange)}.
               </p>
             </div>
             <div className="modal-footer">

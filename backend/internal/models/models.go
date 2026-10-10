@@ -122,6 +122,7 @@ type Table struct {
 	ID         string   `json:"id"`
 	StoreID    string   `json:"storeId"`
 	Number     int      `json:"number"`
+	Name       *string  `json:"name,omitempty"`
 	Seats      int      `json:"seats"`
 	Position   Position `json:"position"`
 	IsActive   bool     `json:"isActive"`
@@ -164,6 +165,7 @@ type Order struct {
 	StoreID        string      `json:"storeId"`
 	TableID        string      `json:"tableId"`
 	TableNumber    int         `json:"tableNumber"`
+	TableName      string      `json:"tableName,omitempty"`
 	Status         string      `json:"status"`
 	OrderType      string      `json:"orderType"`
 	CustomerName   string      `json:"customerName"`
@@ -186,6 +188,7 @@ type Bill struct {
 	StoreID        string      `json:"storeId"`
 	OrderID        string      `json:"orderId"`
 	TableNumber    int         `json:"tableNumber"`
+	TableName      string      `json:"tableName,omitempty"`
 	InvoiceNo      string      `json:"invoiceNo"`
 	Subtotal       float64     `json:"subtotal"`
 	TaxTotal       float64     `json:"taxTotal"`

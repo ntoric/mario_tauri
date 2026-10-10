@@ -323,7 +323,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               ),
                             ),
                             subtitle: Text(
-                              'Table ${bill.tableNumber} • ${dateFormat.format(bill.generatedAt)}',
+                              'Table ${bill.tableLabel} • ${dateFormat.format(bill.generatedAt)}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.gray500,

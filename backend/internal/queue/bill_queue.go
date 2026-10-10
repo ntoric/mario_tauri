@@ -17,6 +17,7 @@ import (
 type BillData struct {
 	OrderID       string  `json:"orderId"`
 	TableNumber   int     `json:"tableNumber"`
+	TableName     string  `json:"tableName"`
 	InvoiceNo     string  `json:"invoiceNo"`
 	Subtotal      float64 `json:"subtotal"`
 	TaxTotal      float64 `json:"taxTotal"`
@@ -145,9 +146,9 @@ func handleQueueItem(db *sql.DB, cfg *config.Config, item QueueItem) error {
 	// 4. Create the bill
 	billID := uuid.New().String()
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO bills (id, store_id, order_id, table_number, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, generated_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		billID, item.StoreID, item.OrderID, data.TableNumber, data.InvoiceNo, data.Subtotal, data.TaxTotal, data.Discount, data.Total, data.PaymentMethod, data.CustomerName, data.GeneratedBy,
+		`INSERT INTO bills (id, store_id, order_id, table_number, table_name, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, generated_by)
+		 VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT o.table_name FROM orders o WHERE o.id = $3)), $6, $7, $8, $9, $10, $11, $12, $13)`,
+		billID, item.StoreID, item.OrderID, data.TableNumber, data.TableName, data.InvoiceNo, data.Subtotal, data.TaxTotal, data.Discount, data.Total, data.PaymentMethod, data.CustomerName, data.GeneratedBy,
 	)
 	if err != nil {
 		markFailed(db, item.ID, "Bill DB insert failed: "+err.Error())

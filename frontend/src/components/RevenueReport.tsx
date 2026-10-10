@@ -352,7 +352,7 @@ const RevenueReport: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Table</div>
-                  <div style={{ fontSize: '0.95rem', color: 'var(--gray-800)' }}>Table {selectedBill.tableNumber}</div>
+                  <div style={{ fontSize: '0.95rem', color: 'var(--gray-800)' }}>Table {selectedBill.tableName || selectedBill.tableNumber}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Customer</div>

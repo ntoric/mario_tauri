@@ -250,7 +250,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    'Order moved to Table ${table.number}'),
+                                    'Order moved to Table ${table.label}'),
                                 backgroundColor: AppColors.success,
                                 behavior: SnackBarBehavior.floating,
                                 shape: RoundedRectangleBorder(
@@ -302,7 +302,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              '${table.number}',
+                              table.label,
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w800,
@@ -366,7 +366,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               ),
               const SizedBox(height: 20),
               Text(
-                'Table ${table.number}',
+                'Table ${table.label}',
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -823,7 +823,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                                     ),
                                     SizedBox(height: compact ? 6 : 8),
                                     Text(
-                                      'Table ${table.number}',
+                                      'Table ${table.label}',
                                       style: TextStyle(
                                         fontSize: titleSize,
                                         fontWeight: FontWeight.w700,

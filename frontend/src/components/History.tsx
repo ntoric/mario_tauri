@@ -167,6 +167,7 @@ const History: React.FC = () => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
       order.tableNumber.toString().includes(searchTerm) ||
+      (order.tableName && order.tableName.toLowerCase().includes(searchLower)) ||
       order.items.some(i => i.item.name.toLowerCase().includes(searchLower)) ||
       (isParcel(order) && 'parcel'.includes(searchLower)) ||
       (order.customerName && order.customerName.toLowerCase().includes(searchLower));
@@ -349,7 +350,7 @@ const History: React.FC = () => {
                     <td>
                       {isParcel(order)
                         ? (order.customerName || 'Walk-in')
-                        : `Table ${order.tableNumber}`}
+                        : `Table ${order.tableName || order.tableNumber}`}
                     </td>
                     <td>{order.items.length}</td>
                     <td>{formatCurrency((order.totalAmount || 0) + (order.taxAmount || 0))}</td>
@@ -420,7 +421,7 @@ const History: React.FC = () => {
                     {viewingOrder.customerName && ` - ${viewingOrder.customerName}`}
                   </span>
                 ) : (
-                  `Order Details - Table ${viewingOrder.tableNumber}`
+                  `Order Details - Table ${viewingOrder.tableName || viewingOrder.tableNumber}`
                 )}
               </h2>
               <button className="close-btn" onClick={() => setViewingOrder(null)}>
@@ -492,7 +493,7 @@ const History: React.FC = () => {
                     Parcel Order{viewingBill.customerName ? ` - ${viewingBill.customerName}` : ''}
                   </span>
                 ) : (
-                  `Bill - Table ${viewingBill.tableNumber}`
+                  `Bill - Table ${viewingBill.tableName || viewingBill.tableNumber}`
                 )}
               </h2>
               <button className="close-btn" onClick={() => setViewingBill(null)}>
@@ -512,7 +513,7 @@ const History: React.FC = () => {
                   <h3>
                     {isParcel(viewingBill)
                       ? `Parcel${viewingBill.customerName ? ` — ${viewingBill.customerName}` : ''}`
-                      : `Table ${viewingBill.tableNumber}`
+                      : `Table ${viewingBill.tableName || viewingBill.tableNumber}`
                     }
                   </h3>
                   <p>Order #{viewingBill.id.slice(-6).toUpperCase()}</p>
@@ -581,7 +582,7 @@ const History: React.FC = () => {
       <ConfirmDialog
         isOpen={!!cancelTarget}
         title="Cancel Completed Order"
-        message={`Are you sure you want to cancel this completed order${cancelTarget ? ` for Table ${cancelTarget.tableNumber}` : ''}? This will also void the associated bill.`}
+        message={`Are you sure you want to cancel this completed order${cancelTarget ? ` for Table ${cancelTarget.tableName || cancelTarget.tableNumber}` : ''}? This will also void the associated bill.`}
         confirmLabel={isCancelling ? 'Cancelling...' : 'Yes, Cancel Order'}
         cancelLabel="No, Keep Order"
         variant="danger"

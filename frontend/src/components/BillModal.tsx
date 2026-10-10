@@ -62,6 +62,7 @@ const BillModal: React.FC = () => {
             await createBill({
               orderId: order.id,
               tableNumber: table.number,
+              tableName: table.name,
               invoiceNo,
               subtotal,
               taxTotal: tax,
@@ -89,6 +90,7 @@ const BillModal: React.FC = () => {
       await createBill({
         orderId: order.id,
         tableNumber: table.number,
+        tableName: table.name,
         invoiceNo,
         subtotal,
         taxTotal: tax,
@@ -228,7 +230,7 @@ const BillModal: React.FC = () => {
             </div>
 
             <div className="bill-table-info">
-              <h3>Table {order.tableNumber}</h3>
+              <h3>Table {order.tableName || order.tableNumber}</h3>
               <p>{formatDate(new Date().toISOString())}</p>
               <p>Server: {user?.name}</p>
             </div>

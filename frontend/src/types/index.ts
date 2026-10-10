@@ -98,6 +98,7 @@ export interface Table {
   id: string;
   storeId: string;
   number: number;
+  name?: string;
   seats: number;
   position: { x: number; y: number };
   isActive: boolean;
@@ -128,6 +129,7 @@ export interface Order {
   storeId: string;
   tableId: string;
   tableNumber: number;
+  tableName?: string;
   items: OrderItem[];
   status: OrderStatus;
   orderType?: OrderType;
@@ -149,6 +151,7 @@ export interface Bill {
   storeId: string;
   orderId: string;
   tableNumber: number;
+  tableName?: string;
   invoiceNo?: string;
   items: OrderItem[];
   subtotal: number;

@@ -132,11 +132,13 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			id VARCHAR(255) PRIMARY KEY,
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
 			number INTEGER NOT NULL,
+			name VARCHAR(255) DEFAULT NULL,
 			seats INTEGER NOT NULL,
 			position_x INTEGER DEFAULT 0,
 			position_y INTEGER DEFAULT 0,
 			is_active BOOLEAN DEFAULT true,
-			UNIQUE(store_id, number)
+			UNIQUE(store_id, number),
+			UNIQUE(store_id, name)
 		)`,
 
 		// Orders table
@@ -145,6 +147,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
 			table_id VARCHAR(255) REFERENCES tables(id),
 			table_number INTEGER NOT NULL,
+			table_name VARCHAR(255),
 			status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
 			total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
 			tax_amount DECIMAL(10, 2) DEFAULT 0,
@@ -174,6 +177,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
 			order_id VARCHAR(255) REFERENCES orders(id),
 			table_number INTEGER NOT NULL,
+			table_name VARCHAR(255),
 			invoice_no VARCHAR(50),
 			subtotal DECIMAL(10, 2) NOT NULL,
 			tax_total DECIMAL(10, 2) NOT NULL,
@@ -304,6 +308,12 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
 		// Table sections — additive migration for existing deployments (NULL = default "Ground Floor")
 		`ALTER TABLE tables ADD COLUMN IF NOT EXISTS section VARCHAR(255) DEFAULT NULL`,
+		// Alphanumeric table names — optional display label (e.g. "1A", "4AA").
+		// number stays the internal sort/compat key so old clients keep working.
+		`ALTER TABLE tables ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT NULL`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS table_name VARCHAR(255)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS table_name VARCHAR(255)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tables_store_name ON tables (store_id, name) WHERE name IS NOT NULL`,
 		// Item preparation expenses — additive migration for existing deployments
 		`CREATE TABLE IF NOT EXISTS item_expenses (
 			id VARCHAR(255) PRIMARY KEY,

@@ -81,7 +81,7 @@ const OrderPage: React.FC = () => {
 
   // Set page header
   useEffect(() => {
-    const title = existingOrder ? `Edit Order - Table ${table?.number ?? ''}` : `New Order - Table ${table?.number ?? ''}`;
+    const title = existingOrder ? `Edit Order - Table ${table?.name || table?.number || ''}` : `New Order - Table ${table?.name || table?.number || ''}`;
     setHeaderContent({
       title,
       subtitle: currentStore?.name || '',
@@ -226,7 +226,7 @@ const OrderPage: React.FC = () => {
         },
         kot: {
           order_id: parseInt(orderId.slice(-6), 36) || 0,
-          table_number: String(table?.number ?? ''),
+          table_number: table?.name || String(table?.number ?? ''),
           waiter_name: '',
           date: new Date().toLocaleString('en-IN'),
           items: orderItems.map(oi => ({
@@ -453,6 +453,7 @@ const OrderPage: React.FC = () => {
         await savePrint(existingOrder.id, {
           orderId: existingOrder.id,
           tableNumber: table.number,
+          tableName: table.name,
           invoiceNo: `INV-${Date.now()}`,
           subtotal: totalAmount,
           taxTotal: taxAmount,
@@ -465,6 +466,7 @@ const OrderPage: React.FC = () => {
         await saveEBill({
           tableId: table.id,
           tableNumber: table.number,
+          tableName: table.name,
           items: orderItems,
           totalAmount,
           taxAmount,
@@ -561,6 +563,7 @@ const OrderPage: React.FC = () => {
       await savePrint(orderId, {
         orderId,
         tableNumber: table.number,
+        tableName: table.name,
         invoiceNo,
         subtotal: totalAmount,
         taxTotal: taxAmount,
@@ -586,7 +589,7 @@ const OrderPage: React.FC = () => {
       setPrinterConfirm({
         show: true,
         title: 'Cancel Order',
-        message: `Are you sure you want to cancel the order for Table ${table.number}?`,
+        message: `Are you sure you want to cancel the order for Table ${table.name || table.number}?`,
         onConfirm: async () => {
           setPrinterConfirm(p => ({ ...p, show: false }));
           try {
