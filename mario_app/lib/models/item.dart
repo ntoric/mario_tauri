@@ -9,6 +9,7 @@ class Item {
   final String? hsnCode;
   final double? taxPercent;
   final bool isActive;
+  final bool enabled;
   final bool isFavourite;
 
   Item({
@@ -22,9 +23,26 @@ class Item {
     this.hsnCode,
     this.taxPercent,
     required this.isActive,
+    this.enabled = true,
     this.isFavourite = false,
   });
 
+  Item copyWith({bool? isFavourite}) {
+    return Item(
+      id: id,
+      storeId: storeId,
+      categoryId: categoryId,
+      categoryName: categoryName,
+      name: name,
+      description: description,
+      price: price,
+      hsnCode: hsnCode,
+      taxPercent: taxPercent,
+      isActive: isActive,
+      enabled: enabled,
+      isFavourite: isFavourite ?? this.isFavourite,
+    );
+  }
 
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
@@ -69,6 +87,10 @@ class Item {
           json['is_active'] ??
           true,
 
+      enabled:
+          json['enabled'] ??
+          true,
+
       isFavourite:
           json['isFavourite'] ??
           json['is_favourite'] ??
@@ -88,6 +110,7 @@ class Item {
       'hsnCode': hsnCode,
       'taxPercent': taxPercent,
       'isActive': isActive,
+      'enabled': enabled,
       'isFavourite': isFavourite,
     };
   }

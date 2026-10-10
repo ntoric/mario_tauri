@@ -122,6 +122,62 @@ pub fn system_reset(ctx: &mut Ctx, body: Value) -> ApiResponse {
     }))
 }
 
+/// POST /api/system/clear-local-db (superadmin) — wipe ALL local data.
+/// Every table is emptied and defaults are re-seeded (superadmin, default
+/// store, settings). The cloud backend is untouched: this route is
+/// sync-exempt and the pending outbox is discarded with everything else.
+pub fn clear_local_db(ctx: &mut Ctx) -> ApiResponse {
+    if let Err(r) = superadmin(ctx) {
+        return r;
+    }
+
+    const TABLES: &[&str] = &[
+        "sync_outbox",
+        "sync_entity_ts",
+        "order_items",
+        "orders",
+        "bills",
+        "bill_queue",
+        "item_expenses",
+        "items",
+        "categories",
+        "expenses",
+        "expense_categories",
+        "tables",
+        "table_sections",
+        "user_stores",
+        "users",
+        "stores",
+        "settings",
+        "app_updates",
+        "global_settings",
+    ];
+
+    // FK off so delete order doesn't matter; pragma changes are no-ops inside
+    // a transaction so it's toggled around the tx.
+    let _ = ctx.conn.pragma_update(None, "foreign_keys", "OFF");
+    let result = (|| -> Result<(), rusqlite::Error> {
+        let tx = ctx.conn.transaction()?;
+        for t in TABLES {
+            tx.execute(&format!("DELETE FROM {}", t), [])?;
+        }
+        tx.commit()
+    })();
+    let _ = ctx.conn.pragma_update(None, "foreign_keys", "ON");
+    if let Err(e) = result {
+        return err(500, e.to_string());
+    }
+
+    // global_settings was wiped — re-persist this process's JWT secret so
+    // signing stays consistent, then re-seed defaults.
+    crate::local::sync::set_setting(&ctx.conn, "jwt_secret", ctx.secret);
+    if let Err(e) = crate::local::db::run_seeds(&ctx.conn) {
+        return err(500, e.to_string());
+    }
+
+    ok(json!({ "message": "Local database cleared and defaults restored" }))
+}
+
 /// GET /api/system/stats
 pub fn get_stats(ctx: &mut Ctx) -> ApiResponse {
     let claims = match ctx.claims() {

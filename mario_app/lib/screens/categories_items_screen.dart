@@ -1,11 +1,14 @@
+// ignore_for_file: unused_local_variable
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/category.dart';
 import '../models/item.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
+import '../widgets/order_ui.dart';
 
 class CategoriesItemsScreen extends StatefulWidget {
   const CategoriesItemsScreen({super.key});
@@ -18,6 +21,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _itemSearchController = TextEditingController();
+  final TextEditingController _categorySearchController =
+      TextEditingController();
   String _selectedCategoryId = 'all';
 
   @override
@@ -32,12 +37,16 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     _itemSearchController.addListener(() {
       setState(() {});
     });
+    _categorySearchController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _itemSearchController.dispose();
+    _categorySearchController.dispose();
     super.dispose();
   }
 
@@ -56,6 +65,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     final descriptionController =
         TextEditingController(text: category?.description ?? '');
     final formKey = GlobalKey<FormState>();
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -110,8 +120,31 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
                   final auth = context.read<AuthProvider>();
                   final data = context.read<DataProvider>();
+                  final storeId = auth.currentStore?.id;
 
                   Navigator.pop(context); // Close dialog
+
+                  if (storeId == null) return;
+
+                  final ok = await data.saveCategory(
+                    existing: category,
+                    storeId: storeId,
+                    name: name,
+                    description: description,
+                  );
+
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(ok
+                          ? (category == null
+                              ? 'Category added'
+                              : 'Category updated')
+                          : (data.error ??
+                              'Failed to save category')),
+                      backgroundColor:
+                          ok ? AppColors.success : AppColors.danger,
+                    ),
+                  );
                 }
               },
               child: const Text('Save'),
@@ -137,6 +170,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
     final data = context.read<DataProvider>();
     final categories = data.categories;
+    final messenger = ScaffoldMessenger.of(context);
 
     if (categories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,7 +182,13 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
       return;
     }
 
-    String selectedCatId = item?.categoryId ?? categories.first.id;
+    String selectedCatId =
+        item != null && categories.any((c) => c.id == item.categoryId)
+            ? item.categoryId
+            : (_selectedCategoryId != 'all' &&
+                    categories.any((c) => c.id == _selectedCategoryId)
+                ? _selectedCategoryId
+                : categories.first.id);
 
     showDialog(
       context: context,
@@ -293,8 +333,34 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
                       final auth = context.read<AuthProvider>();
                       final data = context.read<DataProvider>();
+                      final storeId = auth.currentStore?.id;
 
                       Navigator.pop(context); // Close dialog
+
+                      if (storeId == null) return;
+
+                      final ok = await data.saveItem(
+                        existing: item,
+                        storeId: storeId,
+                        categoryId: selectedCatId,
+                        name: name,
+                        description: description,
+                        price: price,
+                        hsnCode: hsn,
+                        taxPercent: tax,
+                      );
+
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(ok
+                              ? (item == null
+                                  ? 'Item added'
+                                  : 'Item updated')
+                              : (data.error ?? 'Failed to save item')),
+                          backgroundColor:
+                              ok ? AppColors.success : AppColors.danger,
+                        ),
+                      );
                     }
                   },
                   child: const Text('Save'),
@@ -310,44 +376,57 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
-    const isStaff =
-        true; // Categories and items are read-only in the mobile app
+    final canManage = context.watch<AuthProvider>().canManageMenu;
+
+    final palette = context.watch<ThemeProvider>().currentTheme;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppHeader(
-        title: 'Menu List',
+        title: 'Menu',
+        actions: [
+          if (canManage)
+            HeaderIconButton(
+              icon: Icons.add_rounded,
+              tooltip: _tabController.index == 0
+                  ? 'Add category'
+                  : 'Add item',
+              onTap: () => _tabController.index == 0
+                  ? _showCategoryDialog()
+                  : _showItemDialog(),
+            ),
+        ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(76),
+          preferredSize: const Size.fromHeight(70),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Container(
-              padding: const EdgeInsets.all(6),
+              height: 58,
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
-                color: AppColors.gray200,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.65)),
-                boxShadow: ClayStyles.raisedShadow(
-                  blur: 18,
-                  darkOffset: const Offset(8, 8),
-                  lightOffset: const Offset(-6, -6),
-                ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.gray200),
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: _buildMenuTabSelector(
+                    child: _menuSegment(
                       icon: Icons.category_outlined,
                       label: 'Categories',
+                      count: data.categories.length,
                       index: 0,
+                      palette: palette,
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Expanded(
-                    child: _buildMenuTabSelector(
+                    child: _menuSegment(
                       icon: Icons.fastfood_outlined,
-                      label: 'Food Items',
+                      label: 'Items',
+                      count: data.items.length,
                       index: 1,
+                      palette: palette,
                     ),
                   ),
                 ],
@@ -359,60 +438,73 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildCategoriesTab(data, isStaff),
-          _buildItemsTab(data, isStaff),
+          _buildCategoriesTab(data),
+          _buildItemsTab(data),
         ],
       ),
-      floatingActionButton: null,
     );
   }
 
-  Widget _buildMenuTabSelector({
+  Widget _menuSegment({
     required IconData icon,
     required String label,
+    required int count,
     required int index,
+    required AppThemeOption palette,
   }) {
     final isSelected = _tabController.index == index;
+    final fg = isSelected ? Colors.white : AppColors.gray600;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      decoration: isSelected
-          ? ClayStyles.accent(
-              accent: AppColors.primary,
-              radiusValue: 20,
-              opacity: 0.16,
-            )
-          : BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: isSelected ? palette.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(999),
           onTap: () => _tabController.animateTo(index),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: isSelected ? AppColors.primary : AppColors.gray600,
-                ),
-                const SizedBox(width: 8),
+                Icon(icon, size: 19, color: fg),
+                const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight:
                           isSelected ? FontWeight.w700 : FontWeight.w600,
-                      color: isSelected ? AppColors.primary : AppColors.gray600,
+                      color: fg,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white.withOpacity(0.25)
+                        : AppColors.gray200,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          isSelected ? Colors.white : AppColors.gray700,
                     ),
                   ),
                 ),
@@ -424,10 +516,10 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     );
   }
 
-  // --- Categories List Panel ---
-  Widget _buildCategoriesTab(DataProvider data, bool isStaff) {
-    final categories = data.categories
-        .toList()
+  // --- Categories Tab ---
+  Widget _buildCategoriesTab(DataProvider data) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
+    final categories = data.categories.toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
@@ -435,175 +527,406 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
+    final canManage = context.read<AuthProvider>().canManageMenu;
+
     if (categories.isEmpty) {
       return RefreshIndicator(
+        color: palette.primary,
         onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.category_outlined,
-                    size: 64,
-                    color: AppColors.gray400,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No categories found',
-                    style: TextStyle(fontSize: 18, color: AppColors.gray600),
-                  ),
-                  if (!isStaff) ...[
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _showCategoryDialog(),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Category'),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+        child: _emptyState(
+          icon: Icons.category_outlined,
+          title: 'No categories yet',
+          subtitle: canManage
+              ? 'Add your first category to build the menu.'
+              : 'Categories added on the desktop app will appear here.',
+          actionLabel: canManage ? 'Add category' : null,
+          onAction: canManage ? _showCategoryDialog : null,
+          palette: palette,
         ),
       );
     }
 
-    final isTablet = ResponsiveHelper.isTablet(context) ||
-        ResponsiveHelper.isDesktop(context);
+    final crossAxisCount = ResponsiveHelper.isDesktop(context)
+        ? 3
+        : ResponsiveHelper.isTablet(context)
+            ? 2
+            : 1;
 
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: isTablet ? 3 : 1,
-          childAspectRatio: isTablet ? 2.5 : 3.8,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+    final catQuery = _categorySearchController.text.toLowerCase().trim();
+    final filtered = catQuery.isEmpty
+        ? categories
+        : categories
+            .where((c) =>
+                c.name.toLowerCase().contains(catQuery) ||
+                (c.description?.toLowerCase().contains(catQuery) ?? false))
+            .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _searchField(
+            controller: _categorySearchController,
+            hint: 'Search categories',
+            palette: palette,
+          ),
         ),
-        itemCount: categories.length,
-        itemBuilder: (context, index) {
-          final cat = categories[index];
-          final itemsCount =
-              data.items.where((i) => i.categoryId == cat.id).length;
-
-          return Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.category,
-                      color: AppColors.primary,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          cat.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.dark,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (cat.isFavourite) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.star,
-                                size: 14,
-                                color: Colors.amber[600],
-                              ),
-                              const SizedBox(width: 2),
-                              const Text(
-                                'Favourite',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.amber,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (cat.description != null &&
-                            cat.description!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            cat.description!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.gray600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          '$itemsCount items linked',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  catQuery.isEmpty
+                      ? '${categories.length} categories · ${data.items.length} items'
+                      : '${filtered.length} of ${categories.length} categories',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.gray600),
+                ),
               ),
+              if (catQuery.isNotEmpty)
+                TextButton(
+                  onPressed: () => _categorySearchController.clear(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: palette.primary,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Clear',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            color: palette.primary,
+            onRefresh: _refreshData,
+            child: filtered.isEmpty
+                ? _emptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'No matching categories',
+                    subtitle: 'Try a different search.',
+                    actionLabel: 'Clear search',
+                    onAction: () => _categorySearchController.clear(),
+                    palette: palette,
+                  )
+                : crossAxisCount == 1
+                    ? ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(16, 4, 16,
+                            24 + MediaQuery.of(context).padding.bottom),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final cat = filtered[index];
+                          final itemsCount = data.items
+                              .where((i) => i.categoryId == cat.id)
+                              .length;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child:
+                                _categoryCard(cat, itemsCount, palette),
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(16, 4, 16,
+                            24 + MediaQuery.of(context).padding.bottom),
+                        gridDelegate:
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          mainAxisExtent: 100,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final cat = filtered[index];
+                          final itemsCount = data.items
+                              .where((i) => i.categoryId == cat.id)
+                              .length;
+                          return _categoryCard(cat, itemsCount, palette);
+                        },
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _searchField({
+    required TextEditingController controller,
+    required String hint,
+    required AppThemeOption palette,
+  }) {
+    return TextSelectionTheme(
+      data: TextSelectionThemeData(
+        cursorColor: palette.primary,
+        selectionColor: palette.primary.withOpacity(0.25),
+        selectionHandleColor: palette.primary,
+      ),
+      child: SizedBox(
+        height: 48,
+        child: TextField(
+          controller: controller,
+          cursorColor: palette.primary,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle:
+                const TextStyle(fontSize: 14, color: AppColors.gray500),
+            prefixIcon: const Icon(Icons.search_rounded,
+                size: 20, color: AppColors.gray600),
+            suffixIcon: controller.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 18, color: AppColors.gray600),
+                    onPressed: () => controller.clear(),
+                  )
+                : null,
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: EdgeInsets.zero,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppColors.gray200),
             ),
-          );
-        },
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: palette.primary),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // --- Items List Panel with Search & Filter ---
-  Widget _buildItemsTab(DataProvider data, bool isStaff) {
-    final categories = data.categories
-        .toList()
+  Widget _cardMenu({
+    required VoidCallback onEdit,
+    required bool isFavourite,
+    required VoidCallback onToggleFavourite,
+  }) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert_rounded,
+          size: 20, color: AppColors.gray500),
+      padding: EdgeInsets.zero,
+      tooltip: 'Options',
+      onSelected: (value) {
+        if (value == 'edit') onEdit();
+        if (value == 'favourite') onToggleFavourite();
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          value: 'favourite',
+          height: 40,
+          child: Row(
+            children: [
+              Icon(
+                isFavourite
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                size: 18,
+                color: isFavourite
+                    ? Colors.amber[700]
+                    : AppColors.gray700,
+              ),
+              const SizedBox(width: 8),
+              Text(isFavourite
+                  ? 'Remove favourite'
+                  : 'Mark as favourite'),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'edit',
+          height: 40,
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 18, color: AppColors.gray700),
+              SizedBox(width: 8),
+              Text('Edit'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _toggleCategoryFavourite(Category cat) async {
+    final data = context.read<DataProvider>();
+    final ok = await data.toggleCategoryFavourite(cat);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(data.error ?? 'Failed to update favourite'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleItemFavourite(Item item) async {
+    final data = context.read<DataProvider>();
+    final ok = await data.toggleItemFavourite(item);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(data.error ?? 'Failed to update favourite'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Widget _categoryCard(Category cat, int itemsCount, AppThemeOption palette) {
+    final canManage = context.read<AuthProvider>().canManageMenu;
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          setState(() {
+            _selectedCategoryId = cat.id;
+            _itemSearchController.clear();
+          });
+          _tabController.animateTo(1);
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.gray200),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.dark.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: palette.primarySoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.category_rounded,
+                    color: palette.primary, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            cat.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.dark,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (cat.isFavourite) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.star_rounded,
+                              size: 16, color: Colors.amber[600]),
+                        ],
+                      ],
+                    ),
+                    if (cat.description != null &&
+                        cat.description!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          cat.description!,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.gray600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (!cat.isActive)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: _miniPill('Inactive', AppColors.gray200,
+                            AppColors.gray600),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$itemsCount',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                  const Text(
+                    'items',
+                    style: TextStyle(fontSize: 11, color: AppColors.gray600),
+                  ),
+                ],
+              ),
+              if (canManage) ...[
+                const SizedBox(width: 4),
+                _cardMenu(
+                  onEdit: () => _showCategoryDialog(category: cat),
+                  isFavourite: cat.isFavourite,
+                  onToggleFavourite: () => _toggleCategoryFavourite(cat),
+                ),
+              ] else ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded,
+                    size: 20, color: AppColors.gray400),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Items Tab ---
+  Widget _buildItemsTab(DataProvider data) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
+    final canManage = context.read<AuthProvider>().canManageMenu;
+    final categories = data.categories.toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
         if (af != bf) return bf - af;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
+    final categoryNames = {for (final c in data.categories) c.id: c.name};
     final query = _itemSearchController.text.toLowerCase().trim();
 
-    // Filter Items dynamically
     final filteredItems = data.items.where((item) {
       final matchesQuery = item.name.toLowerCase().contains(query) ||
           (item.description?.toLowerCase().contains(query) ?? false);
-
       final matchesCategory = _selectedCategoryId == 'all' ||
           item.categoryId == _selectedCategoryId;
-
       return matchesQuery && matchesCategory;
     }).toList()
       ..sort((a, b) {
@@ -613,294 +936,331 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
+    final filtersActive = query.isNotEmpty || _selectedCategoryId != 'all';
+    final wide =
+        ResponsiveHelper.isTablet(context) || ResponsiveHelper.isDesktop(context);
+
+    void clearFilters() {
+      setState(() {
+        _selectedCategoryId = 'all';
+        _itemSearchController.clear();
+      });
+    }
+
     return Column(
       children: [
-        // Search and Filter Bar
         Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _searchField(
+            controller: _itemSearchController,
+            hint: 'Search menu items',
+            palette: palette,
+          ),
+        ),
+        const SizedBox(height: 10),
+        CategoryChipsRow(
+          categories: categories,
+          selectedId:
+              _selectedCategoryId == 'all' ? null : _selectedCategoryId,
+          onSelected: (id) =>
+              setState(() => _selectedCategoryId = id ?? 'all'),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _itemSearchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search food or beverages...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _itemSearchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () => _itemSearchController.clear(),
-                              )
-                            : null,
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 0, horizontal: 16),
-                        fillColor: AppColors.light,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Text(
-                      'Filter: ',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.gray700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() => _selectedCategoryId = 'all');
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedCategoryId == 'all'
-                              ? AppColors.primary.withOpacity(0.2)
-                              : AppColors.gray200,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.transparent),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.dark.withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'All Categories',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: _selectedCategoryId == 'all'
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    ...categories.map((cat) {
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() => _selectedCategoryId = cat.id);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedCategoryId == cat.id
-                                  ? AppColors.primary.withOpacity(0.2)
-                                  : AppColors.gray200,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.transparent),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.dark.withOpacity(0.15),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              cat.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: _selectedCategoryId == cat.id
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+              Expanded(
+                child: Text(
+                  '${filteredItems.length} item(s)',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.gray600),
                 ),
               ),
+              if (filtersActive)
+                TextButton(
+                  onPressed: clearFilters,
+                  style: TextButton.styleFrom(
+                    foregroundColor: palette.primary,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Clear filters',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
             ],
           ),
         ),
-
-        // Items Grid/List
         Expanded(
           child: RefreshIndicator(
+            color: palette.primary,
             onRefresh: _refreshData,
             child: filteredItems.isEmpty
-                ? SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.6,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.fastfood_outlined,
-                              size: 64,
-                              color: AppColors.gray400,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              query.isNotEmpty || _selectedCategoryId != 'all'
-                                  ? 'No matching food items found'
-                                  : 'No food items added yet',
-                              style: const TextStyle(
-                                  fontSize: 16, color: AppColors.gray600),
-                            ),
-                            if (!isStaff &&
-                                query.isEmpty &&
-                                _selectedCategoryId == 'all') ...[
-                              const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: () => _showItemDialog(),
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add Food Item'),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                ? _emptyState(
+                    icon: Icons.fastfood_outlined,
+                    title: filtersActive
+                        ? 'No matching items'
+                        : 'No menu items yet',
+                    subtitle: filtersActive
+                        ? 'Try a different search or category.'
+                        : (canManage
+                            ? 'Add your first item to build the menu.'
+                            : 'Items added on the desktop app will appear here.'),
+                    actionLabel: filtersActive
+                        ? 'Clear filters'
+                        : (canManage ? 'Add item' : null),
+                    onAction: filtersActive
+                        ? clearFilters
+                        : (canManage ? _showItemDialog : null),
+                    palette: palette,
                   )
-                : ListView.builder(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    itemCount: filteredItems.length,
-                    itemBuilder: (context, index) {
-                      final item = filteredItems[index];
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: AppColors.gray200,
-                            width: 1,
-                          ),
+                : !wide
+                    ? ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(16, 4, 16,
+                            24 + MediaQuery.of(context).padding.bottom),
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _itemCard(filteredItems[index],
+                              categoryNames, palette),
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
-                            child: const Icon(
-                              Icons.restaurant_menu,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              if (item.isFavourite) ...[
-                                Icon(
-                                  Icons.star,
-                                  size: 16,
-                                  color: Colors.amber[600],
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '₹${item.price.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.gray200,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      item.categoryName ?? 'Uncategorized',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.gray700,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Tax: ${item.taxPercent}%',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.gray600,
-                                    ),
-                                  ),
-                                  if (item.hsnCode != null) ...[
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'HSN: ${item.hsnCode}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.gray600,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              if (item.description != null &&
-                                  item.description!.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  item.description!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.gray600,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          ),
-                          trailing: isStaff
-                              ? null
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                ),
+                      )
+                    : GridView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(16, 4, 16,
+                            24 + MediaQuery.of(context).padding.bottom),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisExtent: 124,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
                         ),
-                      );
-                    },
-                  ),
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) => _itemCard(
+                            filteredItems[index], categoryNames, palette),
+                      ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _itemCard(Item item, Map<String, String> categoryNames,
+      AppThemeOption palette) {
+    final canManage = context.read<AuthProvider>().canManageMenu;
+    final categoryName = item.categoryName ??
+        categoryNames[item.categoryId] ??
+        'Uncategorized';
+    final tax = item.taxPercent;
+    final taxLabel = tax == null
+        ? null
+        : 'Tax ${tax == tax.roundToDouble() ? tax.toStringAsFixed(0) : tax.toStringAsFixed(1)}%';
+
+    return Opacity(
+      opacity: item.isActive ? 1 : 0.6,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.gray200),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.dark.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            ItemThumb(item: item, size: 56),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.dark,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (item.isFavourite) ...[
+                        const SizedBox(width: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Icon(Icons.star_rounded,
+                              size: 16, color: Colors.amber[600]),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _miniPill(
+                          categoryName,
+                          palette.highlight.withOpacity(0.12),
+                          palette.highlight),
+                      if (taxLabel != null)
+                        _miniPill(
+                            taxLabel, AppColors.gray100, AppColors.gray700),
+                      if (item.hsnCode != null && item.hsnCode!.isNotEmpty)
+                        _miniPill('HSN ${item.hsnCode}', AppColors.gray100,
+                            AppColors.gray700),
+                    ],
+                  ),
+                  if (item.description != null &&
+                      item.description!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        item.description!,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.gray500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 96),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '₹${item.price.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: palette.highlight,
+                      ),
+                    ),
+                  ),
+                ),
+                if (!item.isActive)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: _miniPill('Unavailable',
+                        AppColors.danger.withOpacity(0.1), AppColors.danger,
+                        fontSize: 10, weight: FontWeight.w700),
+                  ),
+              ],
+            ),
+            if (canManage)
+              _cardMenu(
+                onEdit: () => _showItemDialog(item: item),
+                isFavourite: item.isFavourite,
+                onToggleFavourite: () => _toggleItemFavourite(item),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _miniPill(String label, Color bg, Color fg,
+      {double fontSize = 11, FontWeight weight = FontWeight.w600}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: fontSize, fontWeight: weight, color: fg),
+        maxLines: 1,
+      ),
+    );
+  }
+
+  Widget _emptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    AppThemeOption? palette,
+  }) {
+    final p = palette ?? context.watch<ThemeProvider>().currentTheme;
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.55,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: p.primarySoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 32, color: p.primary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.dark,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.gray600),
+                  textAlign: TextAlign.center,
+                ),
+                if (actionLabel != null) ...[
+                  const SizedBox(height: 14),
+                  TextButton(
+                    onPressed: onAction,
+                    style: TextButton.styleFrom(
+                        foregroundColor: p.primary),
+                    child: Text(actionLabel,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -244,6 +244,13 @@ pub fn switch_store(ctx: &mut Ctx, body: Value) -> ApiResponse {
         return err(403, "Access denied to this store");
     }
 
+    // Re-scope cloud sync to the selected store — the background worker
+    // re-snapshots when this differs from the last snapshotted store.
+    crate::local::sync::set_setting(&ctx.conn, "cloud_store_id", store_id);
+    if let Some(kick) = ctx.outbox_kick {
+        kick();
+    }
+
     match rows::get_store(&ctx.conn, store_id) {
         Ok(Some(s)) => ok(json!({ "store": s })),
         Ok(None) => err(404, "Store not found"),

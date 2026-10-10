@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
 import '../providers/theme_provider.dart';
+import '../models/user.dart';
+import '../models/app_update.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 import 'login_screen.dart';
@@ -24,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isChangingPassword = false;
+  bool _isPasswordExpanded = false;
 
   @override
   void initState() {
@@ -128,37 +131,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _refreshData() async {
-    final auth = context.read<AuthProvider>();
-    final data = context.read<DataProvider>();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    await data.loadAllData(auth);
-
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data refreshed successfully'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.user;
     final data = context.watch<DataProvider>();
     final themeProvider = context.watch<ThemeProvider>();
+    final palette = themeProvider.currentTheme;
+    final update = data.appUpdate;
+    final showUpdate = update != null &&
+        update.enabled &&
+        VersionHelper.isNewerVersion(
+            AppConstants.appVersion, update.version);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -166,510 +150,464 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'Settings',
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        padding: EdgeInsets.fromLTRB(
+            16, 8, 16, 24 + MediaQuery.of(context).padding.bottom),
         children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.cardDark, AppColors.cardDarkLight],
-              ),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 36,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    user?.name ?? 'Unknown',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user?.username ?? '',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      (user?.role ?? 'unknown')
-                          .toUpperCase()
-                          .replaceAll('_', ' '),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryLight,
-                      ),
-                    ),
-                  ),
-                  if (auth.currentStore != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      auth.currentStore!.displayName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          if (data.appUpdate != null &&
-              data.appUpdate!.enabled &&
-              VersionHelper.isNewerVersion(
-                  AppConstants.appVersion, data.appUpdate!.version))
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.system_update,
-                            color: AppColors.primary,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'New Version Available',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                              Text(
-                                'Version ${data.appUpdate!.version}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.gray500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (data.appUpdate!.releaseNotes != null &&
-                        data.appUpdate!.releaseNotes!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        data.appUpdate!.releaseNotes!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.gray600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          final url = Uri.parse(data.appUpdate!.downloadUrl);
-                          try {
-                            final launched = await launchUrl(
-                              url,
-                              mode: LaunchMode.externalApplication,
-                            );
-                            if (!launched) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: const Text(
-                                        'Could not open download URL'),
-                                    backgroundColor: AppColors.danger,
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error opening URL: $e'),
-                                  backgroundColor: AppColors.danger,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.download, size: 20),
-                        label: const Text('Download Update'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          _buildSectionTitle('Change Password'),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.dark.withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _currentPasswordController,
-                    obscureText: _obscureCurrentPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Current Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureCurrentPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureCurrentPassword = !_obscureCurrentPassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: _obscureNewPassword,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureNewPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureNewPassword = !_obscureNewPassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _confirmPasswordController,
-                    obscureText: _obscureConfirmPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirmPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isChangingPassword ? null : _changePassword,
-                      child: _isChangingPassword
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Change Password'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildSectionTitle('Appearance'),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.dark.withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Color Theme',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: AppColors.dark,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Saved for ${user?.name ?? 'this user'} on this device',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.gray500,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ...themeProvider.availableThemes.map((option) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildThemeOptionTile(
-                        option: option,
-                        isSelected: themeProvider.currentThemeId == option.id,
-                        onTap: () => themeProvider.setTheme(option.id),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildSectionTitle('Data'),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.dark.withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.refresh,
-                        color: AppColors.primary, size: 22),
-                  ),
-                  title: const Text('Refresh Data',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  subtitle: Text(
-                    '${data.tables.length} tables, ${data.items.length} items, ${data.orders.length} orders',
-                    style:
-                        const TextStyle(fontSize: 13, color: AppColors.gray500),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: AppColors.gray400),
-                  onTap: _refreshData,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildSectionTitle('App'),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.dark.withOpacity(0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                if (user?.isSuperAdmin ?? false)
-                  ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.system_update_alt,
-                          color: AppColors.primary, size: 22),
-                    ),
-                    title: const Text('App Update Management',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15)),
-                    subtitle: const Text('Manage app update notifications',
-                        style:
-                            TextStyle(fontSize: 13, color: AppColors.gray500)),
-                    trailing: const Icon(Icons.chevron_right,
-                        color: AppColors.gray400),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const AppUpdateScreen()),
-                      );
-                    },
-                  ),
-                if (user?.isSuperAdmin ?? false)
-                  const Divider(height: 1, indent: 20, endIndent: 20),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.info.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.info_outline,
-                        color: AppColors.info, size: 22),
-                  ),
-                  title: const Text('About',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  subtitle: const Text('Mario App v1.0.0',
-                      style: TextStyle(fontSize: 13, color: AppColors.gray500)),
-                ),
-                const Divider(height: 1, indent: 20, endIndent: 20),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.logout,
-                        color: AppColors.danger, size: 22),
-                  ),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(
-                        color: AppColors.danger,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15),
-                  ),
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ),
+          _card(_profileContent(user, auth.currentStore, palette)),
+          const SizedBox(height: 14),
+          if (showUpdate) ...[
+            _card(_updateContent(update, palette)),
+            const SizedBox(height: 14),
+          ],
+          _card(_passwordContent(palette)),
+          const SizedBox(height: 14),
+          _card(_appearanceContent(themeProvider)),
+          const SizedBox(height: 14),
+          _card(_supportContent(palette)),
+          const SizedBox(height: 14),
+          _card(_appContent(user, palette)),
         ],
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12),
-      child: Text(
-        title.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.gray500,
-          letterSpacing: 0.5,
+  Widget _card(Widget child) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.gray200),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.dark.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _sectionHeader({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: iconColor, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                    fontSize: 12.5, color: AppColors.gray600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- Profile card ---
+  Widget _profileContent(
+      User? user, Store? currentStore, AppThemeOption palette) {
+    return Row(
+      children: [
+        Container(
+          width: 84,
+          height: 84,
+          decoration: BoxDecoration(
+            color: palette.primarySoft,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Center(
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: palette.primaryDark,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.person_rounded,
+                  size: 32, color: Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user?.name ?? 'Unknown',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.dark,
+                  height: 1.2,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                user?.username ?? '',
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.gray600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: palette.highlight.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.workspace_premium,
+                        size: 14, color: palette.highlight),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        (user?.role ?? 'unknown')
+                            .toUpperCase()
+                            .replaceAll('_', ' '),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: palette.highlight,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (currentStore != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined,
+                        size: 14, color: AppColors.gray500),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        currentStore.displayName,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.gray600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- Update card ---
+  Widget _updateContent(AppUpdate update, AppThemeOption palette) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader(
+          icon: Icons.system_update,
+          iconColor: palette.primary,
+          title: 'New version available',
+          subtitle: 'Version ${update.version}',
+        ),
+        if (update.releaseNotes != null &&
+            update.releaseNotes!.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            update.releaseNotes!,
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.gray600),
+          ),
+        ],
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              elevation: 0,
+              backgroundColor: palette.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: () async {
+              final url = Uri.parse(update.downloadUrl);
+              try {
+                final launched = await launchUrl(
+                  url,
+                  mode: LaunchMode.externalApplication,
+                );
+                if (!launched) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content:
+                            const Text('Could not open download URL'),
+                        backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error opening URL: $e'),
+                      backgroundColor: AppColors.danger,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.download, size: 20,
+                color: Colors.white),
+            label: const Text(
+              'Download Update',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- Change Password card ---
+  Widget _passwordContent(AppThemeOption palette) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(
+              () => _isPasswordExpanded = !_isPasswordExpanded),
+          borderRadius: BorderRadius.circular(14),
+          child: Row(
+            children: [
+              Expanded(
+                child: _sectionHeader(
+                  icon: Icons.shield_outlined,
+                  iconColor: palette.highlight,
+                  title: 'Change Password',
+                  subtitle: 'Update your account password',
+                ),
+              ),
+              AnimatedRotation(
+                turns: _isPasswordExpanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.gray500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox.shrink(),
+          secondChild: _passwordForm(palette),
+          crossFadeState: _isPasswordExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 220),
+          sizeCurve: Curves.easeOutCubic,
+        ),
+      ],
+    );
+  }
+
+  Widget _passwordForm(AppThemeOption palette) {
+    return Column(
+      children: [
+        const SizedBox(height: 14),
+        _passwordField(
+          hint: 'Current Password',
+          controller: _currentPasswordController,
+          obscure: _obscureCurrentPassword,
+          onToggle: () => setState(() =>
+              _obscureCurrentPassword = !_obscureCurrentPassword),
+          palette: palette,
+        ),
+        const SizedBox(height: 10),
+        _passwordField(
+          hint: 'New Password',
+          controller: _newPasswordController,
+          obscure: _obscureNewPassword,
+          onToggle: () =>
+              setState(() => _obscureNewPassword = !_obscureNewPassword),
+          palette: palette,
+        ),
+        const SizedBox(height: 10),
+        _passwordField(
+          hint: 'Confirm New Password',
+          controller: _confirmPasswordController,
+          obscure: _obscureConfirmPassword,
+          onToggle: () => setState(
+              () => _obscureConfirmPassword = !_obscureConfirmPassword),
+          palette: palette,
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _isChangingPassword ? null : _changePassword,
+            style: ElevatedButton.styleFrom(
+              elevation: 0,
+              backgroundColor: palette.highlight,
+              disabledBackgroundColor:
+                  palette.highlight.withOpacity(0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: _isChangingPassword
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'Change Password',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _passwordField({
+    required String hint,
+    required TextEditingController controller,
+    required bool obscure,
+    required VoidCallback onToggle,
+    required AppThemeOption palette,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle:
+            const TextStyle(fontSize: 14, color: AppColors.gray500),
+        filled: true,
+        fillColor: palette.background,
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 16),
+        prefixIcon: const Icon(Icons.lock_outline,
+            size: 20, color: AppColors.gray500),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscure
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            size: 20,
+            color: AppColors.gray500,
+          ),
+          onPressed: onToggle,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: palette.primary, width: 1.5),
         ),
       ),
     );
   }
 
-  Widget _buildThemeOptionTile({
+  // --- Appearance card ---
+  Widget _appearanceContent(ThemeProvider themeProvider) {
+    return Column(
+      children: [
+        _sectionHeader(
+          icon: Icons.palette_outlined,
+          iconColor: const Color(0xFF6366F1),
+          title: 'Appearance',
+          subtitle: 'Choose a theme for the app',
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 112,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: themeProvider.availableThemes.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final option = themeProvider.availableThemes[index];
+              final isSelected =
+                  themeProvider.currentThemeId == option.id;
+              return _themeCard(
+                option: option,
+                isSelected: isSelected,
+                onTap: () => themeProvider.setTheme(option.id),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _themeCard({
     required AppThemeOption option,
     required bool isSelected,
     required VoidCallback onTap,
@@ -678,62 +616,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(14),
+          width: 128,
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isSelected
-                ? option.primarySoft.withOpacity(0.55)
-                : AppColors.gray100,
-            borderRadius: BorderRadius.circular(18),
+                ? option.primarySoft.withOpacity(0.6)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected
-                  ? option.primary.withOpacity(0.45)
-                  : Colors.white.withOpacity(0.65),
+              color:
+                  isSelected ? option.primary : AppColors.gray200,
+              width: isSelected ? 1.5 : 1,
             ),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  _buildThemeSwatch(option.primary),
-                  const SizedBox(width: 6),
-                  _buildThemeSwatch(option.primaryLight),
-                  const SizedBox(width: 6),
-                  _buildThemeSwatch(option.backgroundSecondary),
+                  _themeDot(option.primary),
+                  const SizedBox(width: 5),
+                  _themeDot(option.primaryLight),
+                  const SizedBox(width: 5),
+                  _themeDot(option.backgroundSecondary),
+                  const Spacer(),
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? option.primary
+                            : AppColors.gray400,
+                        width: isSelected ? 2 : 1.5,
+                      ),
+                    ),
+                    child: isSelected
+                        ? Center(
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: option.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
                 ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      option.label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w600,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      option.description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.gray500,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 8),
+              Text(
+                option.label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: isSelected ? option.primary : AppColors.gray400,
+              const SizedBox(height: 2),
+              Text(
+                option.description,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.gray600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -742,14 +696,186 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeSwatch(Color color) {
+  Widget _themeDot(Color color) {
     return Container(
-      width: 18,
-      height: 18,
+      width: 12,
+      height: 12,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 1.5),
+      ),
+    );
+  }
+
+  // --- Support card ---
+  Widget _supportContent(AppThemeOption palette) {
+    return Column(
+      children: [
+        _sectionHeader(
+          icon: Icons.support_agent_rounded,
+          iconColor: const Color(0xFF25D366),
+          title: 'Support',
+          subtitle: 'Get help from our support team',
+        ),
+        const SizedBox(height: 14),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.gray200),
+          ),
+          child: _appRow(
+            icon: Icons.chat_rounded,
+            color: const Color(0xFF25D366),
+            title: 'WhatsApp Support',
+            subtitle: 'Chat with us on WhatsApp',
+            onTap: _launchWhatsAppSupport,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _launchWhatsAppSupport() async {
+    const number = '918129490227';
+    final whatsappUri = Uri.parse('whatsapp://send?phone=$number');
+    final fallbackUri = Uri.parse('https://wa.me/$number');
+    if (await canLaunchUrl(whatsappUri)) {
+      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+    } else if (await canLaunchUrl(fallbackUri)) {
+      await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open WhatsApp'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  // --- App card ---
+  Widget _appContent(User? user, AppThemeOption palette) {
+    final isSuperAdmin = user?.isSuperAdmin ?? false;
+    final rows = <Widget>[
+      if (isSuperAdmin)
+        _appRow(
+          icon: Icons.system_update_alt,
+          color: palette.primary,
+          title: 'App Update Management',
+          subtitle: 'Manage app update notifications',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const AppUpdateScreen()),
+            );
+          },
+        ),
+      _appRow(
+        icon: Icons.info_outline,
+        color: AppColors.info,
+        title: 'About',
+        subtitle: 'Mario App v${AppConstants.appVersion}',
+        showChevron: false,
+      ),
+      _appRow(
+        icon: Icons.logout,
+        color: AppColors.danger,
+        title: 'Logout',
+        titleColor: AppColors.danger,
+        subtitle: 'Sign out from this device',
+        onTap: _logout,
+      ),
+    ];
+
+    return Column(
+      children: [
+        _sectionHeader(
+          icon: Icons.settings_rounded,
+          iconColor: AppColors.info,
+          title: 'App',
+          subtitle: 'App information and account actions',
+        ),
+        const SizedBox(height: 14),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.gray200),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0)
+                  const Divider(
+                      height: 1, color: AppColors.gray200),
+                rows[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _appRow({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    VoidCallback? onTap,
+    bool showChevron = true,
+    Color titleColor = AppColors.dark,
+  }) {
+    final row = Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: titleColor,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.gray500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (showChevron)
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.gray400, size: 20),
+        ],
+      ),
+    );
+
+    if (onTap == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: row,
       ),
     );
   }

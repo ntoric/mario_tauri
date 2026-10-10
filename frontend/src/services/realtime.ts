@@ -20,3 +20,20 @@ export const listenTableStatusUpdates = (
     }
   });
 };
+
+export interface SyncDataChanged {
+  type: string;
+  storeId: string;
+}
+
+// Fired by the background sync worker after cloud-originated changes are
+// applied to the local DB (menu, categories, tables, users, ...), and after a
+// manual sync. Subscribers should re-read data — the in-memory cache would
+// otherwise keep serving stale copies.
+export const listenSyncDataChanged = (onUpdate: () => void): Promise<UnlistenFn> => {
+  return listen<SyncDataChanged>('sync_data_changed', (event) => {
+    if (event.payload?.type === 'sync_data_changed') {
+      onUpdate();
+    }
+  });
+};

@@ -17,6 +17,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::Emitter;
 
 use super::api::{self, json_to_sql, ApiRequest};
 use super::auth;
@@ -24,10 +25,21 @@ use super::LocalBackend;
 
 /// Default cloud backend. Overridable via the `MARIO_CLOUD_URL` env var
 /// (highest priority) or the `cloud_base_url` global setting.
-const DEFAULT_CLOUD_BASE: &str = "https://mario-api.ntoric.com";
+const DEFAULT_CLOUD_BASE: &str = "https://mario-v2-backend.ntoric.com";
+
+/// Debug builds (`tauri dev`) talk to a locally running backend by default.
+const DEV_CLOUD_BASE: &str = "http://localhost:8088";
+
+fn default_cloud_base() -> &'static str {
+    if cfg!(debug_assertions) {
+        DEV_CLOUD_BASE
+    } else {
+        DEFAULT_CLOUD_BASE
+    }
+}
 
 /// `MARIO_CLOUD_URL` env var — per-run override of the cloud backend.
-/// e.g. `MARIO_CLOUD_URL=http://localhost:8080 npm run tauri:dev`, or
+/// e.g. `MARIO_CLOUD_URL=http://localhost:8088 npm run tauri:dev`, or
 /// `MARIO_CLOUD_URL=local` for an offline-only run.
 fn env_cloud_url() -> Option<String> {
     std::env::var("MARIO_CLOUD_URL")
@@ -67,7 +79,7 @@ fn cloud_base(conn: &Connection) -> String {
     }
     get_setting(conn, "cloud_base_url")
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| DEFAULT_CLOUD_BASE.to_string())
+        .unwrap_or_else(|| default_cloud_base().to_string())
         .trim_end_matches('/')
         .to_string()
 }
@@ -90,8 +102,10 @@ pub fn clear_session(conn: &Connection) {
 }
 
 /// Read the persisted login session for the `get_stored_session` Tauri
-/// command. Returns null when there is no session or the token no longer
-/// verifies (e.g. after logout or a secret rotation).
+/// command. Returns null when there is no session, the token no longer
+/// verifies (e.g. after logout or a secret rotation), or the session's user
+/// no longer exists / is inactive — a dead session is cleared rather than
+/// resurrected, which would loop the frontend through failed requests.
 pub fn stored_session(state: &LocalBackend) -> Value {
     state.ensure_db_current();
     let conn = state.conn.lock().unwrap();
@@ -100,7 +114,22 @@ pub fn stored_session(state: &LocalBackend) -> Value {
     if token.is_empty() || user_json.is_empty() {
         return Value::Null;
     }
-    if auth::verify_token(&token, &state.jwt_secret).is_none() {
+    let claims = match auth::verify_token(&token, &state.jwt_secret) {
+        Some(c) => c,
+        None => {
+            clear_session(&conn);
+            return Value::Null;
+        }
+    };
+    let user_active: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1 AND is_active = 1)",
+            [&claims.id],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if !user_active {
+        clear_session(&conn);
         return Value::Null;
     }
     json!({
@@ -191,7 +220,22 @@ pub fn cache_cloud_session(
     set_setting(conn, "cloud_password", password);
     set_setting(conn, "cloud_user_id", user["id"].as_str().unwrap_or(""));
     set_setting(conn, "cloud_role", user["role"].as_str().unwrap_or("staff"));
-    set_setting(conn, "cloud_store_id", user["storeId"].as_str().unwrap_or(""));
+    // superadmin/business_owner have no storeId — they carry a `stores` list
+    // instead. Fall back to its first entry so the store scope is never empty
+    // (an empty scope would leave pull_snapshot/pull_events permanently idle).
+    let store_id = user["storeId"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            user["stores"]
+                .as_array()
+                .and_then(|stores| stores.first())
+                .and_then(|s| s["id"].as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    set_setting(conn, "cloud_store_id", &store_id);
 
     // Stores first — users.store_id and user_stores reference them.
     if let Some(stores) = user["stores"].as_array() {
@@ -511,19 +555,44 @@ fn upsert_user(conn: &Connection, row: &Value) {
 // Snapshot pull — refresh a store's data from cloud into the local DB
 // ---------------------------------------------------------------------------
 
-async fn cloud_get(state: &LocalBackend, base: &str, token: &str, path: &str) -> Option<Value> {
-    let resp = state
-        .http
-        .get(format!("{}{}", base, path))
-        .bearer_auth(token)
-        .timeout(REQ_TIMEOUT)
-        .send()
-        .await
-        .ok()?;
-    if resp.status().as_u16() != 200 {
-        return None;
+/// GET a cloud endpoint with bearer auth. On 401 the cached token is
+/// discarded and a fresh cloud login is attempted once (the cached token is
+/// trusted blindly by `ensure_cloud_token`, so without this an expired token
+/// would silently fail every collection fetch).
+async fn cloud_get(
+    state: &LocalBackend,
+    base: &str,
+    token: &mut String,
+    path: &str,
+) -> Option<Value> {
+    let mut retried = false;
+    loop {
+        let resp = state
+            .http
+            .get(format!("{}{}", base, path))
+            .bearer_auth(&*token)
+            .timeout(REQ_TIMEOUT)
+            .send()
+            .await
+            .ok()?;
+        let status = resp.status().as_u16();
+        if status == 401 && !retried {
+            retried = true;
+            {
+                let conn = state.conn.lock().unwrap();
+                clear_cloud_token(&conn);
+            }
+            match ensure_cloud_token(state).await {
+                Some(t) => *token = t,
+                None => return None,
+            }
+            continue;
+        }
+        if status != 200 {
+            return None;
+        }
+        return resp.json().await.ok();
     }
-    resp.json().await.ok()
 }
 
 /// Pull the full dataset for the logged-in store from cloud into SQLite.
@@ -537,7 +606,7 @@ pub async fn pull_snapshot(state: &LocalBackend) -> Result<(), String> {
     if store_id.is_empty() {
         return Err("no store selected".to_string());
     }
-    let Some(token) = ensure_cloud_token(state).await else {
+    let Some(mut token) = ensure_cloud_token(state).await else {
         return Err("cloud unreachable".to_string());
     };
 
@@ -545,7 +614,7 @@ pub async fn pull_snapshot(state: &LocalBackend) -> Result<(), String> {
     // on the cloud after this point is picked up by incremental event pulls,
     // so the snapshot can't silently miss it.
     let cursor = if last_seq(state).is_none() {
-        cloud_get(state, &base, &token, "/api/sync/events?since=-1&storeId=")
+        cloud_get(state, &base, &mut token, "/api/sync/events?since=-1&storeId=")
             .await
             .and_then(|v| v["latest"].as_i64())
     } else {
@@ -556,17 +625,17 @@ pub async fn pull_snapshot(state: &LocalBackend) -> Result<(), String> {
     let sid = enc(&store_id);
 
     // Fetch all collections first (network), then write under one DB lock.
-    let store = cloud_get(state, &base, &token, &format!("/api/stores/{}", sid)).await;
-    let categories = cloud_get(state, &base, &token, &format!("/api/categories?storeId={}", sid)).await;
-    let items = cloud_get(state, &base, &token, &format!("/api/items?storeId={}", sid)).await;
-    let tables = cloud_get(state, &base, &token, &format!("/api/tables?storeId={}", sid)).await;
-    let sections = cloud_get(state, &base, &token, &format!("/api/tables/sections?storeId={}", sid)).await;
-    let orders = cloud_get(state, &base, &token, &format!("/api/orders?storeId={}", sid)).await;
-    let bills = cloud_get(state, &base, &token, &format!("/api/bills?storeId={}", sid)).await;
-    let bill_queue = cloud_get(state, &base, &token, &format!("/api/bills/queue?storeId={}", sid)).await;
-    let expense_cats = cloud_get(state, &base, &token, &format!("/api/expense-categories?storeId={}", sid)).await;
-    let expenses = cloud_get(state, &base, &token, &format!("/api/expenses?storeId={}", sid)).await;
-    let users = cloud_get(state, &base, &token, "/api/users").await;
+    let store = cloud_get(state, &base, &mut token, &format!("/api/stores/{}", sid)).await;
+    let categories = cloud_get(state, &base, &mut token, &format!("/api/categories?storeId={}", sid)).await;
+    let items = cloud_get(state, &base, &mut token, &format!("/api/items?storeId={}", sid)).await;
+    let tables = cloud_get(state, &base, &mut token, &format!("/api/tables?storeId={}", sid)).await;
+    let sections = cloud_get(state, &base, &mut token, &format!("/api/tables/sections?storeId={}", sid)).await;
+    let orders = cloud_get(state, &base, &mut token, &format!("/api/orders?storeId={}", sid)).await;
+    let bills = cloud_get(state, &base, &mut token, &format!("/api/bills?storeId={}", sid)).await;
+    let bill_queue = cloud_get(state, &base, &mut token, &format!("/api/bills/queue?storeId={}", sid)).await;
+    let expense_cats = cloud_get(state, &base, &mut token, &format!("/api/expense-categories?storeId={}", sid)).await;
+    let expenses = cloud_get(state, &base, &mut token, &format!("/api/expenses?storeId={}", sid)).await;
+    let users = cloud_get(state, &base, &mut token, "/api/users").await;
 
     // Item expenses are per-item on the API.
     let mut item_expenses: Vec<Value> = Vec::new();
@@ -576,7 +645,7 @@ pub async fn pull_snapshot(state: &LocalBackend) -> Result<(), String> {
                 if let Some(v) = cloud_get(
                     state,
                     &base,
-                    &token,
+                    &mut token,
                     &format!("/api/items/{}/expenses", enc(iid)),
                 )
                 .await
@@ -621,6 +690,9 @@ pub async fn pull_snapshot(state: &LocalBackend) -> Result<(), String> {
         apply(&expense_cats, &|c, r| upsert_row(c, "expense_categories", r, EXPENSE_CAT_COLS, &[]));
         apply(&expenses, &|c, r| upsert_row(c, "expenses", r, EXPENSE_COLS, &[]));
         set_setting(&conn, "cloud_last_snapshot", &super::db::now_ts());
+        // Remember which store this snapshot covered — a store switch makes
+        // the next sync cycle re-snapshot for the new scope.
+        set_setting(&conn, "cloud_snapshot_store", &store_id);
         // Start the event cursor at the position captured before the fetch so
         // later changes flow in incrementally (and history isn't replayed).
         if let Some(latest) = cursor {
@@ -723,9 +795,27 @@ async fn push_outbox(state: &LocalBackend, token: &mut String, base: &str) {
                     eprintln!("[sync] /sync/apply not available on backend — events stay queued");
                     return;
                 }
-                Ok(_) => {
-                    // Applied-but-failed or rejected — count the attempt; the
+                Ok(r) => {
+                    // sync/apply wraps the replayed request's outcome in
+                    // `status`. Permanent rejections (outer 4xx, or the
+                    // replayed request itself 4xx'd) count an attempt and the
                     // event is dead-lettered after MAX_PUSH_ATTEMPTS.
+                    // Transient failures — inner 5xx, or an unreadable body
+                    // (gateway/proxy error) — leave the event queued at full
+                    // attempts so it retries every cycle until the backend
+                    // recovers; the app must not lose queued changes because
+                    // the cloud had a bad minute.
+                    let outer = r.status().as_u16();
+                    let inner = r
+                        .json::<Value>()
+                        .await
+                        .ok()
+                        .and_then(|b| b["status"].as_i64());
+                    let permanent = (400..500).contains(&outer)
+                        || inner.map(|s| (400..500).contains(&s)).unwrap_or(false);
+                    if !permanent {
+                        return; // transient — retry next cycle
+                    }
                     let conn = state.conn.lock().unwrap();
                     let _ = conn.execute(
                         "UPDATE sync_outbox SET attempts = attempts + 1 WHERE id = ?1",
@@ -815,6 +905,7 @@ async fn pull_events(
     // Cloud-originated replays fan out to the desktop UI + LAN clients just
     // like local edits do.
     let broadcast = |sid: &str, reason: &str| api::notify(app, state, sid, reason);
+    let mut applied_count = 0u32;
     for ev in events {
         let seq = ev["seq"].as_i64().unwrap_or(0);
         let method = ev["method"].as_str().unwrap_or("").to_string();
@@ -875,6 +966,7 @@ async fn pull_events(
                 }
             } else {
                 applied = true;
+                applied_count += 1;
             }
         }
         // Record the event's ORIGIN time so ordering compares when the change
@@ -889,6 +981,16 @@ async fn pull_events(
             let conn = state.conn.lock().unwrap();
             set_setting(&conn, "cloud_last_seq", &seq.to_string());
         }
+    }
+
+    // Tell the desktop UI to re-read the local DB — pulled changes (menu,
+    // categories, users, ...) don't all emit table_status_update, and the
+    // frontend cache would otherwise keep serving stale data.
+    if applied_count > 0 {
+        let _ = app.emit(
+            "sync_data_changed",
+            json!({ "type": "sync_data_changed", "storeId": store_id }),
+        );
     }
 }
 
@@ -936,17 +1038,23 @@ pub fn start(state: Arc<LocalBackend>, app: tauri::AppHandle) {
 
 async fn sync_cycle(state: &Arc<LocalBackend>, app: &tauri::AppHandle) {
     state.ensure_db_current();
-    let (base, store_id, has_creds) = {
+    let (base, store_id, has_creds, needs_snapshot) = {
         let conn = state.conn.lock().unwrap();
         if local_only_mode(&conn) {
             return; // cloud disabled — nothing to sync
         }
+        let store_id = get_setting(&conn, "cloud_store_id").unwrap_or_default();
+        let cursor_init = get_setting(&conn, "cloud_last_seq")
+            .filter(|s| !s.is_empty())
+            .is_some();
+        let snapshot_store = get_setting(&conn, "cloud_snapshot_store").unwrap_or_default();
         (
             cloud_base(&conn),
-            get_setting(&conn, "cloud_store_id").unwrap_or_default(),
+            store_id.clone(),
             !get_setting(&conn, "cloud_username")
                 .unwrap_or_default()
                 .is_empty(),
+            !cursor_init || (!store_id.is_empty() && snapshot_store != store_id),
         )
     };
     if !has_creds {
@@ -959,6 +1067,82 @@ async fn sync_cycle(state: &Arc<LocalBackend>, app: &tauri::AppHandle) {
 
     push_outbox(state, &mut token, &base).await;
     if !store_id.is_empty() {
+        // No usable snapshot yet (first run, a failed earlier attempt, or the
+        // synced store changed): pull the full dataset first. Without this
+        // the event cursor never initializes and pull_events stays a no-op.
+        if needs_snapshot {
+            match pull_snapshot(state).await {
+                Ok(()) => {
+                    let _ = app.emit(
+                        "sync_data_changed",
+                        json!({ "type": "sync_data_changed", "storeId": store_id }),
+                    );
+                }
+                Err(e) => eprintln!("[sync] snapshot pull failed: {}", e),
+            }
+        }
         pull_events(state, &mut token, &base, &store_id, app).await;
     }
+}
+
+/// Manual sync triggered from the UI's sync button: pushes the pending
+/// outbox, refreshes the full snapshot for `store_id` (or the currently
+/// scoped store), then drains incremental events. `store_id` re-scopes the
+/// sync target so the button always refreshes the store the user is viewing.
+pub async fn sync_now(
+    state: &Arc<LocalBackend>,
+    app: &tauri::AppHandle,
+    store_id: Option<String>,
+) -> Result<Value, String> {
+    state.ensure_db_current();
+    {
+        let conn = state.conn.lock().unwrap();
+        if local_only_mode(&conn) {
+            return Err("Cloud sync is disabled (local-only mode)".to_string());
+        }
+        if let Some(sid) = store_id.filter(|s| !s.is_empty()) {
+            set_setting(&conn, "cloud_store_id", &sid);
+        }
+        if get_setting(&conn, "cloud_username")
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return Err("No cloud account is signed in on this device".to_string());
+        }
+    }
+    let base = {
+        let conn = state.conn.lock().unwrap();
+        cloud_base(&conn)
+    };
+    let mut token = ensure_cloud_token(state)
+        .await
+        .ok_or_else(|| "Cannot reach the cloud server".to_string())?;
+
+    push_outbox(state, &mut token, &base).await;
+    pull_snapshot(state).await?;
+    let sid = {
+        let conn = state.conn.lock().unwrap();
+        get_setting(&conn, "cloud_store_id").unwrap_or_default()
+    };
+    if !sid.is_empty() {
+        pull_events(state, &mut token, &base, &sid, app).await;
+    }
+    let pending: i64 = {
+        let conn = state.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM sync_outbox WHERE pushed = 0 AND attempts < ?1",
+            [MAX_PUSH_ATTEMPTS],
+            |r| r.get(0),
+        )
+        .unwrap_or(0)
+    };
+    let _ = app.emit(
+        "sync_data_changed",
+        json!({ "type": "sync_data_changed", "storeId": sid }),
+    );
+    Ok(json!({
+        "message": "Sync complete",
+        "storeId": sid,
+        "pendingPush": pending,
+    }))
 }

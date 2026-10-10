@@ -4,16 +4,25 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:ui';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/item.dart';
 import '../models/order.dart';
 import '../models/category.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
+import '../widgets/order_ui.dart';
 
 class ParcelOrderScreen extends StatefulWidget {
   final VoidCallback? onOrderSuccess;
+  final bool showBack;
+  final List<OrderItem>? initialItems;
 
-  const ParcelOrderScreen({super.key, this.onOrderSuccess});
+  const ParcelOrderScreen({
+    super.key,
+    this.onOrderSuccess,
+    this.showBack = false,
+    this.initialItems,
+  });
 
   @override
   State<ParcelOrderScreen> createState() => _ParcelOrderScreenState();
@@ -36,6 +45,9 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialItems != null) {
+      _orderItems.addAll(widget.initialItems!);
+    }
     _fetchCategoriesAndItems();
   }
 
@@ -243,11 +255,125 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
     }
   }
 
+  int get _itemCount =>
+      _orderItems.fold<int>(0, (sum, item) => sum + item.quantity);
+
+  int _quantityFor(String itemId) {
+    for (final orderItem in _orderItems) {
+      if (orderItem.itemId == itemId) return orderItem.quantity;
+    }
+    return 0;
+  }
+
+  String _categoryNameFor(Item item, List<Category> categories) {
+    if (item.categoryName != null && item.categoryName!.isNotEmpty) {
+      return item.categoryName!;
+    }
+    for (final category in categories) {
+      if (category.id == item.categoryId) return category.name;
+    }
+    return 'Uncategorized';
+  }
+
+  Future<void> _confirmClearAll({VoidCallback? onCleared}) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear all items?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _orderItems.clear());
+      onCleared?.call();
+    }
+  }
+
+  void _openOrderSummary() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SizedBox(
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: _buildOrderItemsPanel(
+            showHandle: true,
+            onMutated: () => setSheetState(() {}),
+            onClearAll: () => _confirmClearAll(
+              onCleared: () => Navigator.pop(sheetContext),
+            ),
+            onAddMore: () => Navigator.pop(sheetContext),
+            onAction: _orderItems.isEmpty
+                ? null
+                : () {
+                    Navigator.pop(sheetContext);
+                    _showCustomerDetailsDialog();
+                  },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderItemsPanel({
+    required bool showHandle,
+    VoidCallback? onMutated,
+    VoidCallback? onClearAll,
+    VoidCallback? onAddMore,
+    VoidCallback? onAction,
+  }) {
+    return OrderItemsPanel(
+      items: _orderItems,
+      subtitle: '$_itemCount items • Parcel Order',
+      subtotal: _subtotal,
+      tax: _taxAmount,
+      total: _total,
+      actionLabel: 'Create Order',
+      onIncrement: (item) {
+        _addItem(item);
+        onMutated?.call();
+      },
+      onDecrement: (itemId) {
+        _removeItem(itemId);
+        onMutated?.call();
+      },
+      onDelete: (itemId) {
+        _deleteItem(itemId);
+        onMutated?.call();
+      },
+      onClearAll: onClearAll ??
+          () => _confirmClearAll(
+                onCleared: () => setState(() => _showSummary = false),
+              ),
+      onAddMore: onAddMore ?? () => setState(() => _showSummary = false),
+      onAction:
+          onAction ?? (_orderItems.isEmpty ? null : _showCustomerDetailsDialog),
+      isSaving: _isSaving,
+      showHandle: showHandle,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     final data = context.watch<DataProvider>();
-    final categories = data.categories
-        .toList()
+    final categories = data.categories.toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
@@ -268,55 +394,137 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
-    final isTablet = ResponsiveHelper.isTablet(context) ||
+    final isWide = ResponsiveHelper.isTablet(context) ||
         ResponsiveHelper.isDesktop(context);
+
+    final itemsList = Column(
+      children: [
+        SafeArea(
+          bottom: false,
+          child: ScreenHeader(
+            title: 'Parcel order',
+            showBack: widget.showBack,
+            subtitle: auth.currentStore?.displayName,
+            showSubtitleChevron: true,
+            onSubtitleTap: () => AppHeader.showStoreSwitcher(context),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: OrderSearchField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+          ),
+        ),
+        if (categories.isNotEmpty)
+          CategoryChipsRow(
+            categories: categories,
+            selectedId: _selectedCategoryId,
+            onSelected: (id) => setState(() => _selectedCategoryId = id),
+          ),
+        Expanded(
+          child: _isLoadingItems
+              ? const Center(child: CircularProgressIndicator())
+              : items.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.fastfood_outlined,
+                            size: 64,
+                            color: AppColors.gray400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _searchQuery.isNotEmpty ||
+                                    _selectedCategoryId != null
+                                ? 'No matching items found'
+                                : 'No items available',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: AppColors.gray600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16,
+                          16 + MediaQuery.of(context).padding.bottom),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return MenuItemCard(
+                          item: item,
+                          categoryName: _categoryNameFor(item, categories),
+                          quantity: _quantityFor(item.id),
+                          onAdd: () => _addItem(item),
+                          onRemove: () => _removeItem(item.id),
+                          enabled: !_isSaving,
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: const AppHeader(
-        title: 'Parcel Order',
-      ),
-      body: Stack(
-        children: [
-          // Menu Items Section
-          Positioned.fill(
-            child: _buildItemsSection(categories, items),
-          ),
-
-          // Glassmorphic Backdrop Blur
-          if (_showSummary)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showSummary = false;
-                  });
-                },
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 250),
-                  builder: (context, value, child) {
-                    return Container(
-                      color: Colors.black.withOpacity(0.3 * value),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(
-                          sigmaX: 5.0 * value,
-                          sigmaY: 5.0 * value,
-                        ),
-                        child: const SizedBox.expand(),
+      extendBody: true,
+      body: isWide
+          ? Stack(
+              children: [
+                Positioned.fill(child: itemsList),
+                if (_showSummary)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showSummary = false),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 250),
+                        builder: (context, value, child) {
+                          return Container(
+                            color: Colors.black.withOpacity(0.3 * value),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(
+                                sigmaX: 5.0 * value,
+                                sigmaY: 5.0 * value,
+                              ),
+                              child: const SizedBox.expand(),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOutCubic,
+                  right: _showSummary ? 0 : -420,
+                  top: 0,
+                  bottom: 0,
+                  width: 400,
+                  child: _buildOrderItemsPanel(showHandle: false),
                 ),
-              ),
+              ],
+            )
+          : itemsList,
+      bottomNavigationBar: _orderItems.isEmpty
+          ? null
+          : CartSummaryBar(
+              count: _itemCount,
+              total: _total,
+              actionLabel: 'Create order',
+              isSaving: _isSaving,
+              onOpenCart: () {
+                if (isWide) {
+                  setState(() => _showSummary = true);
+                } else {
+                  _openOrderSummary();
+                }
+              },
+              onAction: _isSaving ? null : _showCustomerDetailsDialog,
             ),
-
-          // Sliding collapsible summary panel
-          _buildSlidingSummaryPanel(isTablet),
-        ],
-      ),
-      floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
@@ -325,7 +533,9 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       context: context,
       barrierDismissible: !_isSaving,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (context, setDialogState) {
+          final palette = context.watch<ThemeProvider>().currentTheme;
+          return AlertDialog(
           title: const Text('Customer Details'),
           content: SingleChildScrollView(
             child: Column(
@@ -336,7 +546,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: palette.primary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -351,10 +561,10 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                       ),
                       Text(
                         '₹${_total.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: palette.primary,
                         ),
                       ),
                     ],
@@ -408,7 +618,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                               setDialogState(() => _paymentMethod = value!);
                               setState(() => _paymentMethod = value!);
                             },
-                      activeColor: AppColors.primary,
+                      activeColor: palette.primary,
                     ),
                     RadioListTile<String>(
                       title: const Text('Card'),
@@ -420,7 +630,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                               setDialogState(() => _paymentMethod = value!);
                               setState(() => _paymentMethod = value!);
                             },
-                      activeColor: AppColors.primary,
+                      activeColor: palette.primary,
                     ),
                     RadioListTile<String>(
                       title: const Text('UPI'),
@@ -432,7 +642,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                               setDialogState(() => _paymentMethod = value!);
                               setState(() => _paymentMethod = value!);
                             },
-                      activeColor: AppColors.primary,
+                      activeColor: palette.primary,
                     ),
                   ],
                 ),
@@ -467,598 +677,13 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   : const Icon(Icons.check_circle_outline, size: 20),
               label: Text(_isSaving ? 'Processing...' : 'Submit'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: palette.primary,
                 foregroundColor: Colors.white,
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget? _buildFloatingActionButton() {
-    final count = _orderItems.fold<int>(0, (sum, item) => sum + item.quantity);
-    if (count == 0 && !_showSummary) return null;
-
-    return FloatingActionButton(
-      onPressed: () {
-        setState(() {
-          _showSummary = !_showSummary;
-        });
-      },
-      backgroundColor: AppColors.primary,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Icon(
-            _showSummary ? Icons.close : Icons.shopping_cart,
-            color: Colors.white,
-            size: 26,
-          ),
-          if (count > 0 && !_showSummary)
-            Positioned(
-              right: -6,
-              top: -6,
-              child: AnimatedScale(
-                scale: count > 0 ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.danger,
-                    shape: BoxShape.circle,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 20,
-                    minHeight: 20,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$count',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget? _buildBottomNavigationBar() {
-    if (_orderItems.isEmpty) return null;
-
-    final count = _orderItems.fold<int>(0, (sum, item) => sum + item.quantity);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total ($count ${count == 1 ? 'item' : 'items'})',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.gray600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '₹${_total.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              ElevatedButton.icon(
-                onPressed: _isSaving ? null : _showCustomerDetailsDialog,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.shopping_bag, size: 20),
-                label: const Text('Create Order'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  elevation: 2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSlidingSummaryPanel(bool isWideScreen) {
-    if (isWideScreen) {
-      // Right slide-in sidebar panel for tablets and desktops
-      return AnimatedPositioned(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutCubic,
-        right: _showSummary ? 0 : -420,
-        top: 0,
-        bottom: 0,
-        width: 400,
-        child: Card(
-          margin: EdgeInsets.zero,
-          elevation: 16,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
-          ),
-          child: ClipRRect(
-            borderRadius:
-                const BorderRadius.horizontal(left: Radius.circular(20)),
-            child: _buildOrderSummaryContent(),
-          ),
-        ),
-      );
-    } else {
-      // Bottom slide-up panel for mobile screens
-      return AnimatedPositioned(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutCubic,
-        left: 0,
-        right: 0,
-        bottom: _showSummary ? 0 : -MediaQuery.of(context).size.height,
-        height: MediaQuery.of(context).size.height * 0.75,
-        child: Card(
-          margin: EdgeInsets.zero,
-          elevation: 16,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.gray400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: _buildOrderSummaryContent(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget _buildOrderSummaryContent() {
-    return Column(
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              const Text(
-                'Order Items',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${_orderItems.length} items',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.gray600,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const Divider(height: 1),
-
-        // Order Items List
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: _orderItems.length,
-            itemBuilder: (context, index) {
-              final orderItem = _orderItems[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              orderItem.item.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${orderItem.item.price.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                color: AppColors.gray600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () => _removeItem(orderItem.itemId),
-                            iconSize: 24,
-                          ),
-                          Text(
-                            '${orderItem.quantity}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () => _addItem(orderItem.item),
-                            iconSize: 24,
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deleteItem(orderItem.itemId),
-                            iconSize: 24,
-                            color: AppColors.danger,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        // Total Summary
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.light,
-            border: Border(
-              top: BorderSide(color: AppColors.gray200),
-            ),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Subtotal'),
-                  Text('₹${_subtotal.toStringAsFixed(2)}'),
-                ],
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Tax'),
-                  Text('₹${_taxAmount.toStringAsFixed(2)}'),
-                ],
-              ),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Total',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  Text(
-                    '₹${_total.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildItemsSection(List<Category> categories, List<Item> items) {
-    if (_isLoadingItems) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return Column(
-      children: [
-        // Search Bar
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
-            onChanged: (value) => setState(() => _searchQuery = value),
-            decoration: InputDecoration(
-              hintText: 'Search items...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(() => _searchQuery = ''),
-                    )
-                  : null,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 12,
-                horizontal: 16,
-              ),
-              fillColor: AppColors.light,
-              filled: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ),
-
-        // Category Filter
-        if (categories.isNotEmpty)
-          SizedBox(
-            height: 50,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                _buildCategoryChip(
-                  label: 'All',
-                  isSelected: _selectedCategoryId == null,
-                  onTap: () {
-                    setState(() => _selectedCategoryId = null);
-                  },
-                ),
-                const SizedBox(width: 8),
-                ...categories.map((cat) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _buildCategoryChip(
-                      label: cat.name,
-                      isSelected: _selectedCategoryId == cat.id,
-                      onTap: () {
-                        setState(() {
-                          _selectedCategoryId =
-                              _selectedCategoryId == cat.id ? null : cat.id;
-                        });
-                      },
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-
-        const SizedBox(height: 8),
-
-        // Items List
-        Expanded(
-          child: items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.fastfood_outlined,
-                        size: 64,
-                        color: AppColors.gray400,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _searchQuery.isNotEmpty || _selectedCategoryId != null
-                            ? 'No matching items found'
-                            : 'No items available',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: AppColors.gray600,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final category = categories.firstWhere(
-                      (cat) => cat.id == item.categoryId,
-                      orElse: () => Category(
-                          id: '',
-                          name: 'Uncategorized',
-                          storeId: '',
-                          isActive: true),
-                    );
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: InkWell(
-                        onTap: () => _addItem(item),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              if (item.isFavourite) ...[
-                                Icon(
-                                  Icons.star,
-                                  size: 16,
-                                  color: Colors.amber[600],
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            AppColors.primary.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        category.name,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.primary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '₹${item.price.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  fontSize: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.add_circle_outline,
-                                color: AppColors.primary,
-                                size: 28,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCategoryChip({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          alignment: Alignment.center,
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primary.withOpacity(0.2)
-                : AppColors.gray200,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.transparent),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.dark.withOpacity(0.15),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

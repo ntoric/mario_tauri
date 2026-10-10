@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { invoke } from '@tauri-apps/api/core';
-import toast from 'react-hot-toast';
+import { useUIStore } from '../stores/uiStore';
 
 interface LocalApiResponse {
   status: number;
@@ -62,14 +62,21 @@ class ApiService {
     if (resp.status >= 400) {
       console.error(`[API ERROR] ${method} ${endpoint} -> ${resp.status}`, resp.body);
       if (resp.status === 401 && !skipAuthRedirect) {
-        this.clearToken();
-        toast.error('Session expired. Please sign in again.');
-        window.location.replace('/#/login');
+        this.handleUnauthorized();
       }
       throw new Error(resp.body?.error || `Request failed (${resp.status})`);
     }
 
     return resp.body;
+  }
+
+  // A 401 means the session is dead (invalid/expired token, or the user was
+  // deactivated or removed). Surface the blocking Session Expired screen —
+  // the token is only cleared when the user explicitly signs out there.
+  // Requests failing while already on the login screen don't retrigger it.
+  private handleUnauthorized() {
+    if (window.location.hash.startsWith('#/login')) return;
+    useUIStore.getState().setSessionExpired(true);
   }
 
   // Auth
@@ -94,7 +101,9 @@ class ApiService {
     // Ends the server-side sync session (clears cached cloud credentials).
     // Best-effort — the app must be able to log out while offline.
     try {
-      await this.fetch('/auth/logout', { method: 'POST' });
+      // skipAuthRedirect: a failed logout must not retrigger the
+      // session-expired screen the user is trying to leave.
+      await this.fetch('/auth/logout', { method: 'POST' }, true);
     } catch {
       // ignore — local logout proceeds regardless
     }
@@ -114,6 +123,16 @@ class ApiService {
     } catch {
       return null;
     }
+  }
+
+  // Trigger an immediate bidirectional cloud sync: pushes pending local
+  // changes, then pulls a fresh snapshot + incremental events into the local
+  // DB. `storeId` re-scopes the sync to the store the user is viewing.
+  async syncNow(storeId?: string) {
+    return invoke<{ message: string; storeId: string; pendingPush: number }>(
+      'sync_now',
+      { storeId: storeId ?? null },
+    );
   }
 
   // Stores
@@ -450,6 +469,15 @@ class ApiService {
     return this.fetch('/system/reset', {
       method: 'POST',
       body: JSON.stringify(options),
+    });
+  }
+
+  // Danger zone: wipe the LOCAL SQLite database entirely (all data, sessions,
+  // and pending sync events) and re-seed defaults. The cloud backend and its
+  // database are not affected.
+  async clearLocalDb() {
+    return this.fetch('/system/clear-local-db', {
+      method: 'POST',
     });
   }
 

@@ -7,6 +7,7 @@ class User {
   final String? storeId;
   final String? storeName;
   final List<Store>? stores;
+  final List<String> storeIds;
   final bool isActive;
 
   User({
@@ -18,6 +19,7 @@ class User {
     this.storeId,
     this.storeName,
     this.stores,
+    this.storeIds = const [],
     required this.isActive,
   });
 
@@ -33,6 +35,9 @@ class User {
       stores: json['stores'] != null
           ? (json['stores'] as List).map((s) => Store.fromJson(s)).toList()
           : null,
+      storeIds: json['storeIds'] != null
+          ? (json['storeIds'] as List).map((s) => s.toString()).toList()
+          : const [],
       isActive: json['isActive'] ?? true,
     );
   }
@@ -47,6 +52,7 @@ class User {
       'storeId': storeId,
       'storeName': storeName,
       'stores': stores?.map((s) => s.toJson()).toList(),
+      'storeIds': storeIds,
       'isActive': isActive,
     };
   }

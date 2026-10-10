@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore, useDataStore } from './stores';
+import { useAuthStore, useDataStore, useUIStore } from './stores';
 import UpdateNotification from './components/UpdateNotification';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
 import Login from './components/Login';
+import SessionExpired from './components/SessionExpired';
 import Layout from './components/Layout';
 import Tables from './components/Tables';
 import Items from './components/Items';
@@ -28,6 +29,7 @@ import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
 import { api } from './services/api';
+import { listenSyncDataChanged } from './services/realtime';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -68,6 +70,33 @@ const AppRoutes: React.FC = () => {
     }
   }, [isAuthenticated, initialize]);
 
+  // Re-read the local DB whenever the background sync worker applies
+  // cloud-originated changes — debounced so a burst of pulled events
+  // collapses into one refresh.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    listenSyncDataChanged(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void useDataStore.getState().refreshData(true);
+      }, 500);
+    }).then((un) => {
+      if (cancelled) {
+        un();
+      } else {
+        unlisten = un;
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      unlisten?.();
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (isAuthenticated && user) {
       const active = checkStoreActive();
@@ -84,7 +113,7 @@ const AppRoutes: React.FC = () => {
       const active = checkStoreActive();
       if (!active) {
         // Store is disabled, logout user
-        logout();
+        await logout();
         window.location.hash = '/login';
       }
     }, 300000); // Check every 5 minutes
@@ -143,10 +172,11 @@ const AppRoutes: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const sessionExpired = useUIStore((s) => s.sessionExpired);
   return (
     <div className="app">
       <UpdateNotification />
-      <AppRoutes />
+      {sessionExpired ? <SessionExpired /> : <AppRoutes />}
       <OnScreenKeyboard />
     </div>
   );

@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class AppConstants {
   static const String appName = 'Mario Business';
   static const String appVersion = '1.0.0';
-  static const String defaultApiUrl = 'https://mario-api.ntoric.com';
+  // Debug builds hit the locally running backend; release builds use cloud.
+  static const String defaultApiUrl = kDebugMode
+      ? 'http://localhost:8088'
+      : 'https://mario-v2-backend.ntoric.com';
 }
 
 class AppColors {

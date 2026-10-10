@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '../services/api';
 import type { User } from '../types';
 import { useDataStore } from './dataStore';
+import { useUIStore } from './uiStore';
 
 // Helper to clear persisted auth storage
 const clearAuthStorage = () => {
@@ -20,7 +21,7 @@ interface AuthState {
   
   // Actions
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   clearAuth: () => void; // New action to completely clear auth state
   validateToken: () => Promise<boolean>; // Validate token on app load
   restoreSession: () => Promise<boolean>; // Rehydrate persisted session on app load
@@ -74,6 +75,7 @@ export const useAuthStore = create<AuthState>()(
               throw new Error('No store assigned. Please contact your administrator.');
             }
             
+            useUIStore.getState().setSessionExpired(false);
             set({
               user: data.user,
               token: data.token,
@@ -116,10 +118,11 @@ export const useAuthStore = create<AuthState>()(
           await api.getMe();
           return true;
         } catch (error) {
-          // Only clear auth if the token was invalidated by a 401 response.
-          // For network errors or server errors (5xx), keep the session intact
-          // so role-based menus don't disappear on transient failures.
-          if (!api.getToken()) {
+          // Only clear auth if the token was invalidated by a 401 response
+          // (the api layer flags sessionExpired on 401). For network errors
+          // or server errors (5xx), keep the session intact so role-based
+          // menus don't disappear on transient failures.
+          if (useUIStore.getState().sessionExpired) {
             // The webview token is dead — try the persisted SQLite session
             // (it may hold a newer token) before forcing a logout.
             const restored = await get().restoreSession();
@@ -138,6 +141,7 @@ export const useAuthStore = create<AuthState>()(
         const s = await api.getStoredSession();
         if (!s?.token || !s?.user) return false;
         api.setToken(s.token);
+        useUIStore.getState().setSessionExpired(false);
         set({
           user: s.user,
           token: s.token,
@@ -176,9 +180,11 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
-        // Ends the cloud sync session server-side (best-effort, works offline).
-        api.logout().catch(() => {});
+      logout: async () => {
+        // Ends the cloud sync session server-side (best-effort, works
+        // offline). Awaited so the persisted SQLite session is gone before
+        // the router remounts — otherwise restoreSession would resurrect it.
+        await api.logout().catch(() => {});
         get().clearAuth();
       },
 

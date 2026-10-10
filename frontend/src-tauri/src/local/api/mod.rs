@@ -204,6 +204,9 @@ pub fn require_claims(state: &LocalBackend, token: &Option<String>) -> Result<Cl
 fn is_public(method: &str, segs: &[&str]) -> bool {
     match (method, segs) {
         ("POST", ["auth", "login"]) => true,
+        // Logout must run even with a dead token — it clears the persisted
+        // session, so requiring valid claims would make sign-out impossible.
+        ("POST", ["auth", "logout"]) => true,
         ("GET", ["stores", "default"]) => true,
         ("GET", ["support-config"]) => true,
         ("GET", ["app-update"]) => true,
@@ -452,6 +455,7 @@ pub async fn dispatch_impl_ex(
 
         // ---- System ----
         ("POST", ["system", "reset"]) => system::system_reset(&mut ctx, body),
+        ("POST", ["system", "clear-local-db"]) => system::clear_local_db(&mut ctx),
         ("GET", ["system", "stats"]) => system::get_stats(&mut ctx),
         ("GET", ["system", "config"]) => system::get_system_config(&mut ctx),
         ("POST", ["system", "config"]) => system::update_system_config(&mut ctx, body),
@@ -594,6 +598,7 @@ fn is_sync_exempt(segs: &[&str]) -> bool {
             | ["sync", ..]
             | ["stores", "switch"]
             | ["system", "reset"]
+            | ["system", "clear-local-db"]
             | ["menu", "parse"]
             | ["menu", "bulk"]
             | ["lan-info"]

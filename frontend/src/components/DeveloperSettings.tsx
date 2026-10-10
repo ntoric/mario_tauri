@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Github, Loader2, AlertCircle, Check, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff, Smartphone, Copy } from 'lucide-react';
+import { Save, Github, Loader2, AlertCircle, Check, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff, Smartphone, Copy, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { invoke } from '@tauri-apps/api/core';
+import ConfirmDialog from './ConfirmDialog';
 
 interface GeminiModel {
   name: string;
@@ -35,6 +36,11 @@ const DeveloperSettings: React.FC = () => {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [geminiMessage, setGeminiMessage] = useState('');
   const [geminiError, setGeminiError] = useState('');
+
+  // Clear local database
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearError, setClearError] = useState('');
 
   useEffect(() => {
     setHeaderContent({
@@ -168,6 +174,24 @@ const DeveloperSettings: React.FC = () => {
     } finally {
       setIsSavingGemini(false);
     }
+  };
+
+  const handleClearLocalDb = async () => {
+    setShowClearConfirm(false);
+    setIsClearing(true);
+    setClearError('');
+    try {
+      await api.clearLocalDb();
+    } catch (err: any) {
+      setClearError(err.message || 'Failed to clear local database');
+      setIsClearing(false);
+      return;
+    }
+    // Wipe client-side state (tokens, persisted auth, caches) and restart at
+    // the login screen — the in-memory stores reset on reload.
+    localStorage.clear();
+    window.location.hash = '#/login';
+    window.location.reload();
   };
 
   if (isLoading) {
@@ -474,6 +498,75 @@ const DeveloperSettings: React.FC = () => {
           </div>
         </form>
       </div>
+
+      <div className="card" style={{ marginTop: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+        <div className="card-header">
+          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
+            <Trash2 size={18} />
+            Danger Zone — Local Data
+          </span>
+        </div>
+        <div className="card-body">
+          <div style={{
+            padding: '1rem',
+            background: 'rgba(239, 68, 68, 0.06)',
+            borderRadius: 'var(--radius)',
+            marginBottom: '1.5rem',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+          }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--gray-600)', margin: 0 }}>
+              <strong>Warning:</strong> This permanently deletes <strong>all locally stored data</strong> —
+              stores, users, menu, tables, orders, bills, sessions, and any unsynced changes —
+              and restores factory defaults. The cloud backend and its database are <strong>not</strong> affected.
+              You will be signed out and can log in again to pull fresh data.
+            </p>
+          </div>
+          {clearError && (
+            <div style={{
+              padding: '1rem',
+              background: 'rgba(229,57,53, 0.1)',
+              color: 'var(--danger)',
+              borderRadius: 'var(--radius)',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}>
+              <AlertCircle size={18} />
+              {clearError}
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => setShowClearConfirm(true)}
+            disabled={isClearing}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            {isClearing ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Clearing...
+              </>
+            ) : (
+              <>
+                <Trash2 size={18} />
+                Clear Local Database
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        title="Clear Local Database?"
+        message="All locally stored data will be permanently deleted and you will be signed out. The cloud backend is not affected. This cannot be undone."
+        confirmLabel="Clear Local Data"
+        variant="danger"
+        onConfirm={handleClearLocalDb}
+        onCancel={() => setShowClearConfirm(false)}
+      />
     </div>
   );
 };

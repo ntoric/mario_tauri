@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -7,17 +9,18 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFFFFCF8),
-              Color(0xFFFFF1E0),
-              Color(0xFFF3E6D8),
+              palette.cardColor,
+              palette.primarySoft,
+              palette.backgroundSecondary,
             ],
           ),
         ),
@@ -36,7 +39,7 @@ class SplashScreen extends StatelessWidget {
                       end: Alignment.bottomRight,
                       colors: [
                         Colors.white,
-                        AppColors.primarySoft,
+                        palette.primarySoft,
                       ],
                     ),
                   ),
@@ -72,7 +75,7 @@ class SplashScreen extends StatelessWidget {
                   height: 32,
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      AppColors.primaryLight.withOpacity(0.8),
+                      palette.primaryLight.withOpacity(0.8),
                     ),
                     strokeWidth: 3,
                   ),

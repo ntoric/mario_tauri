@@ -28,6 +28,9 @@ class AuthProvider extends ChangeNotifier {
   bool get canViewStats =>
     _user?.role == 'superadmin' || _user?.role == 'business_owner' || _user?.role == 'business_admin';
 
+  bool get canManageMenu =>
+    _user?.role == 'superadmin' || _user?.role == 'business_owner' || _user?.role == 'business_admin';
+
   Store? _resolveCurrentStore(User user) {
     final stores = user.stores;
     if (stores == null || stores.isEmpty) return null;

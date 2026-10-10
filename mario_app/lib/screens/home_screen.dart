@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import 'tables_screen.dart';
 import 'orders_screen.dart';
@@ -108,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
     if (_isCheckingStore) {
       return Scaffold(
         backgroundColor: Colors.transparent,
@@ -117,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 32,
               height: 32,
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
                 strokeWidth: 3,
               ),
             ),
@@ -133,7 +136,10 @@ class _HomeScreenState extends State<HomeScreen> {
       const TablesScreen(),
       const OrdersScreen(),
       const HistoryScreen(),
-      if (canViewStats) const StatisticsScreen(),
+      if (canViewStats)
+        StatisticsScreen(
+          onViewAllBills: () => setState(() => _currentIndex = 2),
+        ),
       const CategoriesItemsScreen(),
       ParcelOrderScreen(
         onOrderSuccess: () {
@@ -144,32 +150,32 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final navItems = [
-      _NavItem(
+      NavItem(
           icon: Icons.table_restaurant_outlined,
           activeIcon: Icons.table_restaurant,
           label: 'Tables'),
-      _NavItem(
+      NavItem(
           icon: Icons.receipt_outlined,
           activeIcon: Icons.receipt,
           label: 'Orders'),
-      _NavItem(
+      NavItem(
           icon: Icons.history_outlined,
           activeIcon: Icons.history,
           label: 'History'),
       if (canViewStats)
-        _NavItem(
+        NavItem(
             icon: Icons.bar_chart_outlined,
             activeIcon: Icons.bar_chart,
             label: 'Stats'),
-      _NavItem(
+      NavItem(
           icon: Icons.restaurant_menu_outlined,
           activeIcon: Icons.restaurant_menu,
           label: 'Menu'),
-      _NavItem(
+      NavItem(
           icon: Icons.shopping_bag_outlined,
           activeIcon: Icons.shopping_bag,
           label: 'Parcel'),
-      _NavItem(
+      NavItem(
           icon: Icons.settings_outlined,
           activeIcon: Icons.settings,
           label: 'Settings'),
@@ -187,119 +193,134 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 width: isDesktop ? 240 : 80,
                 margin: const EdgeInsets.fromLTRB(16, 20, 12, 20),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: ClayStyles.surface(
-                  radiusValue: 32,
-                  border: Border.all(color: Colors.white.withOpacity(0.55)),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: ClayStyles.raisedShadow(),
                 ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: isDesktop ? 20 : 16),
-                      child: Row(
-                        mainAxisAlignment: isDesktop
-                            ? MainAxisAlignment.start
-                            : MainAxisAlignment.center,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.55),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.65),
+                        ),
+                      ),
+                      child: Column(
                         children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: ClayStyles.surface(radiusValue: 14),
-                            child: Padding(
-                              padding: const EdgeInsets.all(6),
-                              child: Image.asset('assets/images/logo.png',
-                                  fit: BoxFit.contain),
+                          const SizedBox(height: 24),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: isDesktop ? 20 : 16),
+                            child: Row(
+                              mainAxisAlignment: isDesktop
+                                  ? MainAxisAlignment.start
+                                  : MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration:
+                                      ClayStyles.surface(radiusValue: 14),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Image.asset('assets/images/logo.png',
+                                        fit: BoxFit.contain),
+                                  ),
+                                ),
+                                if (isDesktop) ...[
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    'Mario POS',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (isDesktop) ...[
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Mario POS',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
-                              ),
+                          const SizedBox(height: 24),
+                          Expanded(
+                            child: ListView.builder(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: isDesktop ? 12 : 16),
+                              itemCount: navItems.length,
+                              itemBuilder: (context, index) {
+                                final item = navItems[index];
+                                final isSelected = index == _currentIndex;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () =>
+                                          setState(() => _currentIndex = index),
+                                      borderRadius: ClayStyles.radius(20),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isDesktop ? 16 : 0,
+                                          vertical: isDesktop ? 12 : 14,
+                                        ),
+                                        decoration: isSelected
+                                            ? ClayStyles.accent(
+                                                accent: palette.primary,
+                                                radiusValue: 20,
+                                                opacity: 0.14,
+                                              )
+                                            : null,
+                                        child: isDesktop
+                                            ? Row(
+                                                children: [
+                                                  Icon(
+                                                    isSelected
+                                                        ? item.activeIcon
+                                                        : item.icon,
+                                                    color: isSelected
+                                                        ? palette.primary
+                                                        : AppColors.gray500,
+                                                    size: 24,
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Text(
+                                                    item.label,
+                                                    style: TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight: isSelected
+                                                          ? FontWeight.w700
+                                                          : FontWeight.w500,
+                                                      color: isSelected
+                                                          ? palette.primary
+                                                          : AppColors.gray600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              )
+                                            : Icon(
+                                                isSelected
+                                                    ? item.activeIcon
+                                                    : item.icon,
+                                                color: isSelected
+                                                    ? palette.primary
+                                                    : AppColors.gray500,
+                                                size: 26,
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: isDesktop ? 12 : 16),
-                        itemCount: navItems.length,
-                        itemBuilder: (context, index) {
-                          final item = navItems[index];
-                          final isSelected = index == _currentIndex;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () =>
-                                    setState(() => _currentIndex = index),
-                                borderRadius: ClayStyles.radius(20),
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isDesktop ? 16 : 0,
-                                    vertical: isDesktop ? 12 : 14,
-                                  ),
-                                  decoration: isSelected
-                                      ? ClayStyles.accent(
-                                          accent: AppColors.primary,
-                                          radiusValue: 20,
-                                          opacity: 0.14,
-                                        )
-                                      : null,
-                                  child: isDesktop
-                                      ? Row(
-                                          children: [
-                                            Icon(
-                                              isSelected
-                                                  ? item.activeIcon
-                                                  : item.icon,
-                                              color: isSelected
-                                                  ? AppColors.primary
-                                                  : AppColors.gray500,
-                                              size: 24,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Text(
-                                              item.label,
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w500,
-                                                color: isSelected
-                                                    ? AppColors.primary
-                                                    : AppColors.gray600,
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : Icon(
-                                          isSelected
-                                              ? item.activeIcon
-                                              : item.icon,
-                                          color: isSelected
-                                              ? AppColors.primary
-                                              : AppColors.gray500,
-                                          size: 26,
-                                        ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               Expanded(
@@ -323,71 +344,121 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       extendBody: true,
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: ClayStyles.radius(30),
-          border: Border.all(color: Colors.white.withOpacity(0.6)),
-          boxShadow: ClayStyles.raisedShadow(),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(navItems.length, (index) {
-            final item = navItems[index];
-            final isSelected = index == _currentIndex;
-            return GestureDetector(
-              onTap: () => setState(() => _currentIndex = index),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: isSelected
-                    ? ClayStyles.accent(
-                        accent: AppColors.primary,
-                        radiusValue: 22,
-                        opacity: 0.16,
-                      )
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isSelected ? item.activeIcon : item.icon,
-                      color: isSelected ? AppColors.primary : AppColors.gray500,
-                      size: 24,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color:
-                            isSelected ? AppColors.primary : AppColors.gray500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ),
+      bottomNavigationBar: HomeNavBar(
+        items: navItems,
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
       ),
     );
   }
 }
 
-class _NavItem {
+class NavItem {
   final IconData icon;
   final IconData activeIcon;
   final String label;
 
-  const _NavItem({
+  const NavItem({
     required this.icon,
     required this.activeIcon,
     required this.label,
   });
+}
+
+class HomeNavBar extends StatelessWidget {
+  final List<NavItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const HomeNavBar({
+    super.key,
+    required this.items,
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.55),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.65),
+                ),
+              ),
+              child: Row(
+                children: List.generate(items.length, (index) {
+                  final item = items[index];
+                  final isSelected = index == currentIndex;
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => onTap(index),
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 40,
+                            decoration: isSelected
+                                ? BoxDecoration(
+                                    color: palette.primary,
+                                    borderRadius: BorderRadius.circular(14),
+                                  )
+                                : null,
+                            child: Icon(
+                              isSelected ? item.activeIcon : item.icon,
+                              color:
+                                  isSelected ? Colors.white : AppColors.gray600,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.label,
+                            style: TextStyle(
+                              fontSize: isSelected ? 11 : 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.dark
+                                  : AppColors.gray600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

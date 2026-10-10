@@ -4,6 +4,7 @@ class Category {
   final String name;
   final String? description;
   final bool isActive;
+  final bool enabled;
   final bool isFavourite;
 
   Category({
@@ -12,8 +13,21 @@ class Category {
     required this.name,
     this.description,
     required this.isActive,
+    this.enabled = true,
     this.isFavourite = false,
   });
+
+  Category copyWith({bool? isFavourite}) {
+    return Category(
+      id: id,
+      storeId: storeId,
+      name: name,
+      description: description,
+      isActive: isActive,
+      enabled: enabled,
+      isFavourite: isFavourite ?? this.isFavourite,
+    );
+  }
 
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
@@ -22,6 +36,7 @@ class Category {
       name: json['name'],
       description: json['description'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
+      enabled: json['enabled'] ?? true,
       isFavourite: json['isFavourite'] ?? json['is_favourite'] ?? false,
     );
   }
@@ -33,6 +48,7 @@ class Category {
       'name': name,
       'description': description,
       'isActive': isActive,
+      'enabled': enabled,
       'isFavourite': isFavourite,
     };
   }

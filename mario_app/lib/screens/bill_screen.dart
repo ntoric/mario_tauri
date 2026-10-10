@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
@@ -106,6 +107,7 @@ class _BillScreenState extends State<BillScreen> {
   Widget build(BuildContext context) {
     final order = widget.order;
     final subtotal = order.totalAmount - order.taxAmount;
+    final palette = context.watch<ThemeProvider>().currentTheme;
 
     return Scaffold(
       appBar: const AppHeader(
@@ -279,16 +281,16 @@ class _BillScreenState extends State<BillScreen> {
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : AppColors.light,
+                          color: isSelected ? palette.primary : AppColors.light,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isSelected ? AppColors.primary : AppColors.gray300,
+                            color: isSelected ? palette.primary : AppColors.gray300,
                             width: 1.5,
                           ),
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: AppColors.primary.withOpacity(0.3),
+                                    color: palette.primary.withOpacity(0.3),
                                     blurRadius: 12,
                                     offset: const Offset(0, 4),
                                   ),
@@ -355,6 +357,7 @@ class _BillScreenState extends State<BillScreen> {
   }
 
   Widget _buildBillRow(String label, double amount, {bool isBold = false}) {
+    final palette = context.watch<ThemeProvider>().currentTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -373,7 +376,7 @@ class _BillScreenState extends State<BillScreen> {
             style: TextStyle(
               fontSize: isBold ? 22 : 14,
               fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-              color: isBold ? AppColors.primary : AppColors.dark,
+              color: isBold ? palette.primary : AppColors.dark,
               letterSpacing: isBold ? -0.5 : 0,
             ),
           ),

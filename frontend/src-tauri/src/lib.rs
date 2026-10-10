@@ -171,6 +171,19 @@ async fn get_stored_session(
     Ok(local::sync::stored_session(&state))
 }
 
+/// Manual cloud sync for the header's sync button: pushes pending changes,
+/// pulls a fresh snapshot for the given store (or the currently scoped one),
+/// and drains incremental events. Returns a summary or an error string the
+/// UI can surface.
+#[tauri::command]
+async fn sync_now(
+    state: tauri::State<'_, Arc<LocalBackend>>,
+    app: tauri::AppHandle,
+    store_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    local::sync::sync_now(state.inner(), &app, store_id).await
+}
+
 /// Generic API bridge — the frontend calls this instead of HTTP fetch.
 /// Dispatches method+path+body to the local backend handlers backed by SQLite.
 #[tauri::command]
@@ -228,7 +241,8 @@ pub fn run() {
             save_csv_file,
             api_request,
             lan_server_info,
-            get_stored_session
+            get_stored_session,
+            sync_now
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

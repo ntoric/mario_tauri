@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -9,13 +10,14 @@ import '../models/order.dart';
 import '../models/bill.dart';
 import '../models/statistics.dart';
 import '../models/app_update.dart';
+import '../utils/constants.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
-  String _baseUrl = 'https://mario-api.ntoric.com/api';
+  String _baseUrl = '${AppConstants.defaultApiUrl}/api';
   String? _token;
   String? _serverId;
 
@@ -32,6 +34,11 @@ class ApiService {
     final savedUrl = prefs.getString('api_url');
     if (savedUrl != null && savedUrl.isNotEmpty) {
       _baseUrl = savedUrl;
+    }
+    // Debug builds: a stale production URL saved by an earlier run would
+    // otherwise override the local-backend default forever.
+    if (kDebugMode && _baseUrl == 'https://mario-v2-backend.ntoric.com/api') {
+      _baseUrl = '${AppConstants.defaultApiUrl}/api';
     }
     await prefs.setString('api_url', _baseUrl);
   }
@@ -172,6 +179,27 @@ class ApiService {
     return (data as List).map((c) => Category.fromJson(c)).toList();
   }
 
+  Future<Category> createCategory(Map<String, dynamic> categoryData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/categories'),
+      headers: _headers,
+      body: jsonEncode(categoryData),
+    );
+    final data = await _handleResponse(response);
+    return Category.fromJson(data);
+  }
+
+  Future<Category> updateCategory(
+      String categoryId, Map<String, dynamic> categoryData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/categories/$categoryId'),
+      headers: _headers,
+      body: jsonEncode(categoryData),
+    );
+    final data = await _handleResponse(response);
+    return Category.fromJson(data);
+  }
+
   // Items
   Future<List<Item>> getItems(String storeId) async {
     final response = await http.get(
@@ -180,6 +208,27 @@ class ApiService {
     );
     final data = await _handleResponse(response);
     return (data as List).map((i) => Item.fromJson(i)).toList();
+  }
+
+  Future<Item> createItem(Map<String, dynamic> itemData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/items'),
+      headers: _headers,
+      body: jsonEncode(itemData),
+    );
+    final data = await _handleResponse(response);
+    return Item.fromJson(data);
+  }
+
+  Future<Item> updateItem(
+      String itemId, Map<String, dynamic> itemData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/items/$itemId'),
+      headers: _headers,
+      body: jsonEncode(itemData),
+    );
+    final data = await _handleResponse(response);
+    return Item.fromJson(data);
   }
 
   // Orders

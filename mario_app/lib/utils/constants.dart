@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,7 +6,10 @@ class AppConstants {
   static const String appName = 'Mario App';
   static const String appVersion = '1.0.0';
 
-  static const String defaultApiUrl = 'https://mario-api.ntoric.com';
+  // Debug builds hit the locally running backend; release builds use cloud.
+  static const String defaultApiUrl = kDebugMode
+      ? 'http://localhost:8088'
+      : 'https://mario-v2-backend.ntoric.com';
 }
 
 class AppColors {
@@ -36,6 +40,10 @@ class AppColors {
   static const Color info = Color(0xFF4DA3FF);
   static const Color cardDark = Color(0xFF1A1613);
   static const Color cardDarkLight = Color(0xFF2B241F);
+  static const Color tableAvailable = Color(0xFF1E8E4E);
+  static const Color tableOccupied = Color(0xFFF08A00);
+  static const Color tableReserved = Color(0xFF2F80ED);
+  static const Color wood = Color(0xFF9A6B3F);
 }
 
 class ClayStyles {
@@ -172,6 +180,7 @@ class AppThemeOption {
   final Color backgroundSecondary;
   final Color cardColor;
   final Color accentTint;
+  final Color highlight;
 
   const AppThemeOption({
     required this.id,
@@ -185,6 +194,7 @@ class AppThemeOption {
     required this.backgroundSecondary,
     required this.cardColor,
     required this.accentTint,
+    required this.highlight,
   });
 }
 
@@ -201,6 +211,7 @@ class AppThemeOptions {
     backgroundSecondary: Color(0xFFF1E7DD),
     cardColor: Color(0xFFFFFCF8),
     accentTint: Color(0xFFFFD4AD),
+    highlight: Color(0xFFE56F00),
   );
 
   static const ocean = AppThemeOption(
@@ -215,6 +226,7 @@ class AppThemeOptions {
     backgroundSecondary: Color(0xFFE4ECF8),
     cardColor: Color(0xFFFBFDFF),
     accentTint: Color(0xFFD7E8FF),
+    highlight: Color(0xFF155AD1),
   );
 
   static const forest = AppThemeOption(
@@ -229,6 +241,7 @@ class AppThemeOptions {
     backgroundSecondary: Color(0xFFE3EEE0),
     cardColor: Color(0xFFFBFEFA),
     accentTint: Color(0xFFD7EEDB),
+    highlight: Color(0xFF23784E),
   );
 
   static const plum = AppThemeOption(
@@ -243,6 +256,22 @@ class AppThemeOptions {
     backgroundSecondary: Color(0xFFECE4F9),
     cardColor: Color(0xFFFEFBFF),
     accentTint: Color(0xFFE5D8FF),
+    highlight: Color(0xFF6C3FC0),
+  );
+
+  static const ruby = AppThemeOption(
+    id: 'ruby',
+    label: 'Ruby Red',
+    description: 'Bold red and blush',
+    primary: Color(0xFFE03131),
+    primaryDark: Color(0xFFC01F1F),
+    primaryLight: Color(0xFFFF8787),
+    primarySoft: Color(0xFFFFE0E0),
+    background: Color(0xFFFFF6F5),
+    backgroundSecondary: Color(0xFFF8E8E6),
+    cardColor: Color(0xFFFFFDFC),
+    accentTint: Color(0xFFF8D8D4),
+    highlight: Color(0xFFC01F1F),
   );
 
   static const List<AppThemeOption> all = [
@@ -250,9 +279,10 @@ class AppThemeOptions {
     ocean,
     forest,
     plum,
+    ruby,
   ];
 
-  static const AppThemeOption defaultOption = sunset;
+  static const AppThemeOption defaultOption = forest;
 
   static AppThemeOption fromId(String id) {
     for (final option in all) {
@@ -409,9 +439,9 @@ class AppTheme {
           color: AppColors.gray600,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.transparent,
-        selectedItemColor: AppColors.primary,
+        selectedItemColor: option.primary,
         unselectedItemColor: AppColors.gray500,
         type: BottomNavigationBarType.fixed,
         elevation: 0,

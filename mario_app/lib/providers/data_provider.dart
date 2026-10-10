@@ -78,6 +78,126 @@ class DataProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> saveCategory({
+    Category? existing,
+    required String storeId,
+    required String name,
+    String? description,
+  }) async {
+    try {
+      if (existing == null) {
+        await _backend.api.createCategory({
+          'storeId': storeId,
+          'name': name,
+          'description': description ?? '',
+        });
+      } else {
+        await _backend.api.updateCategory(existing.id, {
+          'name': name,
+          'description': description ?? '',
+          'enabled': existing.enabled,
+          'isFavourite': existing.isFavourite,
+        });
+      }
+      await loadCategories(storeId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> saveItem({
+    Item? existing,
+    required String storeId,
+    required String categoryId,
+    required String name,
+    String? description,
+    required double price,
+    String? hsnCode,
+    double? taxPercent,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'categoryId': categoryId,
+        'name': name,
+        'description': description ?? '',
+        'price': price,
+        'hsnCode': hsnCode ?? '',
+        'taxPercent': taxPercent ?? 0,
+        'enabled': existing?.enabled ?? true,
+        'isFavourite': existing?.isFavourite ?? false,
+      };
+      if (existing == null) {
+        payload['storeId'] = storeId;
+        await _backend.api.createItem(payload);
+      } else {
+        await _backend.api.updateItem(existing.id, payload);
+      }
+      await loadItems(storeId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Optimistically flips the favourite flag so the UI updates instantly,
+  // then persists via PUT (which rewrites enabled/is_favourite together).
+  Future<bool> toggleCategoryFavourite(Category category) async {
+    final index = _categories.indexWhere((c) => c.id == category.id);
+    if (index < 0) return false;
+
+    final updated = category.copyWith(isFavourite: !category.isFavourite);
+    _categories[index] = updated;
+    notifyListeners();
+
+    try {
+      await _backend.api.updateCategory(category.id, {
+        'name': updated.name,
+        'description': updated.description ?? '',
+        'enabled': updated.enabled,
+        'isFavourite': updated.isFavourite,
+      });
+      return true;
+    } catch (e) {
+      _categories[index] = category;
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> toggleItemFavourite(Item item) async {
+    final index = _items.indexWhere((i) => i.id == item.id);
+    if (index < 0) return false;
+
+    final updated = item.copyWith(isFavourite: !item.isFavourite);
+    _items[index] = updated;
+    notifyListeners();
+
+    try {
+      await _backend.api.updateItem(item.id, {
+        'categoryId': updated.categoryId,
+        'name': updated.name,
+        'description': updated.description ?? '',
+        'price': updated.price,
+        'hsnCode': updated.hsnCode ?? '',
+        'taxPercent': updated.taxPercent ?? 0,
+        'enabled': updated.enabled,
+        'isFavourite': updated.isFavourite,
+      });
+      return true;
+    } catch (e) {
+      _items[index] = item;
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> loadOrders(String storeId) async {
     try {
       final data = await _backend.api.getOrders(storeId);

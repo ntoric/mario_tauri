@@ -31,6 +31,10 @@ interface UIState {
   // Sidebar
   sidebarOpen: boolean;
 
+  // Session expired — set when the backend rejects the token (401); renders a
+  // blocking page with a sign-out action instead of an instant redirect.
+  sessionExpired: boolean;
+
   // On-screen keyboard
   onScreenKeyboardEnabled: boolean;
 
@@ -63,6 +67,7 @@ interface UIState {
   openStoreSwitcher: () => void;
   closeStoreSwitcher: () => void;
   toggleSidebar: () => void;
+  setSessionExpired: (expired: boolean) => void;
   toggleOnScreenKeyboard: () => void;
   addNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   removeNotification: (id: string) => void;
@@ -80,6 +85,7 @@ export const useUIStore = create<UIState>((set) => ({
   expenseCategoryModal: { isOpen: false },
   storeSwitcherModal: false,
   sidebarOpen: true,
+  sessionExpired: false,
   onScreenKeyboardEnabled: getInitialOskEnabled(),
   notifications: [],
 
@@ -113,6 +119,8 @@ export const useUIStore = create<UIState>((set) => ({
   closeStoreSwitcher: () => set({ storeSwitcherModal: false }),
   
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+  setSessionExpired: (expired) => set({ sessionExpired: expired }),
 
   toggleOnScreenKeyboard: () => set((state) => {
     const next = !state.onScreenKeyboardEnabled;

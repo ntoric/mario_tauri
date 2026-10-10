@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -7,13 +8,14 @@ import '../models/item.dart';
 import '../models/order.dart';
 import '../models/bill.dart';
 import '../models/statistics.dart';
+import '../utils/constants.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
-  String _baseUrl = 'https://mario-api.ntoric.com/api';
+  String _baseUrl = '${AppConstants.defaultApiUrl}/api';
   String? _token;
   String? _serverId;
 
@@ -30,6 +32,11 @@ class ApiService {
     final savedUrl = prefs.getString('api_url');
     if (savedUrl != null && savedUrl.isNotEmpty) {
       _baseUrl = savedUrl;
+    }
+    // Debug builds: a stale production URL saved by an earlier run would
+    // otherwise override the local-backend default forever.
+    if (kDebugMode && _baseUrl == 'https://mario-v2-backend.ntoric.com/api') {
+      _baseUrl = '${AppConstants.defaultApiUrl}/api';
     }
     await prefs.setString('api_url', _baseUrl);
   }

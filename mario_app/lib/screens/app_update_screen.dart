@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 
@@ -109,6 +110,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final palette = context.watch<ThemeProvider>().currentTheme;
     
     // Check if user is superadmin
     if (!(auth.user?.isSuperAdmin ?? false)) {
@@ -163,7 +165,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                                       _loadAppUpdate();
                                     }
                                   },
-                                  activeColor: AppColors.primary,
+                                  activeColor: palette.primary,
                                 ),
                               ),
                               Expanded(
@@ -177,7 +179,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                                       _loadAppUpdate();
                                     }
                                   },
-                                  activeColor: AppColors.primary,
+                                  activeColor: palette.primary,
                                 ),
                               ),
                             ],
@@ -200,7 +202,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                                 onChanged: (value) {
                                   setState(() => _enabled = value);
                                 },
-                                activeColor: AppColors.primary,
+                                activeColor: palette.primary,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -280,7 +282,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                     child: ElevatedButton(
                       onPressed: _isSaving ? null : _saveAppUpdate,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: palette.primary,
                       ),
                       child: _isSaving
                           ? const SizedBox(

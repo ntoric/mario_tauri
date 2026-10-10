@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, Keyboard } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -272,7 +272,7 @@ const Tables: React.FC = () => {
             onClick={() => setShowShortcutsHelp(true)}
             title="Keyboard shortcuts (?)"
           >
-            <Keyboard size={18} />
+            <span style={{ fontWeight: 700 }}>?</span>
           </button>
         </>
       ),

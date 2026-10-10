@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/order.dart';
-import '../utils/constants.dart';
+import '../providers/theme_provider.dart';
 
 /// A live elapsed-time indicator for an active order.
 ///
@@ -109,7 +110,8 @@ class _OrderTimerState extends State<OrderTimer> {
     if (!widget.order.isActive && !widget.showWhenInactive) {
       return const SizedBox.shrink();
     }
-    final color = widget.color ?? AppColors.primary;
+    final color =
+        widget.color ?? context.watch<ThemeProvider>().currentTheme.primary;
     final style = widget.textStyle ??
         TextStyle(
           fontSize: 12,

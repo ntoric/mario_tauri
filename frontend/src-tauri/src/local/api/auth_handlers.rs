@@ -93,9 +93,10 @@ pub async fn login_cloud_first(state: &LocalBackend, body: Value) -> ApiResponse
                 let conn = state.conn.lock().unwrap();
                 sync::cache_cloud_session(&conn, &username, &password, &token, &user);
             }
-            // Refresh menu/tables/orders/etc from cloud now that we know the
-            // store, and kick the background worker.
-            let _ = sync::pull_snapshot(state).await;
+            // Kick the background worker — it pushes the outbox and pulls the
+            // snapshot asynchronously. Login must not block on the pull: the
+            // app runs on the local DB, and the UI refreshes when the worker
+            // emits sync_data_changed.
             state.sync_notify.notify_one();
 
             let claims = new_claims(

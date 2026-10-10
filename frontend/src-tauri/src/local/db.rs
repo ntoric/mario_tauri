@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS sync_entity_ts (
     Ok(())
 }
 
-fn run_seeds(conn: &Connection) -> Result<(), rusqlite::Error> {
+pub fn run_seeds(conn: &Connection) -> Result<(), rusqlite::Error> {
     // Default global settings
     conn.execute_batch(
         "INSERT OR IGNORE INTO global_settings (key, value) VALUES

@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles } from 'lucide-react';
-import { useAuthStore, useDataStore } from '../stores';
+import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, RefreshCw, CloudOff, Keyboard } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useAuthStore, useDataStore, useUIStore } from '../stores';
+import { api } from '../services/api';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
 import UpdateBanner from './UpdateBanner';
@@ -11,12 +13,16 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
   const { stores } = useDataStore();
+  const oskEnabled = useUIStore((state) => state.onScreenKeyboardEnabled);
+  const toggleOsk = useUIStore((state) => state.toggleOnScreenKeyboard);
   const { headerContent } = usePageHeader();
   const navigate = useNavigate();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Live clock (Petpooja-style date/time in top bar)
@@ -43,9 +49,33 @@ const LayoutContent: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
+  };
+
+  const handleToggleOsk = () => {
+    const next = !oskEnabled;
+    toggleOsk();
+    toast.success(next ? 'On-screen keyboard enabled' : 'On-screen keyboard disabled', { duration: 1500 });
+  };
+
+  // Manual cloud sync — pushes pending local changes, then pulls a fresh
+  // snapshot + incremental events for the store currently being viewed.
+  const handleSyncNow = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      await api.syncNow(currentStoreId ?? undefined);
+      await useDataStore.getState().refreshData(true);
+      setSyncStatus({ ok: true, message: 'Synced' });
+    } catch (e: any) {
+      setSyncStatus({ ok: false, message: typeof e === 'string' ? e : e?.message || 'Sync failed' });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncStatus(null), 5000);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -384,6 +414,40 @@ const LayoutContent: React.FC = () => {
           </div>
           
           <div className="navbar-right">
+            <button
+              type="button"
+              className={`btn btn-outline btn-icon navbar-osk-toggle ${oskEnabled ? 'active' : ''}`}
+              onClick={handleToggleOsk}
+              title={oskEnabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
+              aria-label="Toggle on-screen keyboard"
+            >
+              <Keyboard size={18} />
+            </button>
+            {syncStatus && (
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.8rem',
+                  color: syncStatus.ok ? 'var(--success)' : 'var(--danger)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {!syncStatus.ok && <CloudOff size={14} />}
+                {syncStatus.message}
+              </span>
+            )}
+            <button
+              type="button"
+              className="btn btn-outline btn-icon"
+              onClick={handleSyncNow}
+              disabled={syncing}
+              title="Sync with cloud (push local changes, pull latest data)"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
+            </button>
             {headerContent.actions && (
               <div className="navbar-actions">
                 {headerContent.actions}
