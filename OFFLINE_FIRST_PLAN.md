@@ -22,7 +22,7 @@ The Tauri desktop app becomes a local API server + sync bridge: it caches all PO
 
 ### Tauri Desktop (`frontend/`)
 - React + Tauri v2, Zustand state management
-- All API calls go to cloud (`frontend/src/services/api.ts:3-5` → `https://mario-v2-backend.ntoric.com/api`)
+- All API calls go to cloud (`frontend/src/services/api.ts:3-5` → `http://localhost:8088/api`)
 - In-memory cache only (`frontend/src/utils/cache.ts`) — cleared on startup
 - WebSocket for table status updates (`frontend/src/services/realtime.ts`)
 - Printer integration via Rust (`frontend/src-tauri/src/lib.rs`)
@@ -353,7 +353,7 @@ createOrder: async (order) => {
 
 ### 4.1 Update API base URL configuration
 - **File:** `mario_app/lib/services/api_service.dart`
-- Change default `_baseUrl` from `https://mario-v2-backend.ntoric.com/api` to empty or local default
+- Change default `_baseUrl` from `http://localhost:8088/api` to empty or local default
 - The `setBaseUrl()` and `saveBaseUrl()` methods already exist (lines 21-39)
 - The `connectToBackend()` flow in `backend_service.dart:23-26` already checks health
 

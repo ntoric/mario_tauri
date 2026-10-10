@@ -21,7 +21,7 @@ The API base URL is baked in at build time via `VITE_API_URL`
 
 - `.env.development` → `npm run dev` (defaults to `http://localhost:8088/api`)
 - `.env.production` → `npm run build` (defaults to the cloud backend
-  `https://mario-v2-backend.ntoric.com/api`)
+  `http://localhost:8088/api`)
 
 ## Develop
 

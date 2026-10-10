@@ -90,6 +90,7 @@ set-version:
 	@sed -i '' 's/"version": "[^"]*"/"version": "$(VERSION)"/' frontend/package.json
 	@sed -i '' 's/^VITE_APP_VERSION=.*/VITE_APP_VERSION=$(VERSION)/' frontend/.env.development
 	@sed -i '' 's/^VITE_APP_VERSION=.*/VITE_APP_VERSION=$(VERSION)/' frontend/.env.example
+	@sed -i '' 's/^version: [0-9][0-9.]*/version: $(VERSION)/' mario_app/pubspec.yaml
 	@echo "Version updated to $(VERSION) in all files."
 
 # ── Release ────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ set-version:
 release: set-version
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=1.3.1"; exit 1; fi
 	@echo "Committing version bump ..."
-	@git add frontend/src-tauri/tauri.conf.json frontend/src-tauri/Cargo.toml frontend/package.json frontend/.env.development frontend/.env.example
+	@git add frontend/src-tauri/tauri.conf.json frontend/src-tauri/Cargo.toml frontend/package.json frontend/.env.development frontend/.env.example mario_app/pubspec.yaml
 	@if git diff --cached --quiet; then \
 		echo "No version changes to commit (already at $(VERSION))."; \
 	else \

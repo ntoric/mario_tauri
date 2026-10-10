@@ -55,7 +55,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5NjI2N0FBM0JEMUEzNDkKUldSSm85RTdxbWRpaVk3b2FXdjViN21BR0VXWldhekV1Y0xXQWJpUDREOWhNcWIyQ0prUVg1YlUK",
       "endpoints": [
-        "https://mario-v2-backend.ntoric.com/api/update/manifest"
+        "http://localhost:8088/api/update/manifest"
       ],
       "dialog": true,
       "windows": {

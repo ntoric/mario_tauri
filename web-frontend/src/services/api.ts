@@ -2,7 +2,7 @@
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_URL ||
-  'https://mario-v2-backend.ntoric.com/api';
+  'http://localhost:8088/api';
 
 // Log API URL for debugging
 console.log('API URL configured as:', API_URL);

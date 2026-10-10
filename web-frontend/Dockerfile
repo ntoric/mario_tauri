@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Cloud backend URL is baked into the bundle at build time.
 # Override with: docker build --build-arg VITE_API_URL=https://your-backend/api .
-ARG VITE_API_URL=https://mario-v2-backend.ntoric.com/api
+ARG VITE_API_URL=http://localhost:8088/api
 ARG VITE_BACKEND_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL:-$VITE_API_URL}

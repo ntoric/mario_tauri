@@ -25,7 +25,7 @@ use super::LocalBackend;
 
 /// Default cloud backend. Overridable via the `MARIO_CLOUD_URL` env var
 /// (highest priority) or the `cloud_base_url` global setting.
-const DEFAULT_CLOUD_BASE: &str = "https://mario-v2-backend.ntoric.com";
+const DEFAULT_CLOUD_BASE: &str = "http://localhost:8088";
 
 /// Debug builds (`tauri dev`) talk to a locally running backend by default.
 const DEV_CLOUD_BASE: &str = "http://localhost:8088";

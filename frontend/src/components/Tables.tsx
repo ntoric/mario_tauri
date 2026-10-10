@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Search, Users, ArrowUpRight, CheckCircle2, Clock, HelpCircle, ChevronDown, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
-import { formatCurrency, formatCurrencyInt } from '../utils/currency';
+import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
@@ -17,7 +17,7 @@ import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShort
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
-  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection } = useDataStore();
+  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection, cancelOrder } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -187,6 +187,7 @@ const Tables: React.FC = () => {
   const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
   const [activeSection, setActiveSection] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'vacant' | 'occupied'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
@@ -198,11 +199,24 @@ const Tables: React.FC = () => {
   // Keyboard navigation state
   const [kbFocusedIndex, setKbFocusedIndex] = useState<number>(-1);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showTableMenu, setShowTableMenu] = useState(false);
+  const tableMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tableMenuRef.current && !tableMenuRef.current.contains(event.target as Node)) {
+        setShowTableMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Bill dialog state
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [isPrinting, setIsPrinting] = useState(false);
+  const [previewTable, setPreviewTable] = useState<Table | null>(null);
 
   // Change table dialog state
   const [changeTableDialog, setChangeTableDialog] = useState<{ fromTable: Table; order: any } | null>(null);
@@ -228,56 +242,8 @@ const Tables: React.FC = () => {
 
   // Set page header
   useEffect(() => {
-    setHeaderContent({
-      title: 'Tables',
-      subtitle: 'Manage tables and orders',
-      actions: (
-        <>
-          <div className="view-toggle">
-            <button
-              className={`view-btn ${viewMode === 'layout' ? 'active' : ''}`}
-              onClick={() => setViewMode('layout')}
-              title="Layout View"
-            >
-              <Grid3X3 size={18} />
-            </button>
-            <button
-              className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-              onClick={() => setViewMode('list')}
-              title="List View"
-            >
-              <List size={18} />
-            </button>
-          </div>
-          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
-            <Package size={18} />
-            Parcel Order
-          </button>
-            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-              <Plus size={18} />
-              Add Table
-            </button>
-          {isAdmin && (
-            <button
-              className={`btn ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
-              onClick={() => setDeleteMode(!deleteMode)}
-              title="Toggle delete mode"
-            >
-              <Trash2 size={18} />
-              {deleteMode ? 'Done' : 'Delete Tables'}
-            </button>
-          )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowShortcutsHelp(true)}
-            title="Keyboard shortcuts (?)"
-          >
-            <span style={{ fontWeight: 700 }}>?</span>
-          </button>
-        </>
-      ),
-    });
-  }, [viewMode, isAdmin, setHeaderContent, navigate, user, deleteMode]);
+    setHeaderContent({ title: 'Tables', subtitle: 'Dining room management', actions: null });
+  }, [setHeaderContent]);
 
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
@@ -549,6 +515,7 @@ const Tables: React.FC = () => {
   };
 
   const billDialogOrder = billDialogTable ? getActiveOrderByTable(billDialogTable.id) : null;
+  const previewOrder = previewTable ? getActiveOrderByTable(previewTable.id) : null;
   const billDialogTotal = billDialogOrder ?
     billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) +
     (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
@@ -568,19 +535,18 @@ const Tables: React.FC = () => {
     return Array.from(set);
   }, [tableSections, tables]);
 
-  const filteredTables = React.useMemo(() => {
-    return tables
-      .filter(t => activeSection === 'all' || (t.section || 'Ground Floor') === activeSection)
-      .filter(t => {
-        if (statusFilter === 'all') return true;
-        const occupied = !!getActiveOrderByTable(t.id);
-        return statusFilter === 'occupied' ? occupied : !occupied;
-      })
-      .sort((a, b) => a.number - b.number);
-  }, [tables, activeSection, statusFilter, getActiveOrderByTable]);
+  const filteredTables = tables
+    .filter(t => activeSection === 'all' || (t.section || 'Ground Floor') === activeSection)
+    .filter(t => statusFilter === 'all' || (statusFilter === 'occupied' ? !!getActiveOrderByTable(t.id) : !getActiveOrderByTable(t.id)))
+    .filter(t => !searchQuery.trim() || `table ${t.number} ${t.section || 'Ground Floor'}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    .sort((a, b) => a.number - b.number);
 
   const occupiedCount = tables.filter(t => getActiveOrderByTable(t.id)).length;
   const vacantCount = tables.length - occupiedCount;
+
+  const resetFilters = () => { setSearchQuery(''); setActiveSection('all'); setStatusFilter('all'); };
+  useEffect(() => { setKbFocusedIndex(-1); }, [searchQuery, activeSection, statusFilter, currentStoreId]);
+  useEffect(() => { resetFilters(); }, [currentStoreId]);
 
   // Keep keyboard focus index in range when the filtered list changes.
   useEffect(() => {
@@ -594,12 +560,13 @@ const Tables: React.FC = () => {
   const anyModalOpen = !!(
     billDialogTable || confirmTableChange || changeTableDialog || deleteConfirmTable ||
     showAddModal || showSectionsModal || showStatusDropdown || showShortcutsHelp ||
-    printerConfirm.show || errorDialog.show || sectionToDelete
+    printerConfirm.show || errorDialog.show || sectionToDelete || previewTable
   );
 
   // Close the top-most open modal/dialog (used by Esc).
   const closeTopModal = useCallback(() => {
     if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
+    if (previewTable) { setPreviewTable(null); return; }
     if (printerConfirm.show) { setPrinterConfirm(p => ({ ...p, show: false })); return; }
     if (errorDialog.show) { setErrorDialog({ show: false, message: '' }); return; }
     if (sectionToDelete) { setSectionToDelete(null); return; }
@@ -610,7 +577,7 @@ const Tables: React.FC = () => {
     if (showStatusDropdown) { setShowStatusDropdown(false); return; }
     if (showSectionsModal) { setShowSectionsModal(false); return; }
     if (showAddModal) { setShowAddModal(false); return; }
-  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, showStatusDropdown, showSectionsModal, showAddModal]);
+  }, [showShortcutsHelp, previewTable, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, showStatusDropdown, showSectionsModal, showAddModal]);
 
   const openFocusedTable = useCallback((table: Table) => {
     if (checkingTableId) return;
@@ -677,12 +644,13 @@ const Tables: React.FC = () => {
     },
     {
       key: 'Enter',
-      handler: () => {
+      handler: (e) => {
         // Bill dialog open -> confirm print & complete.
         if (billDialogTable) {
           if (!isPrinting) handlePrintAndComplete();
           return;
         }
+        if (e.target instanceof HTMLElement && e.target.closest('button, a')) return;
         if (anyModalOpen) return;
         const focused = kbFocusedIndex >= 0 ? filteredTables[kbFocusedIndex] : undefined;
         if (focused) openFocusedTable(focused);
@@ -732,242 +700,60 @@ const Tables: React.FC = () => {
     },
   ];
 
+  const renderTableActions = (table: Table) => (
+    <div className="tables-card-actions">
+      {getActiveOrderByTable(table.id) && <>
+        <button type="button" className="tables-action tables-action-info" data-tooltip="Preview" aria-label={`Preview order for Table ${table.number}`} onClick={e => { e.stopPropagation(); setPreviewTable(table); }}><Eye size={15} /><span className="tables-action-label">Preview</span></button>
+        <button type="button" className="tables-action tables-action-primary" data-tooltip="Bill" aria-label={`Print bill for Table ${table.number}`} onClick={e => handleBillClick(e, table)}><Printer size={15} /><span className="tables-action-label">Bill</span></button>
+        <button type="button" className="tables-action tables-action-secondary" data-tooltip="Move" aria-label={`Move order from Table ${table.number}`} onClick={e => handleChangeTableClick(e, table)}><ArrowRightLeft size={15} /><span className="tables-action-label">Move</span></button>
+      </>}
+      {isAdmin && deleteMode && <button type="button" className="tables-action tables-action-danger" data-tooltip="Delete" aria-label={`Delete Table ${table.number}`} disabled={loadingTableId === table.id} onClick={() => handleDeleteTable(table)}>{loadingTableId === table.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}<span className="tables-action-label">Delete</span></button>}
+    </div>
+  );
+
   return (
     <>
-      <div>
-        {viewMode === 'layout' ? (
-          <div className="tables-layout-container">
-            {tables.length === 0 ? (
-              <div className="empty-state">
-                <Grid3X3 size={64} style={{ opacity: 0.5 }} />
-                <p>No tables configured</p>
-                {isAdmin && (
-                  <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '1rem' }}>
-                    Add Your First Table
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Status filter dropdown */}
-                <div className="tables-section-tabs">
-                  <div className="tables-section-tab tables-count-tab">
-                    All Tables <span className="tab-count">{tables.length}</span>
-                  </div>
-
-                  <div className="status-filter-dropdown">
-                    <button
-                      className={`tables-section-tab status-filter-trigger ${statusFilter !== 'all' ? 'active' : ''}`}
-                      onClick={() => setShowStatusDropdown(s => !s)}
-                      title="Filter by status"
-                    >
-                      <Filter size={13} />
-                      {statusFilter === 'all' ? 'All Status' : statusFilter === 'vacant' ? `Vacant (${vacantCount})` : `Occupied (${occupiedCount})`}
-                      <ChevronDown size={13} />
-                    </button>
-                    {showStatusDropdown && (
-                      <>
-                        <div className="status-filter-overlay" onClick={() => setShowStatusDropdown(false)} />
-                        <div className="status-filter-menu">
-                          <button
-                            className={`status-filter-option ${statusFilter === 'all' ? 'active' : ''}`}
-                            onClick={() => { setStatusFilter('all'); setShowStatusDropdown(false); }}
-                          >
-                            All Tables <span className="tab-count">{tables.length}</span>
-                          </button>
-                          <button
-                            className={`status-filter-option ${statusFilter === 'vacant' ? 'active' : ''}`}
-                            onClick={() => { setStatusFilter('vacant'); setShowStatusDropdown(false); }}
-                          >
-                            Vacant <span className="tab-count">{vacantCount}</span>
-                          </button>
-                          <button
-                            className={`status-filter-option ${statusFilter === 'occupied' ? 'active' : ''}`}
-                            onClick={() => { setStatusFilter('occupied'); setShowStatusDropdown(false); }}
-                          >
-                            Occupied <span className="tab-count">{occupiedCount}</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="tables-layout-grid compact">
-                {filteredTables.map((table, idx) => {
-                  const activeOrder = getActiveOrderByTable(table.id);
-                  return (
-                    <div
-                      key={table.id}
-                      className={`table-layout-card compact ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
-                      onClick={() => handleTableClick(table)}
-                      style={{ position: 'relative' }}
-                    >
-                      {checkingTableId === table.id && (
-                        <div className="table-checking-overlay" style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          background: 'rgba(255, 255, 255, 0.7)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 'inherit',
-                          zIndex: 10
-                        }}>
-                          <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
-                        </div>
-                      )}
-                      {isAdmin && deleteMode && (
-                        <button
-                          className="table-delete-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTable(table);
-                          }}
-                          disabled={loadingTableId === table.id}
-                        >
-                          {loadingTableId === table.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={12} />
-                          )}
-                        </button>
-                      )}
-                      {activeOrder && (
-                        <>
-                          <button
-                            className="table-bill-btn new-design"
-                            onClick={(e) => handleBillClick(e, table)}
-                            title="Print Bill"
-                          >
-                            <Printer size={16} />
-                          </button>
-                          <button
-                            className="table-change-btn"
-                            onClick={(e) => handleChangeTableClick(e, table)}
-                            title="Change Table"
-                          >
-                            <ArrowRightLeft size={14} />
-                          </button>
-                        </>
-                      )}
-                      {activeOrder && (
-                        <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
-                      )}
-                      <div className="table-layout-number">{table.number}</div>
-                      <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
-                        {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
-                      </div>
-                    </div>
-                  );
-                })}
-                </div>
-              </>
-            )}
+      <div className="tables-workspace">
+        <div className="tables-heading">
+          <div className="tables-summary" role="group" aria-label="Filter tables by status">
+            {([
+              { filter: 'all', label: 'All tables', count: tables.length, icon: Grid3X3 },
+              { filter: 'vacant', label: 'Available', count: vacantCount, icon: CheckCircle2 },
+              { filter: 'occupied', label: 'Occupied', count: occupiedCount, icon: Clock },
+            ] as const).map(({ filter, label, count, icon: Icon }) => <button type="button" key={filter} className={`tables-summary-card ${filter} ${statusFilter === filter ? 'is-selected' : ''}`} aria-pressed={statusFilter === filter} onClick={() => setStatusFilter(filter)}><span className="tables-summary-icon"><Icon size={14} /></span><span className="tables-summary-copy"><span>{label}</span><strong>{count}</strong></span></button>)}
           </div>
-        ) : (
-          <div className="card">
-            <div className="card-body" style={{ padding: 0 }}>
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>Table #</th>
-                    <th>Seats</th>
-                    <th>Status</th>
-                    <th>Current Order</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTables.map((table, idx) => {
-                    const activeOrder = getActiveOrderByTable(table.id);
-                    return (
-                      <tr
-                        key={table.id}
-                        className={`clickable-row ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
-                        onClick={() => handleTableClick(table)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <strong>Table {table.number}</strong>
-                            {checkingTableId === table.id && (
-                              <Loader2 size={14} className="animate-spin" style={{ color: 'var(--primary)' }} />
-                            )}
-                          </div>
-                        </td>
-                        <td>{table.seats} seats</td>
-                        <td>
-                          <span className={`badge ${activeOrder ? 'badge-warning' : 'badge-success'}`}>
-                            {activeOrder ? 'Occupied' : 'Available'}
-                          </span>
-                        </td>
-                        <td>
-                          {activeOrder ? (
-                            <div>
-                              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                                {formatCurrency(activeOrder.totalAmount)} ({activeOrder.items.length} items)
-                              </span>
-                              <div style={{ marginTop: '0.25rem' }}>
-                                <OrderTimer createdAt={activeOrder.createdAt} className="list-timer" />
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--gray-500)' }}>-</span>
-                          )}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="action-btns">
-                            {activeOrder && (
-                              <>
-                                <button
-                                  className="action-btn"
-                                  style={{ background: 'rgba(245,130,32, 0.1)', color: 'var(--primary)' }}
-                                  onClick={(e) => handleBillClick(e as any, table)}
-                                  title="Print Bill"
-                                >
-                                  <Printer size={14} />
-                                </button>
-                                <button 
-                                  className="action-btn" 
-                                  style={{ background: 'rgba(33,150,243, 0.1)', color: 'var(--info)' }}
-                                  onClick={(e) => handleChangeTableClick(e as any, table)}
-                                  title="Change Table"
-                                >
-                                  <ArrowRightLeft size={14} />
-                                </button>
-                              </>
-                            )}
-                            {isAdmin && deleteMode && (
-                              <button 
-                                className="action-btn delete" 
-                                onClick={() => handleDeleteTable(table)}
-                                disabled={loadingTableId === table.id}
-                                style={{
-                                  opacity: loadingTableId === table.id ? 0.5 : 1,
-                                  cursor: loadingTableId === table.id ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                {loadingTableId === table.id ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={14} />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <div className="tables-heading-actions">
+            <div className="tables-search"><Search size={18} aria-hidden="true" /><input aria-label="Search tables" type="search" placeholder="Search tables..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />{searchQuery && <button type="button" aria-label="Clear search" onClick={() => setSearchQuery('')}><X size={16} /></button>}</div>
+            <div className="tables-view-switch" role="group" aria-label="Table view"><button type="button" aria-label="Grid view" title="Grid view" aria-pressed={viewMode === 'layout'} className={viewMode === 'layout' ? 'is-selected' : ''} onClick={() => setViewMode('layout')}><Grid3X3 size={17} /></button><button type="button" aria-label="List view" title="List view" aria-pressed={viewMode === 'list'} className={viewMode === 'list' ? 'is-selected' : ''} onClick={() => setViewMode('list')}><List size={18} /></button></div>
+            <button type="button" className="tables-control tables-primary" onClick={() => navigate('/parcel-order')}><Package size={18} /> Parcel order</button>
+            <div className="tables-menu" ref={tableMenuRef}>
+              <button type="button" className="tables-control tables-menu-trigger" aria-label="Table actions" title="Table actions" aria-haspopup="menu" aria-expanded={showTableMenu} onClick={() => setShowTableMenu(open => !open)}><ChevronDown size={18} /></button>
+              {showTableMenu && <div className="tables-menu-list" role="menu">
+                <button type="button" role="menuitem" className="tables-menu-item" onClick={() => { setShowAddModal(true); setShowTableMenu(false); }}><Plus size={15} /> Add table</button>
+                {isAdmin && <button type="button" role="menuitem" className={`tables-menu-item ${deleteMode ? 'is-active' : ''}`} onClick={() => { setDeleteMode(mode => !mode); setShowTableMenu(false); }}><Trash2 size={15} /> {deleteMode ? 'Done managing' : 'Manage tables'}</button>}
+              </div>}
             </div>
+            <button type="button" className="tables-control tables-help" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShowShortcutsHelp(true)}><HelpCircle size={18} /></button>
           </div>
-        )}
+        </div>
+        <section className="tables-panel" aria-label="Dining tables">
+          <div className="tables-results-heading"><h3>{activeSection === 'all' ? 'All sections' : activeSection}<span>{filteredTables.length} {filteredTables.length === 1 ? 'table' : 'tables'}</span></h3></div>
+          {deleteMode && isAdmin && <div className="tables-manage-notice"><Trash2 size={16} /><span>Table management is on. Choose Delete to remove a table; you’ll be asked to confirm.</span><button type="button" onClick={() => setDeleteMode(false)}>Done</button></div>}
+          {filteredTables.length === 0 ? <div className="tables-empty"><span className="tables-empty-icon">{tables.length ? <Search size={28} /> : <Grid3X3 size={28} />}</span><h3>{tables.length ? 'No tables match your filters' : 'Your dining room starts here'}</h3><p>{tables.length ? 'Try another table number, section, or status.' : 'Add your first table to start taking dine-in orders.'}</p><button type="button" className="tables-control tables-primary" onClick={tables.length ? resetFilters : () => setShowAddModal(true)}>{tables.length ? 'Clear filters' : 'Add your first table'}</button></div> : viewMode === 'layout' ? <div className="tables-card-grid">{filteredTables.map((table, idx) => {
+            const activeOrder = getActiveOrderByTable(table.id);
+            return <article key={table.id} className={`tables-dining-card ${activeOrder ? 'is-occupied' : ''} ${idx === kbFocusedIndex ? 'is-kb-focused' : ''}`}>
+              <button type="button" className="tables-card-open" onClick={() => handleTableClick(table)} aria-label={`${activeOrder ? 'View order for' : 'Start order at'} Table ${table.number}`}>
+                <span className="tables-card-top"><span className="tables-card-title">Table <strong>{table.number}</strong></span><span className={`tables-status ${activeOrder ? 'occupied' : 'available'}`}><span />{activeOrder ? 'Occupied' : 'Available'}</span></span>
+                <span className="tables-card-meta"><Users size={14} />{table.seats} seats<span className="tables-meta-divider">·</span><span className="tables-section-name">{table.section || 'Ground Floor'}</span></span>
+                <span className="tables-card-order">{activeOrder ? <><strong>{formatCurrency(activeOrder.totalAmount)}</strong><OrderTimer createdAt={activeOrder.createdAt} className="tables-elapsed" /></> : <span className="tables-start-label"><Plus size={13} /> Start order</span>}</span>
+              </button>
+              {((!!activeOrder) || (isAdmin && deleteMode)) && renderTableActions(table)}
+            </article>;
+          })}</div> : <div className="tables-list-scroll"><table className="tables-list"><thead><tr><th scope="col">Table</th><th scope="col">Section</th><th scope="col">Seats</th><th scope="col">Status</th><th scope="col">Current order</th><th scope="col">Actions</th></tr></thead><tbody>{filteredTables.map((table, idx) => {
+            const activeOrder = getActiveOrderByTable(table.id);
+            return <tr key={table.id} className={idx === kbFocusedIndex ? 'is-kb-focused' : ''}><td><button type="button" className="tables-list-open" onClick={() => handleTableClick(table)}>Table {table.number}<ArrowUpRight size={15} /></button></td><td>{table.section || 'Ground Floor'}</td><td>{table.seats} seats</td><td><span className={`tables-status ${activeOrder ? 'occupied' : 'available'}`}><span />{activeOrder ? 'Occupied' : 'Available'}</span></td><td>{activeOrder ? <div className="tables-list-order"><strong>{formatCurrency(activeOrder.totalAmount)}</strong><OrderTimer createdAt={activeOrder.createdAt} className="tables-elapsed" /></div> : <span className="tables-muted">No active order</span>}</td><td>{activeOrder || (isAdmin && deleteMode) ? renderTableActions(table) : <button type="button" className="tables-action" onClick={() => handleTableClick(table)}><Plus size={15} /> Start order</button>}</td></tr>;
+          })}</tbody></table></div>}
+        </section>
       </div>
 
       {/* Add Table Modal */}
@@ -1026,6 +812,87 @@ const Tables: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Order Preview Modal */}
+      {previewTable && previewOrder && (
+        <div className="modal-overlay" onClick={() => setPreviewTable(null)}>
+          <div className="modal tables-preview-modal" onClick={e => e.stopPropagation()}>
+            <div className="tables-preview-head">
+              <span className="tables-preview-chip">T{previewTable.number}</span>
+              <div className="tables-preview-headtext">
+                <h2>Order preview</h2>
+                <span>Table {previewTable.number} · {previewTable.section || 'Ground Floor'}</span>
+              </div>
+              <button className="close-btn" onClick={() => setPreviewTable(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="tables-preview-statusbar">
+              <span className="tables-status occupied"><span />Occupied</span>
+              <OrderTimer createdAt={previewOrder.createdAt} className="tables-elapsed" />
+              <span className="tables-preview-count">{previewOrder.items.length} {previewOrder.items.length === 1 ? 'item' : 'items'}</span>
+            </div>
+            <div className="tables-preview-items">
+              {previewOrder.items.map((oi: any, index: number) => (
+                <div key={index} className="tables-preview-item">
+                  <span className="tables-preview-qty">{oi.quantity}×</span>
+                  <div className="tables-preview-item-info">
+                    <span className="tables-preview-item-name">{oi.item.name}</span>
+                    <span className="tables-preview-item-sub">{formatCurrency(oi.item.price)} each{oi.notes ? ` · ${oi.notes}` : ''}</span>
+                  </div>
+                  <span className="tables-preview-item-total">{formatCurrency(oi.quantity * oi.item.price)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="tables-preview-summary">
+              <div className="tables-preview-summary-row">
+                <span>Subtotal</span>
+                <span>{formatCurrency(previewOrder.items.reduce((sum: number, oi: any) => sum + oi.item.price * oi.quantity, 0))}</span>
+              </div>
+              {previewOrder.discountAmount > 0 && (
+                <div className="tables-preview-summary-row">
+                  <span>Discount</span>
+                  <span>-{formatCurrency(previewOrder.discountAmount)}</span>
+                </div>
+              )}
+              {taxEnabled && previewOrder.taxAmount > 0 && (
+                <div className="tables-preview-summary-row">
+                  <span>Tax</span>
+                  <span>{formatCurrency(previewOrder.taxAmount)}</span>
+                </div>
+              )}
+              <div className="tables-preview-summary-row tables-preview-total">
+                <span>TOTAL</span>
+                <span>{formatCurrency(previewOrder.totalAmount)}</span>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={e => { setPreviewTable(null); handleBillClick(e, previewTable); }}>
+                <Printer size={16} /> Bill
+              </button>
+              <button className="btn btn-secondary" onClick={() => { const table = previewTable; setPreviewTable(null); handleTableClick(table); }}>
+                Open order
+              </button>
+              <button className="btn btn-danger" onClick={() => setPrinterConfirm({
+                show: true,
+                title: 'Cancel Order',
+                message: `Are you sure you want to cancel the order for Table ${previewTable.number}?`,
+                onConfirm: async () => {
+                  setPrinterConfirm(p => ({ ...p, show: false }));
+                  try {
+                    await cancelOrder(previewOrder.id);
+                    setPreviewTable(null);
+                  } catch (error: any) {
+                    setErrorDialog({ show: true, message: error.message || 'Failed to cancel order' });
+                  }
+                },
+              })}>
+                Cancel order
+              </button>
+            </div>
           </div>
         </div>
       )}

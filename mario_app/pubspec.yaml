@@ -3,7 +3,7 @@ description: Mario App - Restaurant Management System
 
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 3.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -39,6 +39,7 @@ dependencies:
   flutter_slidable: ^3.0.1
   skeletonizer: ^1.1.1
   url_launcher: ^6.2.2
+  package_info_plus: ^9.0.1
 
 flutter:
   uses-material-design: true

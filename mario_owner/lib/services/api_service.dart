@@ -35,7 +35,7 @@ class ApiService {
     }
     // Debug builds: a stale production URL saved by an earlier run would
     // otherwise override the local-backend default forever.
-    if (kDebugMode && _baseUrl == 'https://mario-v2-backend.ntoric.com/api') {
+    if (kDebugMode && _baseUrl == 'http://localhost:8088/api') {
       _baseUrl = '${AppConstants.defaultApiUrl}/api';
     }
     await prefs.setString('api_url', _baseUrl);

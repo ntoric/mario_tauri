@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 
 class AppConstants {
   static const String appName = 'Mario App';
-  static const String appVersion = '1.0.0';
+
+  // Populated at startup from the version baked into the binary at build
+  // time (pubspec.yaml `version:` or `--build-name`). Do not hardcode.
+  static String appVersion = '0.0.0';
 
   // Debug builds hit the locally running backend; release builds use cloud.
   static const String defaultApiUrl = kDebugMode
       ? 'http://localhost:8088'
-      : 'https://mario-v2-backend.ntoric.com';
+      : 'http://localhost:8088';
 }
 
 class AppColors {

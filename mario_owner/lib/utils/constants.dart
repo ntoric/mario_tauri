@@ -8,7 +8,7 @@ class AppConstants {
   // Debug builds hit the locally running backend; release builds use cloud.
   static const String defaultApiUrl = kDebugMode
       ? 'http://localhost:8088'
-      : 'https://mario-v2-backend.ntoric.com';
+      : 'http://localhost:8088';
 }
 
 class AppColors {
