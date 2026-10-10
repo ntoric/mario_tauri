@@ -22,8 +22,11 @@ class ApiService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token');
+    // The session token is intentionally NOT persisted: sessions live
+    // server-side in Redis and the app must log in on every cold start.
     await prefs.setString('api_url', _baseUrl);
+    // Remove any token persisted by older builds.
+    await prefs.remove('auth_token');
   }
 
   Future<void> saveBaseUrl(String url) async {
@@ -45,9 +48,8 @@ class ApiService {
   }
 
   Future<void> setToken(String token) async {
+    // In-memory only — never written to persistent storage.
     _token = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
   }
 
   String? get token => _token;
@@ -56,6 +58,19 @@ class ApiService {
     _token = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+  }
+
+  /// Invalidates the server-side session, then clears the local token.
+  Future<void> logout() async {
+    try {
+      await http.post(
+        Uri.parse('$_baseUrl/auth/logout'),
+        headers: _headers,
+      );
+    } catch (_) {
+      // Best-effort: local cleanup proceeds regardless.
+    }
+    await clearToken();
   }
 
   Future<dynamic> _handleResponse(http.Response response) async {

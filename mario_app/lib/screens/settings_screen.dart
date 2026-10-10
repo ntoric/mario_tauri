@@ -118,6 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirm == true) {
       final auth = context.read<AuthProvider>();
       await auth.logout();
+      context.read<DataProvider>().clearData();
 
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(

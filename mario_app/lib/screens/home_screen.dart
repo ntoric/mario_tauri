@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Check store status every 30 seconds - refresh user data from server
     _storeStatusCheckTimer =
         Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (isQuietHours()) return;
       final auth = context.read<AuthProvider>();
       await auth.refreshUser();
       _checkStoreStatus();

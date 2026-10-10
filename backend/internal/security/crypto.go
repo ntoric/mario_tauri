@@ -28,7 +28,7 @@ func HashPassword(password string) (string, error) {
 	}
 
 	hash := pbkdf2.Key([]byte(password), salt, Iterations, KeyLen, sha256.New)
-	
+
 	saltHex := hex.EncodeToString(salt)
 	hashHex := hex.EncodeToString(hash)
 

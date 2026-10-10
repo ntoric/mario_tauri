@@ -3,12 +3,10 @@ package middleware
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"cafe-backend/internal/session"
 )
 
 type contextKey string
@@ -20,33 +18,11 @@ type UserClaims struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	StoreID  string `json:"store_id"` // Matches Node.js casing (store_id)
-	jwt.RegisteredClaims
 }
 
-// GenerateToken creates a new JWT token for a user
-func GenerateToken(userID, username, role, storeID, secretKey string) (string, error) {
-	claims := UserClaims{
-		ID:       userID,
-		Username: username,
-		Role:     role,
-		StoreID:  storeID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(secretKey))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-// AuthMiddleware intercepts requests and validates Bearer JWT tokens
-func AuthMiddleware(db *sql.DB, secretKey string) func(http.Handler) http.Handler {
+// AuthMiddleware intercepts requests and validates Bearer session tokens
+// against the server-side session store in Redis.
+func AuthMiddleware(db *sql.DB, sessions *session.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -65,18 +41,23 @@ func AuthMiddleware(db *sql.DB, secretKey string) func(http.Handler) http.Handle
 				http.Error(w, `{"error": "Access denied. No token provided."}`, http.StatusUnauthorized)
 				return
 			}
-			claims := &UserClaims{}
 
-			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, errors.New("unexpected signing method")
-				}
-				return []byte(secretKey), nil
-			})
-
-			if err != nil || !token.Valid {
-				http.Error(w, `{"error": "Invalid token"}`, http.StatusUnauthorized)
+			if sessions == nil {
+				http.Error(w, `{"error": "Session store unavailable"}`, http.StatusServiceUnavailable)
 				return
+			}
+
+			data, err := sessions.Get(r.Context(), tokenString)
+			if err != nil {
+				http.Error(w, `{"error": "Invalid or expired session"}`, http.StatusUnauthorized)
+				return
+			}
+
+			claims := &UserClaims{
+				ID:       data.UserID,
+				Username: data.Username,
+				Role:     data.Role,
+				StoreID:  data.StoreID,
 			}
 
 			// Verify user exists and is active in database
@@ -94,7 +75,7 @@ func AuthMiddleware(db *sql.DB, secretKey string) func(http.Handler) http.Handle
 	}
 }
 
-// GetUserFromContext extracts JWT claims from context
+// GetUserFromContext extracts user claims from context
 func GetUserFromContext(ctx context.Context) (*UserClaims, bool) {
 	claims, ok := ctx.Value(UserContextKey).(*UserClaims)
 	return claims, ok

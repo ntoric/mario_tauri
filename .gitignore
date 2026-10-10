@@ -60,3 +60,6 @@ frontend/src-tauri/target/
 # Electron build artifacts (removed - kept for git history)
 electron/dist/
 electron/out/
+
+# Request logs
+logs/

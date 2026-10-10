@@ -1,5 +1,5 @@
 export const getTableStatusWsUrl = (storeId: string): string => {
-  const token = localStorage.getItem('cafe_token');
+  const token = sessionStorage.getItem('cafe_token');
   if (!token) return '';
 
   const env = (import.meta as any).env;

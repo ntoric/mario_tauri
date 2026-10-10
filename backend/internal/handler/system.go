@@ -65,7 +65,23 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := h.Repo.System.GetStats(r.Context())
+	// Scope stats to the caller's own stores; only superadmin sees globals.
+	var storeIDs []string
+	switch claims.Role {
+	case "business_admin":
+		storeIDs = []string{claims.StoreID}
+	case "business_owner":
+		stores, err := h.Repo.User.GetUserStores(r.Context(), claims.ID)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		for _, s := range stores {
+			storeIDs = append(storeIDs, s.ID)
+		}
+	}
+
+	stats, err := h.Repo.System.GetStats(r.Context(), storeIDs)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -135,7 +151,7 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.Repo.System.SaveConfig(r.Context(), req.CleanupEnabled, req.CleanupIntervalMins)
+	err := h.Repo.System.SaveConfig(r.Context(), req.CleanupEnabled, req.CleanupIntervalMins, claims.ID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -245,6 +261,7 @@ func (h *Handler) UpdateAppUpdate(w http.ResponseWriter, r *http.Request) {
 		Version:      req.Version,
 		DownloadURL:  req.DownloadURL,
 		ReleaseNotes: &req.ReleaseNotes,
+		ModifiedBy:   claims.ID,
 	}
 
 	err := h.Repo.AppUpdate.CreateOrUpdate(r.Context(), update)
@@ -296,7 +313,7 @@ func (h *Handler) UpdateSupportConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Repo.SupportConfig.Save(r.Context(), req); err != nil {
+	if err := h.Repo.SupportConfig.Save(r.Context(), req, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -364,7 +381,7 @@ func (h *Handler) UpdateUpdateRepoConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.Repo.UpdateRepo.Save(r.Context(), repo); err != nil {
+	if err := h.Repo.UpdateRepo.Save(r.Context(), repo, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

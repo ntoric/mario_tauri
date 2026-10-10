@@ -25,16 +25,10 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
 	status := r.URL.Query().Get("status")
 
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -65,13 +59,12 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
 
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	if req.TableID != "" && !h.requireRecordBelongsToStore(w, r, "tables", req.TableID, targetStoreID, "Table") {
 		return
 	}
 
@@ -101,7 +94,18 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 // UpdateOrder handles PUT /api/orders/:id
 func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+
+	orderStoreID, ok := h.recordStoreAccess(w, r, claims, "orders", id)
+	if !ok {
+		return
+	}
 
 	// Read unstructured JSON to parse fields dynamically
 	var raw map[string]interface{}
@@ -121,7 +125,17 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		updates["discount_amount"] = val
 	}
 	if val, exists := raw["tableId"]; exists {
-		updates["table_id"] = val
+		tableID, _ := val.(string)
+		if tableID == "" {
+			updates["table_id"] = nil
+		} else {
+			// The target table must belong to the same store as the order,
+			// otherwise the order would surface in another store's table view.
+			if !h.requireRecordBelongsToStore(w, r, "tables", tableID, orderStoreID, "Table") {
+				return
+			}
+			updates["table_id"] = tableID
+		}
 	}
 	if val, exists := raw["tableNumber"]; exists {
 		if floatVal, ok := val.(float64); ok {
@@ -179,7 +193,32 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err := h.Repo.Order.Update(r.Context(), id, updates, items, hasItems)
+	// Every referenced item must belong to the order's store.
+	if hasItems {
+		itemIDs := make([]string, 0, len(items))
+		for _, it := range items {
+			itemID := it.ItemID
+			if itemID == "" {
+				itemID = it.Item.ID
+			}
+			if itemID != "" {
+				itemIDs = append(itemIDs, itemID)
+			}
+		}
+		foreign, err := h.Repo.CountForeignStoreRecords(r.Context(), "items", itemIDs, orderStoreID)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if foreign > 0 {
+			h.writeError(w, http.StatusForbidden, "One or more items belong to a different store")
+			return
+		}
+	}
+
+	updates["modified_by"] = claims.ID
+
+	err := h.Repo.Order.Update(r.Context(), id, updates, items, hasItems, claims.ID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -198,13 +237,24 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 
 // CompleteOrder handles PATCH /api/orders/:id/complete
 func (h *Handler) CompleteOrder(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+
+	if !h.requireRecordStoreAccess(w, r, claims, "orders", id) {
+		return
+	}
+
 	var req struct {
 		PaymentMethod string `json:"paymentMethod"`
 	}
 	_ = h.readJSON(r, &req)
 
-	err := h.Repo.Order.Complete(r.Context(), id, req.PaymentMethod)
+	err := h.Repo.Order.Complete(r.Context(), id, req.PaymentMethod, claims.ID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -223,6 +273,12 @@ func (h *Handler) CompleteOrder(w http.ResponseWriter, r *http.Request) {
 // CancelOrder handles PATCH /api/orders/:id/cancel
 // Supports cancelling both active and completed (bill printed) orders.
 func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 
 	var req struct {
@@ -237,12 +293,22 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	allowed, err := h.authorizeStore(r.Context(), claims, order.StoreID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+		return
+	}
+
 	if order.Status == "cancelled" {
 		h.writeError(w, http.StatusBadRequest, "Order is already cancelled")
 		return
 	}
 
-	err = h.Repo.Order.Cancel(r.Context(), id)
+	err = h.Repo.Order.Cancel(r.Context(), id, claims.ID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -274,12 +340,12 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+
+	if req.TableID != "" && !h.requireRecordBelongsToStore(w, r, "tables", req.TableID, targetStoreID, "Table") {
 		return
 	}
 
@@ -315,7 +381,7 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Complete order immediately
-	if err := h.Repo.Order.Complete(r.Context(), orderID, paymentMethod); err != nil {
+	if err := h.Repo.Order.Complete(r.Context(), orderID, paymentMethod, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -369,12 +435,8 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -384,7 +446,7 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if order == nil {
+	if order == nil || order.StoreID != targetStoreID {
 		h.writeError(w, http.StatusNotFound, "Order not found")
 		return
 	}
@@ -420,7 +482,7 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Repo.Order.Complete(r.Context(), id, paymentMethod); err != nil {
+	if err := h.Repo.Order.Complete(r.Context(), id, paymentMethod, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -458,12 +520,8 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -495,7 +553,7 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update status to completed (Create inserts as 'active', so we need to update)
-	if err := h.Repo.Order.Complete(r.Context(), orderID, req.PaymentMethod); err != nil {
+	if err := h.Repo.Order.Complete(r.Context(), orderID, req.PaymentMethod, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -543,14 +601,8 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -581,13 +633,12 @@ func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
 
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	if req.OrderID != "" && !h.requireRecordBelongsToStore(w, r, "orders", req.OrderID, targetStoreID, "Order") {
 		return
 	}
 
@@ -611,10 +662,9 @@ func (h *Handler) GetNextInvoiceNo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
+		return
 	}
 
 	invoiceNo, err := h.Repo.Bill.GetNextInvoiceNo(r.Context(), targetStoreID)
@@ -628,9 +678,19 @@ func (h *Handler) GetNextInvoiceNo(w http.ResponseWriter, r *http.Request) {
 
 // PrintBill handles POST /api/bills/:id/print
 func (h *Handler) PrintBill(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 
-	err := h.Repo.Bill.MarkAsPrinted(r.Context(), id)
+	if !h.requireRecordStoreAccess(w, r, claims, "bills", id) {
+		return
+	}
+
+	err := h.Repo.Bill.MarkAsPrinted(r.Context(), id, claims.ID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -670,13 +730,12 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("REQ : ", req)
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
 
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	if req.OrderID != "" && !h.requireRecordBelongsToStore(w, r, "orders", req.OrderID, targetStoreID, "Order") {
 		return
 	}
 
@@ -747,14 +806,8 @@ func (h *Handler) GetBillQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 

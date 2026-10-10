@@ -5,6 +5,7 @@ import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
+import { isQuietHours } from '../utils/quietHours';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
@@ -107,7 +108,7 @@ const Tables: React.FC = () => {
     let isPolling = false;
 
     const pollQueue = async () => {
-      if (isPolling) return;
+      if (isPolling || isQuietHours()) return;
       isPolling = true;
       try {
         await fetchBillQueue();

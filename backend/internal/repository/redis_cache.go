@@ -24,6 +24,12 @@ func (r *RedisCache) Ping(ctx context.Context) error {
 	return r.client.Ping(ctx).Err()
 }
 
+// Client exposes the underlying Redis client for subsystems that need commands
+// beyond the cache helpers (e.g. the session store).
+func (r *RedisCache) Client() *redis.Client {
+	return r.client
+}
+
 func (r *RedisCache) Get(ctx context.Context, key string) ([]byte, bool) {
 	val, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {

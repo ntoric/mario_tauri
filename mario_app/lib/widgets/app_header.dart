@@ -137,6 +137,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                             try {
                               await auth.switchStore(store);
                               final data = screenContext.read<DataProvider>();
+                              data.clearData();
                               await data.loadAllData(auth);
 
                               navigator.pop();
@@ -244,6 +245,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             try {
               await auth.switchStore(store);
               final data = context.read<DataProvider>();
+              data.clearData();
               await data.loadAllData(auth);
 
               if (context.mounted) Navigator.pop(context);

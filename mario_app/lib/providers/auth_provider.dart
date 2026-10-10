@@ -56,31 +56,8 @@ class AuthProvider extends ChangeNotifier {
       }
     }
 
-    // Try to load saved token
-    final savedToken = prefs.getString('auth_token');
-
-    if (_isBackendConnected && savedToken != null) {
-      try {
-        _backend.currentToken = savedToken;
-        final isValid = await _backend.validateToken();
-        if (isValid) {
-          final meData = Map<String, dynamic>.from(_backend.currentUser!);
-          try {
-            final stores = await _backend.api.getStores();
-            meData['stores'] = stores.map((s) => s.toJson()).toList();
-          } catch (_) {
-            // Keep session restore resilient; some payloads already include stores.
-          }
-
-          _user = User.fromJson(meData);
-          _isAuthenticated = true;
-          _currentStore = _resolveCurrentStore(_user!);
-        }
-      } catch (e) {
-        _isAuthenticated = false;
-        print('Token validation error on startup: $e');
-      }
-    }
+    // Sessions are server-side (Redis) and the token is never persisted, so a
+    // cold start always requires a fresh login.
 
     notifyListeners();
   }
@@ -143,10 +120,6 @@ class AuthProvider extends ChangeNotifier {
         _user = User.fromJson(_backend.currentUser!);
         _isAuthenticated = true;
         _currentStore = _resolveCurrentStore(_user!);
-
-        // Save token
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('auth_token', _backend.currentToken!);
       } else {
         _error = 'Invalid username or password';
       }
@@ -165,13 +138,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // Invalidate the server-side session, then clear local state.
+    await _backend.api.logout();
     _backend.logout();
     _user = null;
     _currentStore = null;
     _isAuthenticated = false;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
 
     notifyListeners();
   }

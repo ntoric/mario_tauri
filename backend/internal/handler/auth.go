@@ -2,10 +2,12 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
 	"cafe-backend/internal/security"
+	"cafe-backend/internal/session"
 )
 
 // Login handles POST /api/auth/login
@@ -56,10 +58,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate JWT token
-	token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, user.StoreID, h.Cfg.JWTSecret)
+	// Create a server-side session; clients receive only the opaque token.
+	if h.Sessions == nil {
+		h.writeError(w, http.StatusServiceUnavailable, "Session store unavailable")
+		return
+	}
+	token, err := h.Sessions.Create(r.Context(), session.Data{
+		UserID:   user.ID,
+		Username: user.Username,
+		Role:     user.Role,
+		StoreID:  user.StoreID,
+	})
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to generate token: "+err.Error())
+		h.writeError(w, http.StatusInternalServerError, "Failed to create session: "+err.Error())
 		return
 	}
 
@@ -77,6 +88,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			IsActive:  user.IsActive,
 		},
 	})
+}
+
+// Logout handles POST /api/auth/logout. Public route: it deletes whatever
+// session the presented token maps to and is a no-op for invalid tokens.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	if h.Sessions != nil {
+		authHeader := r.Header.Get("Authorization")
+		if parts := strings.Split(authHeader, " "); len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" && parts[1] != "" {
+			h.Sessions.Delete(r.Context(), parts[1])
+		}
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Logged out"})
 }
 
 // Me handles GET /api/auth/me (Protected Route)

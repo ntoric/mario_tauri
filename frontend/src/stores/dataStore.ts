@@ -207,6 +207,20 @@ export const useDataStore = create<DataState>((set, get) => ({
     await api.switchStore(storeId);
     useAuthStore.getState().setCurrentStore(storeId);
     
+    // Drop all store-scoped data so the previous store's records are never
+    // rendered under the newly selected store while refetch is in flight.
+    set({
+      categories: [],
+      items: [],
+      tables: [],
+      tableSections: [],
+      orders: [],
+      bills: [],
+      billQueue: [],
+      expenseCategories: [],
+      expenses: [],
+    });
+
     // Clear store-specific cache when switching stores
     cache.deleteByPrefix('categories:');
     cache.deleteByPrefix('items:');

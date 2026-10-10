@@ -56,7 +56,24 @@ func (h *Handler) GetStores(w http.ResponseWriter, r *http.Request) {
 
 // GetStore handles GET /api/stores/:id
 func (h *Handler) GetStore(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+
+	allowed, err := h.authorizeStore(r.Context(), claims, id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+		return
+	}
+
 	s, err := h.Repo.Store.GetByID(r.Context(), id)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -213,6 +230,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 			updates[sqlCol] = val
 		}
 	}
+	updates["modified_by"] = claims.ID
 
 	if err := h.Repo.Store.Update(r.Context(), id, updates); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -328,12 +346,17 @@ func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "Not authorized")
 			return
 		}
-	} else if claims.Role != "superadmin" && claims.Role != "business_admin" && claims.Role != "staff" {
+	} else if claims.Role == "business_admin" || claims.Role == "staff" {
+		if claims.StoreID != id {
+			h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+			return
+		}
+	} else if claims.Role != "superadmin" {
 		h.writeError(w, http.StatusForbidden, "Not authorized")
 		return
 	}
 
-	if err := h.Repo.Store.UpdateLogo(r.Context(), id, req.LogoBase64); err != nil {
+	if err := h.Repo.Store.UpdateLogo(r.Context(), id, req.LogoBase64, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -368,12 +391,17 @@ func (h *Handler) DeleteLogo(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "Not authorized")
 			return
 		}
-	} else if claims.Role != "superadmin" && claims.Role != "business_admin" && claims.Role != "staff" {
+	} else if claims.Role == "business_admin" || claims.Role == "staff" {
+		if claims.StoreID != id {
+			h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+			return
+		}
+	} else if claims.Role != "superadmin" {
 		h.writeError(w, http.StatusForbidden, "Not authorized")
 		return
 	}
 
-	if err := h.Repo.Store.DeleteLogo(r.Context(), id); err != nil {
+	if err := h.Repo.Store.DeleteLogo(r.Context(), id, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -442,7 +470,7 @@ func (h *Handler) ReportAppVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Repo.Store.UpdateAppVersion(r.Context(), storeID, version); err != nil {
+	if err := h.Repo.Store.UpdateAppVersion(r.Context(), storeID, version, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

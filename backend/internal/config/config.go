@@ -22,6 +22,7 @@ type Config struct {
 	SuperadminUsername string
 	SuperadminPassword string
 	SuperadminName     string
+	RequestLogDir      string
 }
 
 func LoadConfig() (*Config, error) {
@@ -88,6 +89,7 @@ func LoadConfig() (*Config, error) {
 	superadminUsername := getEnv("SUPERADMIN_USERNAME", "superadmin")
 	superadminPassword := getEnv("SUPERADMIN_PASSWORD", "superadmin123")
 	superadminName := getEnv("SUPERADMIN_NAME", "Super Administrator")
+	requestLogDir := getEnv("REQUEST_LOG_DIR", "logs")
 
 	return &Config{
 		DBHost:             dbHost,
@@ -103,6 +105,7 @@ func LoadConfig() (*Config, error) {
 		SuperadminUsername: superadminUsername,
 		SuperadminPassword: superadminPassword,
 		SuperadminName:     superadminName,
+		RequestLogDir:      requestLogDir,
 	}, nil
 }
 

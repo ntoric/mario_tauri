@@ -22,14 +22,8 @@ func (h *Handler) GetCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -60,13 +54,8 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -85,7 +74,17 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 
 // UpdateCategory handles PUT /api/categories/:id
 func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+	if !h.requireRecordStoreAccess(w, r, claims, "categories", id) {
+		return
+	}
+
 	var req models.Category
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -93,6 +92,7 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ID = id
+	req.ModifiedBy = claims.ID
 	if err := h.Repo.Category.Update(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -103,8 +103,18 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 
 // DeleteCategory handles DELETE /api/categories/:id
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
-	if err := h.Repo.Category.Delete(r.Context(), id); err != nil {
+	if !h.requireRecordStoreAccess(w, r, claims, "categories", id) {
+		return
+	}
+
+	if err := h.Repo.Category.Delete(r.Context(), id, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -124,14 +134,8 @@ func (h *Handler) GetItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -164,13 +168,12 @@ func (h *Handler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
 
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	if req.CategoryID != "" && !h.requireRecordBelongsToStore(w, r, "categories", req.CategoryID, targetStoreID, "Category") {
 		return
 	}
 
@@ -189,14 +192,30 @@ func (h *Handler) CreateItem(w http.ResponseWriter, r *http.Request) {
 
 // UpdateItem handles PUT /api/items/:id
 func (h *Handler) UpdateItem(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+	itemStoreID, ok := h.recordStoreAccess(w, r, claims, "items", id)
+	if !ok {
+		return
+	}
+
 	var req models.Item
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
 
+	if req.CategoryID != "" && !h.requireRecordBelongsToStore(w, r, "categories", req.CategoryID, itemStoreID, "Category") {
+		return
+	}
+
 	req.ID = id
+	req.ModifiedBy = claims.ID
 	if err := h.Repo.Item.Update(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -207,8 +226,18 @@ func (h *Handler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 
 // DeleteItem handles DELETE /api/items/:id
 func (h *Handler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
-	if err := h.Repo.Item.Delete(r.Context(), id); err != nil {
+	if !h.requireRecordStoreAccess(w, r, claims, "items", id) {
+		return
+	}
+
+	if err := h.Repo.Item.Delete(r.Context(), id, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

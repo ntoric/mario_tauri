@@ -2,7 +2,7 @@
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_URL ||
-  'https://mario-v2-backend.ntoric.com/api';
+  'http://localhost:8088/api';
 
 // Log API URL for debugging
 console.log('API URL configured as:', API_URL);
@@ -14,21 +14,26 @@ class ApiService {
 
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('cafe_token', token);
+    // Session-scoped storage only: nothing survives a browser/app restart,
+    // matching the server-side Redis session model.
+    sessionStorage.setItem('cafe_token', token);
   }
 
   getToken(): string | null {
     if (!this.token) {
-      this.token = localStorage.getItem('cafe_token');
+      this.token = sessionStorage.getItem('cafe_token');
     }
     return this.token;
   }
 
   clearToken() {
     this.token = null;
+    sessionStorage.removeItem('cafe_token');
+    sessionStorage.removeItem('cafe-auth');
+    sessionStorage.removeItem('cafe-user');
+    // Clean up any credentials persisted by older builds.
     localStorage.removeItem('cafe_token');
     localStorage.removeItem('cafe-auth');
-    // Also clear any other auth-related keys
     localStorage.removeItem('cafe-user');
   }
 
@@ -104,6 +109,15 @@ class ApiService {
 
   async getMe() {
     return this.fetch('/auth/me');
+  }
+
+  async logout() {
+    // Invalidate the server-side session, then clear the local token.
+    try {
+      await this.fetch('/auth/logout', { method: 'POST' }, true);
+    } finally {
+      this.clearToken();
+    }
   }
 
   // Stores

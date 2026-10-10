@@ -12,9 +12,18 @@ import (
 
 // GetItemExpenses handles GET /api/items/{itemId}/expenses
 func (h *Handler) GetItemExpenses(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	itemID := chi.URLParam(r, "itemId")
 	if itemID == "" {
 		h.writeError(w, http.StatusBadRequest, "Item ID required")
+		return
+	}
+	if !h.requireRecordStoreAccess(w, r, claims, "items", itemID) {
 		return
 	}
 
@@ -52,12 +61,19 @@ func (h *Handler) CreateItemExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
 	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+
+	// The item must belong to the same store the expense is recorded against.
+	itemStoreID, err := h.Repo.GetRecordStoreID(r.Context(), "items", itemID)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "Item not found")
+		return
+	}
+	if itemStoreID != targetStoreID {
+		h.writeError(w, http.StatusNotFound, "Item not found")
 		return
 	}
 
@@ -83,6 +99,22 @@ func (h *Handler) UpdateItemExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := chi.URLParam(r, "id")
+
+	storeID, err := h.Repo.GetRecordStoreID(r.Context(), "item_expenses", id)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "Item expense not found")
+		return
+	}
+	allowed, err := h.authorizeStore(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+		return
+	}
+
 	var req models.ItemExpense
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -95,11 +127,8 @@ func (h *Handler) UpdateItemExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ID = id
-	storeID := req.StoreID
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
 	req.StoreID = storeID
+	req.ModifiedBy = claims.ID
 
 	if err := h.Repo.ItemExpense.Update(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -118,12 +147,23 @@ func (h *Handler) DeleteItemExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := chi.URLParam(r, "id")
-	storeID := r.URL.Query().Get("storeId")
-	if storeID == "" {
-		storeID = claims.StoreID
+
+	storeID, err := h.Repo.GetRecordStoreID(r.Context(), "item_expenses", id)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "Item expense not found")
+		return
+	}
+	allowed, err := h.authorizeStore(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		h.writeError(w, http.StatusForbidden, "Not authorized for this store")
+		return
 	}
 
-	if err := h.Repo.ItemExpense.Delete(r.Context(), id, storeID); err != nil {
+	if err := h.Repo.ItemExpense.Delete(r.Context(), id, storeID, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -139,12 +179,8 @@ func (h *Handler) GetItemProfitReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
-	if storeID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	storeID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 

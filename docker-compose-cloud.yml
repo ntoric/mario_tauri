@@ -75,6 +75,8 @@ services:
       SUPERADMIN_NAME: ${SUPERADMIN_NAME}
     ports:
       - "8088:8088"
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       db:
         condition: service_started

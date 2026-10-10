@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"cafe-backend/internal/middleware"
-	"cafe-backend/internal/realtime"
 
 	"github.com/gorilla/websocket"
 )
@@ -30,7 +29,6 @@ func (h *Handler) broadcastTableStatusUpdate(storeID, reason string) {
 	}
 
 	h.Realtime.Broadcast(storeID, string(msg))
-	h.Realtime.BroadcastAll(string(msg))
 }
 
 // TableStatusWS handles websocket stream for table status updates.
@@ -41,13 +39,8 @@ func (h *Handler) TableStatusWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -59,9 +52,7 @@ func (h *Handler) TableStatusWS(w http.ResponseWriter, r *http.Request) {
 
 	ch := make(chan string, 8)
 	h.Realtime.Register(targetStoreID, ch)
-	h.Realtime.Register(realtime.GlobalChannel, ch)
 	defer h.Realtime.Unregister(targetStoreID, ch)
-	defer h.Realtime.Unregister(realtime.GlobalChannel, ch)
 
 	go func() {
 		for {

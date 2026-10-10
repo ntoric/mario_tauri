@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { updaterService, UpdateInfo, UpdateProgress } from '../services/updater';
+import { isQuietHours } from '../utils/quietHours';
 
 export interface UseUpdaterReturn {
   updateInfo: UpdateInfo | null;
@@ -97,7 +98,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
     if (!autoCheck) return;
 
     const interval = setInterval(() => {
-      checkForUpdates();
+      if (!isQuietHours()) checkForUpdates();
     }, checkInterval);
 
     return () => clearInterval(interval);

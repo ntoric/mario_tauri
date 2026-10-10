@@ -78,6 +78,8 @@ services:
       NODE_ENV: ${NODE_ENV}
     ports:
       - "8088:8088"
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       redis:
         condition: service_started

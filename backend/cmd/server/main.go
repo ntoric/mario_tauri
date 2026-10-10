@@ -16,6 +16,7 @@ import (
 	"cafe-backend/internal/queue"
 	"cafe-backend/internal/realtime"
 	"cafe-backend/internal/repository"
+	"cafe-backend/internal/session"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -55,7 +56,16 @@ func main() {
 	}
 	repo := repository.NewRepository(sqlDB, redisCache)
 	realtimeHub := realtime.NewHub()
-	h := handler.NewHandler(repo, cfg, realtimeHub)
+
+	// Server-side session store backed by Redis. Required for auth: if Redis is
+	// unavailable, protected endpoints return 503 rather than trusting tokens.
+	var sessionStore *session.Store
+	if redisCache != nil {
+		sessionStore = session.New(redisCache.Client(), 24*time.Hour)
+	} else {
+		log.Println("WARNING: Redis unavailable — session store disabled; all authenticated requests will fail")
+	}
+	h := handler.NewHandler(repo, cfg, realtimeHub, sessionStore)
 
 	// 5. Setup Router & Middlewares
 	r := chi.NewRouter()
@@ -65,6 +75,14 @@ func main() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+
+	// JSON-lines request log, retained ~24h and purged daily at 03:00 IST.
+	if reqLogger, err := middleware.NewRequestLogger(cfg.RequestLogDir, sessionStore); err != nil {
+		log.Printf("Request logging disabled: %v", err)
+	} else {
+		r.Use(reqLogger.Middleware)
+		reqLogger.StartDailyCleanup()
+	}
 
 	// CORS Config matching Node.js
 	c := cors.New(cors.Options{
@@ -89,6 +107,7 @@ func main() {
 	// Public Routes
 	r.Group(func(r chi.Router) {
 		r.Post("/api/auth/login", h.Login)
+		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/stores/default", h.GetDefaultStore)
 		r.Get("/api/support-config", h.GetSupportConfig)
 		r.Get("/api/app-update", h.GetAppUpdate)
@@ -98,7 +117,7 @@ func main() {
 
 	// Protected Routes (JWT Auth required)
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddleware(sqlDB, cfg.JWTSecret))
+		r.Use(middleware.AuthMiddleware(sqlDB, sessionStore))
 
 		// Auth & Me
 		r.Get("/api/auth/me", h.Me)

@@ -6,6 +6,10 @@ import { useDataStore } from './dataStore';
 
 // Helper to clear persisted auth storage
 const clearAuthStorage = () => {
+  sessionStorage.removeItem('cafe-auth');
+  sessionStorage.removeItem('cafe_token');
+  sessionStorage.removeItem('cafe-user');
+  // Clean up credentials persisted by older builds.
   localStorage.removeItem('cafe-auth');
   localStorage.removeItem('cafe_token');
   localStorage.removeItem('cafe-user');
@@ -43,6 +47,30 @@ const getDefaultStoreId = (user: User | null): string | null => {
   
   // For superadmin and business_owner, use first available store
   return user.stores?.[0]?.id || null;
+};
+
+// Helper: is this store selection valid for the user?
+// staff/business_admin are pinned to their assigned store; business_owner may
+// only select stores they own; superadmin is unrestricted. A stale persisted
+// selection for any other store is dropped so the app never silently points at
+// the wrong store.
+const isStoreAllowedForUser = (user: User, storeId: string): boolean => {
+  if (user.role === 'staff' || user.role === 'business_admin') {
+    return storeId === user.storeId;
+  }
+  if (user.role === 'superadmin') {
+    return true;
+  }
+  if ((user.stores ?? []).some((s) => s.id === storeId)) {
+    return true;
+  }
+  // The store may not be in user.stores yet (e.g. just created) — accept it if
+  // it exists in the loaded store list.
+  try {
+    return (useDataStore.getState().stores ?? []).some((s: any) => s.id === storeId);
+  } catch {
+    return false;
+  }
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -139,9 +167,12 @@ export const useAuthStore = create<AuthState>()(
           const { currentStoreId: existingStoreId } = get();
           const defaultStoreId = getDefaultStoreId(data);
           
-          // Preserve existing store selection if it's still valid for the user
-          // Only reset to default if no store is currently selected
-          const newStoreId = existingStoreId || defaultStoreId;
+          // Preserve the current store selection only if the user is still
+          // authorized for it; otherwise fall back to their default store.
+          const newStoreId =
+            existingStoreId && isStoreAllowedForUser(data, existingStoreId)
+              ? existingStoreId
+              : defaultStoreId;
           
           set({
             user: data,
@@ -155,6 +186,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Invalidate the server-side session; don't block local cleanup.
+        api.logout().catch(() => {});
         get().clearAuth();
       },
 
@@ -163,6 +196,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setCurrentStore: (storeId: string) => {
+        const { user } = get();
+        if (user && !isStoreAllowedForUser(user, storeId)) {
+          return;
+        }
         set({ currentStoreId: storeId });
       },
 
@@ -189,11 +226,13 @@ export const useAuthStore = create<AuthState>()(
 
       ensureStoreSelected: () => {
         const { user, currentStoreId } = get();
-        
-        // If no store is selected but user has a default store, set it
-        if (!currentStoreId && user) {
+        if (!user) return;
+
+        // Keep the current selection only while it is still valid for this
+        // user; otherwise reset to the default store.
+        if (!currentStoreId || !isStoreAllowedForUser(user, currentStoreId)) {
           const defaultStoreId = getDefaultStoreId(user);
-          if (defaultStoreId) {
+          if (defaultStoreId && defaultStoreId !== currentStoreId) {
             set({ currentStoreId: defaultStoreId });
           }
         }
@@ -201,6 +240,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cafe-auth',
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,

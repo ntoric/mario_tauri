@@ -532,3 +532,13 @@ class VersionHelper {
     return compareVersions(current, latest) < 0;
   }
 }
+
+/// Nightly pause window: between 00:30 and 07:30 IST all background polling
+/// must be skipped (the backend pauses its workers in the same window).
+bool isQuietHours([DateTime? now]) {
+  final t = (now ?? DateTime.now())
+      .toUtc()
+      .add(const Duration(hours: 5, minutes: 30));
+  final mins = t.hour * 60 + t.minute;
+  return mins >= 30 && mins < 450;
+}

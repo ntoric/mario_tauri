@@ -43,7 +43,10 @@ func StartProcessor(db *sql.DB, cfg *config.Config) {
 
 	ticker := time.NewTicker(2 * time.Second)
 	go func() {
-		for range ticker.C {
+		for t := range ticker.C {
+			if InQuietHours(t) {
+				continue
+			}
 			processPendingQueues(db, cfg)
 		}
 	}()

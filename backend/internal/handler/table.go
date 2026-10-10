@@ -19,14 +19,8 @@ func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	targetStoreID := storeID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-
-	if targetStoreID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -61,17 +55,12 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("CreateTable: request =", req)
 
-	targetStoreID := req.StoreID
-	if targetStoreID == "" {
-		targetStoreID = claims.StoreID
-	}
-	fmt.Println("CreateTable: targetStoreID =", targetStoreID)
-
-	if targetStoreID == "" {
-		fmt.Println("CreateTable: store ID required")
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		fmt.Println("CreateTable: store access denied or missing")
 		return
 	}
+	fmt.Println("CreateTable: targetStoreID =", targetStoreID)
 
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
@@ -91,7 +80,17 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 
 // UpdateTable handles PUT /api/tables/:id
 func (h *Handler) UpdateTable(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+	if !h.requireRecordStoreAccess(w, r, claims, "tables", id) {
+		return
+	}
+
 	var req models.Table
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -99,6 +98,7 @@ func (h *Handler) UpdateTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.ID = id
+	req.ModifiedBy = claims.ID
 	if err := h.Repo.Table.Update(r.Context(), req); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -110,7 +110,17 @@ func (h *Handler) UpdateTable(w http.ResponseWriter, r *http.Request) {
 
 // DeleteTable handles DELETE /api/tables/:id
 func (h *Handler) DeleteTable(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
+	if !h.requireRecordStoreAccess(w, r, claims, "tables", id) {
+		return
+	}
+
 	table, err := h.Repo.Table.GetByID(r.Context(), id)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -137,12 +147,8 @@ func (h *Handler) GetSections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
-	if storeID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	storeID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
@@ -183,12 +189,8 @@ func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := req.StoreID
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
-	if storeID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	storeID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
@@ -226,16 +228,12 @@ func (h *Handler) RenameSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := req.StoreID
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
-	if storeID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	storeID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
 		return
 	}
 
-	if err := h.Repo.Table.RenameSection(r.Context(), storeID, req.OldName, req.NewName); err != nil {
+	if err := h.Repo.Table.RenameSection(r.Context(), storeID, req.OldName, req.NewName, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -259,16 +257,12 @@ func (h *Handler) DeleteSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID := r.URL.Query().Get("storeId")
-	if storeID == "" {
-		storeID = claims.StoreID
-	}
-	if storeID == "" {
-		h.writeError(w, http.StatusBadRequest, "Store ID required")
+	storeID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
 		return
 	}
 
-	if err := h.Repo.Table.DeleteSection(r.Context(), storeID, sectionName); err != nil {
+	if err := h.Repo.Table.DeleteSection(r.Context(), storeID, sectionName, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

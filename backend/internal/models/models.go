@@ -60,6 +60,7 @@ type Category struct {
 	Enabled     bool      `json:"enabled"`
 	IsFavourite bool      `json:"isFavourite"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	ModifiedBy  string    `json:"modifiedBy,omitempty"`
 }
 
 // Item represents item table schema and json dto
@@ -80,6 +81,7 @@ type Item struct {
 	TotalCost     float64   `json:"totalCost,omitempty"`
 	Profit        float64   `json:"profit,omitempty"`
 	ProfitPercent float64   `json:"profitPercent,omitempty"`
+	ModifiedBy    string    `json:"modifiedBy,omitempty"`
 }
 
 // ItemExpense represents a cost component for preparing a menu item
@@ -92,6 +94,7 @@ type ItemExpense struct {
 	Amount      float64   `json:"amount"`
 	IsActive    bool      `json:"isActive"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	ModifiedBy  string    `json:"modifiedBy,omitempty"`
 }
 
 // ItemProfitEntry represents profit analysis for a single menu item
@@ -116,13 +119,14 @@ type ItemProfitReport struct {
 
 // Table represents table/seat layout schema and json dto
 type Table struct {
-	ID       string   `json:"id"`
-	StoreID  string   `json:"storeId"`
-	Number   int      `json:"number"`
-	Seats    int      `json:"seats"`
-	Position Position `json:"position"`
-	IsActive bool     `json:"isActive"`
-	Section  *string  `json:"section,omitempty"`
+	ID         string   `json:"id"`
+	StoreID    string   `json:"storeId"`
+	Number     int      `json:"number"`
+	Seats      int      `json:"seats"`
+	Position   Position `json:"position"`
+	IsActive   bool     `json:"isActive"`
+	Section    *string  `json:"section,omitempty"`
+	ModifiedBy string   `json:"modifiedBy,omitempty"`
 }
 
 // TableSection represents a section/floor that exists independently of tables.
@@ -454,6 +458,7 @@ type ExpenseCategory struct {
 	Description string    `json:"description"`
 	IsActive    bool      `json:"isActive"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	ModifiedBy  string    `json:"modifiedBy,omitempty"`
 }
 
 // Expense represents expense table schema and json dto
@@ -474,6 +479,7 @@ type Expense struct {
 	CreatedAt     time.Time `json:"createdAt,omitempty"`
 	UpdatedAt     time.Time `json:"updatedAt,omitempty"`
 	CreatedBy     string    `json:"createdBy"`
+	ModifiedBy    string    `json:"modifiedBy,omitempty"`
 }
 
 // ExpenseReport represents aggregated expense data for reports

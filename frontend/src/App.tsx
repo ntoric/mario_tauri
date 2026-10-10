@@ -28,6 +28,7 @@ import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
 import { api } from './services/api';
+import { isQuietHours } from './utils/quietHours';
 import { updaterService } from './services/updater';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,7 +73,9 @@ const AppRoutes: React.FC = () => {
     if (!isAuthenticated || !currentStoreId) return;
     updaterService.reportAppVersion(currentStoreId);
     const interval = setInterval(
-      () => updaterService.reportAppVersion(currentStoreId),
+      () => {
+        if (!isQuietHours()) updaterService.reportAppVersion(currentStoreId);
+      },
       3600000,
     );
     return () => clearInterval(interval);
@@ -90,6 +93,7 @@ const AppRoutes: React.FC = () => {
     if (!isAuthenticated || !user || user.role === 'superadmin' || user.role === 'business_owner') return;
 
     const checkInterval = setInterval(async () => {
+      if (isQuietHours()) return;
       await refreshUser();
       const active = checkStoreActive();
       if (!active) {

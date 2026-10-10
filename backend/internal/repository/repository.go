@@ -90,11 +90,13 @@ type Repository struct {
 	ItemExpense     *ItemExpenseRepository
 	RevenueReport   *RevenueReportRepository
 	Cache           *MemoryCache
+	db              *sql.DB
 }
 
 func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 	cache := NewMemoryCache()
 	return &Repository{
+		db:              db,
 		Store:           &StoreRepository{db: db},
 		User:            &UserRepository{db: db},
 		Category:        &CategoryRepository{db: db, redis: redisCache},
@@ -114,6 +116,54 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		RevenueReport:   &RevenueReportRepository{db: db},
 		Cache:           cache,
 	}
+}
+
+// storeScopedTables lists tables that carry a store_id column. The whitelist
+// is required because the table name is interpolated into the query.
+var storeScopedTables = map[string]bool{
+	"orders":             true,
+	"categories":         true,
+	"items":              true,
+	"tables":             true,
+	"table_sections":     true,
+	"bills":              true,
+	"bill_queue":         true,
+	"expenses":           true,
+	"expense_categories": true,
+	"item_expenses":      true,
+}
+
+// GetRecordStoreID returns the store_id of a record in a store-scoped table.
+// Used to authorize ID-based mutations against the record's owning store.
+func (r *Repository) GetRecordStoreID(ctx context.Context, table, id string) (string, error) {
+	if !storeScopedTables[table] {
+		return "", fmt.Errorf("unsupported table for store lookup: %s", table)
+	}
+	var storeID sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		"SELECT store_id FROM "+table+" WHERE id = $1", id).Scan(&storeID)
+	if err != nil {
+		return "", err
+	}
+	return storeID.String, nil
+}
+
+// CountForeignStoreRecords returns how many of the given record ids belong to
+// a store other than storeID. Used to reject cross-store foreign-key
+// references (order -> table, item -> category, order item -> item, ...).
+// table must be one of the whitelisted store-scoped tables.
+func (r *Repository) CountForeignStoreRecords(ctx context.Context, table string, ids []string, storeID string) (int, error) {
+	if !storeScopedTables[table] {
+		return 0, fmt.Errorf("unsupported table for store lookup: %s", table)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM "+table+" WHERE id = ANY($1) AND store_id <> $2",
+		pq.Array(ids), storeID).Scan(&count)
+	return count, err
 }
 
 // ==========================================
@@ -250,22 +300,22 @@ func (r *StoreRepository) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *StoreRepository) UpdateLogo(ctx context.Context, id, logoBase64 string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE stores SET logo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", logoBase64, id)
+func (r *StoreRepository) UpdateLogo(ctx context.Context, id, logoBase64, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE stores SET logo_url = $1, modified_by = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $2", logoBase64, id, modifiedBy)
 	return err
 }
 
-func (r *StoreRepository) DeleteLogo(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE stores SET logo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1", id)
+func (r *StoreRepository) DeleteLogo(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE stores SET logo_url = NULL, modified_by = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1", id, modifiedBy)
 	return err
 }
 
 // UpdateAppVersion records which desktop app version a store is running.
 // Telemetry only — intentionally does not touch updated_at.
-func (r *StoreRepository) UpdateAppVersion(ctx context.Context, storeID, version string) error {
+func (r *StoreRepository) UpdateAppVersion(ctx context.Context, storeID, version, modifiedBy string) error {
 	_, err := r.db.ExecContext(ctx,
-		"UPDATE stores SET app_version = $1, app_version_seen_at = CURRENT_TIMESTAMP WHERE id = $2",
-		version, storeID)
+		"UPDATE stores SET app_version = $1, app_version_seen_at = CURRENT_TIMESTAMP, modified_by = $3 WHERE id = $2",
+		version, storeID, modifiedBy)
 	return err
 }
 
@@ -406,10 +456,11 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 
 func (r *UserRepository) GetUserStores(ctx context.Context, userID string) ([]models.Store, error) {
 	sqlStr := `
-		SELECT s.id, s.name, s.branch 
-		FROM stores s 
-		JOIN user_stores us ON s.id = us.store_id 
+		SELECT s.id, s.name, s.branch
+		FROM stores s
+		JOIN user_stores us ON s.id = us.store_id
 		WHERE us.user_id = $1 AND s.is_active = true
+		ORDER BY s.name, s.id
 	`
 	rows, err := r.db.QueryContext(ctx, sqlStr, userID)
 	if err != nil {
@@ -514,8 +565,8 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *UserRepository) UpdatePassword(ctx context.Context, id, hashedPassword string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE users SET password = $1 WHERE id = $2", hashedPassword, id)
+func (r *UserRepository) UpdatePassword(ctx context.Context, id, hashedPassword, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET password = $1, modified_by = $3 WHERE id = $2", hashedPassword, id, modifiedBy)
 	return err
 }
 
@@ -574,16 +625,16 @@ func (r *CategoryRepository) Create(ctx context.Context, c models.Category) erro
 }
 
 func (r *CategoryRepository) Update(ctx context.Context, c models.Category) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1, description = $2, enabled = $3, is_favourite = $4 WHERE id = $5",
-		c.Name, c.Description, c.Enabled, c.IsFavourite, c.ID)
+	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1, description = $2, enabled = $3, is_favourite = $4, modified_by = $5 WHERE id = $6",
+		c.Name, c.Description, c.Enabled, c.IsFavourite, c.ModifiedBy, c.ID)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, "categories:")
 	}
 	return err
 }
 
-func (r *CategoryRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE categories SET is_active = false WHERE id = $1", id)
+func (r *CategoryRepository) Delete(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE categories SET is_active = false, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, "categories:")
 	}
@@ -725,8 +776,8 @@ func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
 }
 
 func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
-	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, enabled = $7, is_favourite = $8 WHERE id = $9"
-	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite, i.ID)
+	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, enabled = $7, is_favourite = $8, modified_by = $9 WHERE id = $10"
+	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite, i.ModifiedBy, i.ID)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
@@ -734,8 +785,8 @@ func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
 	return err
 }
 
-func (r *ItemRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE items SET is_active = false WHERE id = $1", id)
+func (r *ItemRepository) Delete(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE items SET is_active = false, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
@@ -824,19 +875,19 @@ func (r *ItemExpenseRepository) Update(ctx context.Context, e models.ItemExpense
 	if !r.tableExists(ctx) {
 		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
 	}
-	sqlStr := `UPDATE item_expenses SET name = $1, description = $2, amount = $3 WHERE id = $4`
-	_, err := r.db.ExecContext(ctx, sqlStr, e.Name, e.Description, e.Amount, e.ID)
+	sqlStr := `UPDATE item_expenses SET name = $1, description = $2, amount = $3, modified_by = $4 WHERE id = $5`
+	_, err := r.db.ExecContext(ctx, sqlStr, e.Name, e.Description, e.Amount, e.ModifiedBy, e.ID)
 	if err == nil {
 		r.invalidateItemCache(ctx, e.StoreID)
 	}
 	return err
 }
 
-func (r *ItemExpenseRepository) Delete(ctx context.Context, id, storeID string) error {
+func (r *ItemExpenseRepository) Delete(ctx context.Context, id, storeID, modifiedBy string) error {
 	if !r.tableExists(ctx) {
 		return fmt.Errorf("item_expenses table not available; restart the server to apply migrations")
 	}
-	_, err := r.db.ExecContext(ctx, "UPDATE item_expenses SET is_active = false WHERE id = $1", id)
+	_, err := r.db.ExecContext(ctx, "UPDATE item_expenses SET is_active = false, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	if err == nil {
 		r.invalidateItemCache(ctx, storeID)
 	}
@@ -988,8 +1039,8 @@ func (r *TableRepository) GetByID(ctx context.Context, id string) (*models.Table
 }
 
 func (r *TableRepository) Update(ctx context.Context, t models.Table) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4, section = $5 WHERE id = $6",
-		t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section, t.ID)
+	_, err := r.db.ExecContext(ctx, "UPDATE tables SET number = $1, seats = $2, position_x = $3, position_y = $4, section = $5, modified_by = $6 WHERE id = $7",
+		t.Number, t.Seats, t.Position.X, t.Position.Y, t.Section, t.ModifiedBy, t.ID)
 	return err
 }
 
@@ -1001,7 +1052,7 @@ func (r *TableRepository) Delete(ctx context.Context, id string) error {
 // RenameSection bulk-renames a section within a store (case-sensitive match).
 // If oldName is empty, it targets tables with NULL section (the default).
 // It also renames the matching row in table_sections so the catalog stays in sync.
-func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, newName string) error {
+func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, newName, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1009,15 +1060,15 @@ func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, n
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		"UPDATE tables SET section = $1 WHERE store_id = $2 AND COALESCE(section, '') = COALESCE($3, '')",
-		newName, storeID, oldName); err != nil {
+		"UPDATE tables SET section = $1, modified_by = $4 WHERE store_id = $2 AND COALESCE(section, '') = COALESCE($3, '')",
+		newName, storeID, oldName, modifiedBy); err != nil {
 		return err
 	}
 
 	if oldName != "" {
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE table_sections SET name = $1 WHERE store_id = $2 AND name = $3",
-			newName, storeID, oldName); err != nil {
+			"UPDATE table_sections SET name = $1, modified_by = $4 WHERE store_id = $2 AND name = $3",
+			newName, storeID, oldName, modifiedBy); err != nil {
 			return err
 		}
 	}
@@ -1028,7 +1079,7 @@ func (r *TableRepository) RenameSection(ctx context.Context, storeID, oldName, n
 // DeleteSection clears the section on all tables in the given section,
 // effectively moving them back to the default (NULL) section, and removes the
 // section from the table_sections catalog.
-func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionName string) error {
+func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionName, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1036,8 +1087,8 @@ func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionNam
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		"UPDATE tables SET section = NULL WHERE store_id = $1 AND COALESCE(section, '') = COALESCE($2, '')",
-		storeID, sectionName); err != nil {
+		"UPDATE tables SET section = NULL, modified_by = $3 WHERE store_id = $1 AND COALESCE(section, '') = COALESCE($2, '')",
+		storeID, sectionName, modifiedBy); err != nil {
 		return err
 	}
 
@@ -1299,7 +1350,7 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	return tx.Commit()
 }
 
-func (r *OrderRepository) Update(ctx context.Context, id string, updates map[string]interface{}, items []models.OrderItem, hasItems bool) error {
+func (r *OrderRepository) Update(ctx context.Context, id string, updates map[string]interface{}, items []models.OrderItem, hasItems bool, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1325,9 +1376,9 @@ func (r *OrderRepository) Update(ctx context.Context, id string, updates map[str
 			}
 
 			_, err = tx.ExecContext(ctx, `
-				INSERT INTO order_items (order_id, item_id, quantity, unit_price, tax_percent, notes)
-				VALUES ($1, $2, $3, $4, $5, $6)
-			`, id, item.ItemID, item.Quantity, price, item.TaxPercent, notes)
+				INSERT INTO order_items (order_id, item_id, quantity, unit_price, tax_percent, notes, modified_by)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, id, item.ItemID, item.Quantity, price, item.TaxPercent, notes, modifiedBy)
 			if err != nil {
 				return err
 			}
@@ -1353,7 +1404,7 @@ func (r *OrderRepository) Update(ctx context.Context, id string, updates map[str
 		}
 	} else {
 		// Update only updated_at timestamp if no fields changed but items did
-		_, err = tx.ExecContext(ctx, "UPDATE orders SET updated_at = CURRENT_TIMESTAMP WHERE id = $1", id)
+		_, err = tx.ExecContext(ctx, "UPDATE orders SET updated_at = CURRENT_TIMESTAMP, modified_by = $2 WHERE id = $1", id, modifiedBy)
 		if err != nil {
 			return err
 		}
@@ -1362,15 +1413,15 @@ func (r *OrderRepository) Update(ctx context.Context, id string, updates map[str
 	return tx.Commit()
 }
 
-func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod string) error {
+func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod, modifiedBy string) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE orders SET status = 'completed', payment_status = 'paid', payment_method = $1, updated_at = CURRENT_TIMESTAMP 
+		UPDATE orders SET status = 'completed', payment_status = 'paid', payment_method = $1, modified_by = $3, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $2
-	`, paymentMethod, id)
+	`, paymentMethod, id, modifiedBy)
 	return err
 }
 
-func (r *OrderRepository) Cancel(ctx context.Context, id string) error {
+func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1378,15 +1429,15 @@ func (r *OrderRepository) Cancel(ctx context.Context, id string) error {
 	defer tx.Rollback()
 
 	_, err = tx.ExecContext(ctx, `
-		UPDATE orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1
-	`, id)
+		UPDATE orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, modified_by = $2 WHERE id = $1
+	`, id, modifiedBy)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		UPDATE bills SET status = 'cancelled' WHERE order_id = $1 AND (status IS NULL OR status = 'active')
-	`, id)
+		UPDATE bills SET status = 'cancelled', modified_by = $2 WHERE order_id = $1 AND (status IS NULL OR status = 'active')
+	`, id, modifiedBy)
 	if err != nil {
 		return err
 	}
@@ -1507,8 +1558,8 @@ func (r *BillRepository) GetNextInvoiceNo(ctx context.Context, storeID string) (
 	return fmt.Sprintf("INV-%06d", nextNumber), nil
 }
 
-func (r *BillRepository) MarkAsPrinted(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE bills SET is_printed = true WHERE id = $1", id)
+func (r *BillRepository) MarkAsPrinted(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE bills SET is_printed = true, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	return err
 }
 
@@ -1718,18 +1769,46 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 	return results, nil
 }
 
-func (r *SystemRepository) GetStats(ctx context.Context) (map[string]int, error) {
+// GetStats returns record counts. When storeIDs is nil the counts are global
+// (superadmin); otherwise they are scoped to the given stores so non-superadmin
+// callers never see other stores' figures.
+func (r *SystemRepository) GetStats(ctx context.Context, storeIDs []string) (map[string]int, error) {
 	stats := make(map[string]int)
 
-	tables := []string{"users", "stores", "categories", "items", "orders", "tables", "bills"}
-	for _, t := range tables {
+	if storeIDs == nil {
+		tables := []string{"users", "stores", "categories", "items", "orders", "tables", "bills"}
+		for _, t := range tables {
+			var count int
+			err := r.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", t)).Scan(&count)
+			if err != nil {
+				return nil, err
+			}
+			stats[t] = count
+		}
+		return stats, nil
+	}
+
+	for _, t := range []string{"categories", "items", "orders", "tables", "bills"} {
 		var count int
-		err := r.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", t)).Scan(&count)
+		err := r.db.QueryRowContext(ctx,
+			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE store_id = ANY($1)", t),
+			pq.Array(storeIDs)).Scan(&count)
 		if err != nil {
 			return nil, err
 		}
 		stats[t] = count
 	}
+
+	stats["stores"] = len(storeIDs)
+
+	var userCount int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(DISTINCT user_id) FROM user_stores WHERE store_id = ANY($1)",
+		pq.Array(storeIDs)).Scan(&userCount)
+	if err != nil {
+		return nil, err
+	}
+	stats["users"] = userCount
 
 	return stats, nil
 }
@@ -1752,7 +1831,7 @@ func (r *SystemRepository) GetConfig(ctx context.Context) (map[string]string, er
 	return settings, nil
 }
 
-func (r *SystemRepository) SaveConfig(ctx context.Context, enabled bool, intervalMins int) error {
+func (r *SystemRepository) SaveConfig(ctx context.Context, enabled bool, intervalMins int, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1765,18 +1844,18 @@ func (r *SystemRepository) SaveConfig(ctx context.Context, enabled bool, interva
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('cleanup_enabled', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1
-	`, enabledStr)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('cleanup_enabled', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2
+	`, enabledStr, modifiedBy)
 	if err != nil {
 		return err
 	}
 
 	intervalStr := fmt.Sprintf("%d", intervalMins)
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('cleanup_interval_mins', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1
-	`, intervalStr)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('cleanup_interval_mins', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2
+	`, intervalStr, modifiedBy)
 	if err != nil {
 		return err
 	}
@@ -1801,6 +1880,7 @@ type AppUpdate struct {
 	ReleaseNotes *string
 	CreatedAt    time.Time
 	UpdatedAt    *time.Time
+	ModifiedBy   string
 }
 
 func (r *AppUpdateRepository) Get(ctx context.Context, platform string) (*AppUpdate, error) {
@@ -1866,9 +1946,9 @@ func (r *AppUpdateRepository) CreateOrUpdate(ctx context.Context, update *AppUpd
 		// Update existing
 		_, err = tx.ExecContext(ctx, `
 			UPDATE app_updates
-			SET enabled = $1, version = $2, download_url = $3, release_notes = $4, updated_at = CURRENT_TIMESTAMP
+			SET enabled = $1, version = $2, download_url = $3, release_notes = $4, updated_at = CURRENT_TIMESTAMP, modified_by = $6
 			WHERE id = $5
-		`, update.Enabled, update.Version, update.DownloadURL, update.ReleaseNotes, existingID)
+		`, update.Enabled, update.Version, update.DownloadURL, update.ReleaseNotes, existingID, update.ModifiedBy)
 		update.ID = existingID
 	}
 
@@ -1920,7 +2000,7 @@ func (r *SupportConfigRepository) Get(ctx context.Context) (*models.SupportConfi
 	return config, nil
 }
 
-func (r *SupportConfigRepository) Save(ctx context.Context, req models.SupportConfigRequest) error {
+func (r *SupportConfigRepository) Save(ctx context.Context, req models.SupportConfigRequest, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1928,25 +2008,25 @@ func (r *SupportConfigRepository) Save(ctx context.Context, req models.SupportCo
 	defer tx.Rollback()
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('support_email', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1
-	`, req.Email)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('support_email', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2
+	`, req.Email, modifiedBy)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('support_phone', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1
-	`, req.Phone)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('support_phone', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2
+	`, req.Phone, modifiedBy)
 	if err != nil {
 		return err
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('support_whatsapp_link', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1
-	`, req.WhatsAppLink)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('support_whatsapp_link', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2
+	`, req.WhatsAppLink, modifiedBy)
 	if err != nil {
 		return err
 	}
@@ -1976,11 +2056,11 @@ func (r *UpdateRepoRepository) Get(ctx context.Context) (string, error) {
 }
 
 // Save persists the GitHub repository (owner/repo) used for desktop app updates.
-func (r *UpdateRepoRepository) Save(ctx context.Context, repo string) error {
+func (r *UpdateRepoRepository) Save(ctx context.Context, repo, modifiedBy string) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('update_github_repo', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
-	`, repo)
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('update_github_repo', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2, updated_at = CURRENT_TIMESTAMP
+	`, repo, modifiedBy)
 	return err
 }
 
@@ -2018,7 +2098,7 @@ func (r *GeminiConfigRepository) Get(ctx context.Context) (apiKey, model string,
 }
 
 // Save persists the Gemini API key and model in global_settings.
-func (r *GeminiConfigRepository) Save(ctx context.Context, apiKey, model string) error {
+func (r *GeminiConfigRepository) Save(ctx context.Context, apiKey, model, modifiedBy string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -2026,16 +2106,16 @@ func (r *GeminiConfigRepository) Save(ctx context.Context, apiKey, model string)
 	defer tx.Rollback()
 
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('gemini_api_key', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
-	`, apiKey); err != nil {
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('gemini_api_key', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2, updated_at = CURRENT_TIMESTAMP
+	`, apiKey, modifiedBy); err != nil {
 		return err
 	}
 
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO global_settings (key, value) VALUES ('gemini_model', $1)
-		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
-	`, model); err != nil {
+		INSERT INTO global_settings (key, value, modified_by) VALUES ('gemini_model', $1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = $1, modified_by = $2, updated_at = CURRENT_TIMESTAMP
+	`, model, modifiedBy); err != nil {
 		return err
 	}
 
@@ -2317,16 +2397,16 @@ func (r *ExpenseCategoryRepository) Create(ctx context.Context, c models.Expense
 }
 
 func (r *ExpenseCategoryRepository) Update(ctx context.Context, c models.ExpenseCategory) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET name = $1, description = $2 WHERE id = $3",
-		c.Name, c.Description, c.ID)
+	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET name = $1, description = $2, modified_by = $3 WHERE id = $4",
+		c.Name, c.Description, c.ModifiedBy, c.ID)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, "expense_categories:")
 	}
 	return err
 }
 
-func (r *ExpenseCategoryRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET is_active = false WHERE id = $1", id)
+func (r *ExpenseCategoryRepository) Delete(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE expense_categories SET is_active = false, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, "expense_categories:")
 	}
@@ -2499,9 +2579,9 @@ func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error 
 		return err
 	}
 
-	sqlStr := `UPDATE expenses SET category_id = $1, title = $2, description = $3, amount = $4, 
-	           expense_date = $5, payment_method = $6, receipt_number = $7, vendor = $8, 
-	           attachments = $9::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
+	sqlStr := `UPDATE expenses SET category_id = $1, title = $2, description = $3, amount = $4,
+	           expense_date = $5, payment_method = $6, receipt_number = $7, vendor = $8,
+	           attachments = $9::jsonb, modified_by = $11, updated_at = CURRENT_TIMESTAMP WHERE id = $10`
 
 	var categoryID, paymentMethod, receiptNumber, vendor interface{}
 	if e.CategoryID != "" {
@@ -2519,12 +2599,12 @@ func (r *ExpenseRepository) Update(ctx context.Context, e models.Expense) error 
 
 	_, err = r.db.ExecContext(ctx, sqlStr,
 		categoryID, e.Title, e.Description, e.Amount, e.ExpenseDate,
-		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), e.ID)
+		paymentMethod, receiptNumber, vendor, string(attachmentsJSON), e.ID, e.ModifiedBy)
 	return err
 }
 
-func (r *ExpenseRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE expenses SET is_active = false WHERE id = $1", id)
+func (r *ExpenseRepository) Delete(ctx context.Context, id, modifiedBy string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE expenses SET is_active = false, modified_by = $2 WHERE id = $1", id, modifiedBy)
 	return err
 }
 

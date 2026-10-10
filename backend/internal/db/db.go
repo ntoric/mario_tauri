@@ -336,6 +336,45 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		}
 	}
 
+	// Audit columns — record when a row was last modified and by which user.
+	// Backward compatible: both columns are optional so existing rows, old
+	// INSERT statements, and old clients continue to work unchanged.
+	// modified_at defaults to the insert time for new rows and is refreshed by
+	// a BEFORE UPDATE trigger on every change (including writes from older
+	// backend versions); modified_by is populated by the application for
+	// user-initiated writes (NULL for system or unknown actors).
+	auditTables := []string{
+		"stores", "users", "user_stores", "categories", "items", "tables",
+		"orders", "order_items", "bills", "bill_queue", "settings",
+		"global_settings", "app_updates", "expense_categories", "expenses",
+		"item_expenses", "table_sections",
+	}
+	for _, t := range auditTables {
+		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", t)); err != nil {
+			log.Printf("Non-blocking warning: failed adding modified_at to %s: %v", t, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_by VARCHAR(255)", t)); err != nil {
+			log.Printf("Non-blocking warning: failed adding modified_by to %s: %v", t, err)
+		}
+	}
+
+	if _, err := db.Exec(`CREATE OR REPLACE FUNCTION set_modified_at() RETURNS TRIGGER AS $$
+BEGIN
+	NEW.modified_at := CURRENT_TIMESTAMP;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql`); err != nil {
+		log.Printf("Non-blocking warning: failed creating set_modified_at function: %v", err)
+	}
+	for _, t := range auditTables {
+		if _, err := db.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS trg_modified_at_%s ON %s", t, t)); err != nil {
+			log.Printf("Non-blocking warning: failed dropping audit trigger on %s: %v", t, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("CREATE TRIGGER trg_modified_at_%s BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION set_modified_at()", t, t)); err != nil {
+			log.Printf("Non-blocking warning: failed creating audit trigger on %s: %v", t, err)
+		}
+	}
+
 	// Seed data
 	if err := runSeeds(db, cfg); err != nil {
 		return fmt.Errorf("seed failed: %w", err)

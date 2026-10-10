@@ -108,7 +108,7 @@ func (h *Handler) UpdateGeminiConfig(w http.ResponseWriter, r *http.Request) {
 		model = defaultGeminiModel
 	}
 
-	if err := h.Repo.Gemini.Save(r.Context(), apiKey, model); err != nil {
+	if err := h.Repo.Gemini.Save(r.Context(), apiKey, model, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

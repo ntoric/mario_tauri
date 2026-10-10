@@ -9,20 +9,20 @@ import (
 
 func TestPBKDF2(t *testing.T) {
 	password := "mySecurePassword123"
-	
+
 	// 1. Test hashing
 	hash, err := HashPassword(password)
 	if err != nil {
 		t.Fatalf("Failed to hash password: %v", err)
 	}
-	
+
 	t.Logf("Generated PBKDF2 hash: %s", hash)
-	
+
 	// Verify it starts with correct prefix
 	if !strings.HasPrefix(hash, "pbkdf2_sha256$100000$") {
 		t.Errorf("Hash does not have expected prefix, got: %s", hash)
 	}
-	
+
 	// 2. Test correct password verification
 	valid, err := VerifyPassword(hash, password)
 	if err != nil {
@@ -31,7 +31,7 @@ func TestPBKDF2(t *testing.T) {
 	if !valid {
 		t.Error("Expected correct password to verify successfully")
 	}
-	
+
 	// 3. Test incorrect password verification
 	valid, err = VerifyPassword(hash, "wrongPassword")
 	if err != nil {
@@ -40,14 +40,14 @@ func TestPBKDF2(t *testing.T) {
 	if valid {
 		t.Error("Expected incorrect password to fail verification")
 	}
-	
+
 	// 4. Test legacy bcrypt verification
 	bcryptHashBytes, err := bcrypt.GenerateFromPassword([]byte(password), 10)
 	if err != nil {
 		t.Fatalf("Failed to generate legacy bcrypt hash: %v", err)
 	}
 	bcryptHash := string(bcryptHashBytes)
-	
+
 	valid, err = VerifyPassword(bcryptHash, password)
 	if err != nil {
 		t.Fatalf("Error during legacy bcrypt verification: %v", err)
@@ -55,7 +55,7 @@ func TestPBKDF2(t *testing.T) {
 	if !valid {
 		t.Error("Expected legacy bcrypt hash to verify successfully")
 	}
-	
+
 	valid, err = VerifyPassword(bcryptHash, "wrongPassword")
 	if err != nil {
 		t.Fatalf("Error during legacy bcrypt verification: %v", err)

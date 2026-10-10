@@ -20,7 +20,10 @@ func StartCleanupProcessor(db *sql.DB, cfg *config.Config) {
 
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
-		for range ticker.C {
+		for t := range ticker.C {
+			if InQuietHours(t) {
+				continue
+			}
 			checkAndRunCleanup(db)
 		}
 	}()

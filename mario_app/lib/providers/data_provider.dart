@@ -34,6 +34,18 @@ class DataProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // Clears all store-scoped data. Call before switching stores or on logout so
+  // the previous store's records are never shown under the new selection.
+  void clearData() {
+    _tables = [];
+    _categories = [];
+    _items = [];
+    _orders = [];
+    _bills = [];
+    _stats = null;
+    notifyListeners();
+  }
+
   Future<void> loadAllData(AuthProvider auth) async {
     if (auth.currentStore == null) return;
 
