@@ -140,7 +140,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                           opacity: 0.12,
                                         ),
                                         child: Text(
-                                          'Table ${order.tableLabel}',
+                                          order.tableLabel,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w700,
                                             color: AppColors.primary,
@@ -326,7 +326,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                       builder: (dialogContext) => AlertDialog(
                                         title: const Text('Cancel Order?'),
                                         content: Text(
-                                          'Are you sure you want to cancel the order for Table ${order.tableLabel}?',
+                                          'Are you sure you want to cancel the order for ${order.tableLabel}?',
                                         ),
                                         actions: [
                                           TextButton(

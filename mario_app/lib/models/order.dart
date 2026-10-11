@@ -140,10 +140,11 @@ class Order {
   bool get isActive => status == 'active';
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
+  bool get isMerged => status == 'merged';
 
-  // Display label: alphanumeric table name when set, else the table number.
+  // Display label: alphanumeric table name when set, else "T<tableNumber>".
   String get tableLabel =>
-      (tableName != null && tableName!.isNotEmpty) ? tableName! : '$tableNumber';
+      (tableName != null && tableName!.isNotEmpty) ? tableName! : 'T$tableNumber';
 
   double get subtotal => totalAmount - taxAmount + discountAmount;
 }

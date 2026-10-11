@@ -250,7 +250,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    'Order moved to Table ${table.label}'),
+                                    'Order moved to ${table.label}'),
                                 backgroundColor: AppColors.success,
                                 behavior: SnackBarBehavior.floating,
                                 shape: RoundedRectangleBorder(
@@ -338,6 +338,191 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
+  void _showCombineTableDialog(
+      Order order, List<TableModel> tables, DataProvider data) {
+    final parentContext = context;
+    // Only tables with an active order can be merged into this one.
+    final occupiedTables = tables
+        .where((t) => t.id != order.tableId && data.isTableOccupied(t.id))
+        .toList();
+
+    if (occupiedTables.isEmpty) {
+      ScaffoldMessenger.of(parentContext).showSnackBar(
+        const SnackBar(
+          content: Text('No other occupied tables to combine with'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: parentContext,
+      builder: (dialogContext) {
+        final navigator = Navigator.of(parentContext);
+        final scaffoldMessenger = ScaffoldMessenger.of(parentContext);
+
+        return AlertDialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          contentPadding: EdgeInsets.zero,
+          titlePadding: EdgeInsets.zero,
+          content: Container(
+            width: double.maxFinite,
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+            decoration: ClayStyles.surface(radiusValue: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Combine Bill',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.dark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Pick an occupied table — its order merges into ${order.tableLabel} and the table is freed',
+                  style: const TextStyle(
+                    color: AppColors.gray500,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 1,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: occupiedTables.length,
+                  itemBuilder: (itemBuilderContext, index) {
+                    final table = occupiedTables[index];
+                    final otherOrder = data.getOrderForTable(table.id);
+                    return InkWell(
+                      onTap: () async {
+                        if (otherOrder == null) return;
+                        Navigator.pop(dialogContext);
+
+                        showDialog(
+                          context: navigator.context,
+                          barrierDismissible: false,
+                          builder: (loadingContext) => const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        );
+
+                        try {
+                          final merged = await data.mergeOrders(
+                            order.id,
+                            otherOrder.id,
+                          );
+
+                          navigator.pop();
+
+                          if (merged != null) {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    '${table.label} order merged — table freed'),
+                                backgroundColor: AppColors.success,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            );
+                          } else {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    data.error ?? 'Failed to combine orders.'),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          navigator.pop();
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Error: ${e.toString()}'),
+                              backgroundColor: AppColors.danger,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      borderRadius: ClayStyles.radius(18),
+                      child: Container(
+                        decoration: ClayStyles.surface(
+                          radiusValue: 18,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white,
+                              AppColors.clayBlue.withOpacity(0.65),
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              table.label,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              '₹${(otherOrder?.totalAmount ?? 0).toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showTableOptions(TableModel table, Order? order, DataProvider data) {
     final parentContext = context;
     final auth = parentContext.read<AuthProvider>();
@@ -345,6 +530,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     showModalBottomSheet(
       context: parentContext,
       backgroundColor: Colors.transparent,
+      elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -352,7 +538,8 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         child: Container(
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-          decoration: ClayStyles.surface(radiusValue: 32),
+          decoration:
+              ClayStyles.surface(radiusValue: 32, boxShadow: const []),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -366,7 +553,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               ),
               const SizedBox(height: 20),
               Text(
-                'Table ${table.label}',
+                table.label,
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -515,6 +702,27 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showChangeTableDialog(order, data.tables, data);
+                  },
+                ),
+                ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.merge_type,
+                        color: AppColors.success, size: 22),
+                  ),
+                  title: const Text('Combine Bill',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showCombineTableDialog(order, data.tables, data);
                   },
                 ),
                 ListTile(
@@ -765,7 +973,20 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => _showTableOptions(table, order, data),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => OrderScreen(
+                                  table: table,
+                                  order: order,
+                                  isNewOrder: order == null,
+                                ),
+                              ),
+                            );
+                          },
+                          onLongPress: () =>
+                              _showTableOptions(table, order, data),
                           borderRadius: BorderRadius.circular(28),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
@@ -823,7 +1044,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                                     ),
                                     SizedBox(height: compact ? 6 : 8),
                                     Text(
-                                      'Table ${table.label}',
+                                      table.label,
                                       style: TextStyle(
                                         fontSize: titleSize,
                                         fontWeight: FontWeight.w700,

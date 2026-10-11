@@ -7,7 +7,11 @@ import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({super.key, this.isActive = false});
+
+  // Whether this tab is currently visible inside HomeScreen's IndexedStack.
+  // Data is fetched lazily the first time the tab becomes active.
+  final bool isActive;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -19,14 +23,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
   DateTimeRange? _selectedDateRange;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      if (auth.currentStore != null) {
-        context.read<DataProvider>().loadOrders(auth.currentStore!.id);
-      }
-    });
+  void didUpdateWidget(HistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _fetchOrders();
+    }
+  }
+
+  // Loads orders for the selected date range, defaulting to the last 7 days
+  // so the whole order history is never downloaded.
+  void _fetchOrders() {
+    final auth = context.read<AuthProvider>();
+    if (auth.currentStore == null) return;
+
+    final range = _selectedDateRange;
+    context.read<DataProvider>().loadHistoryOrders(
+          auth.currentStore!.id,
+          from: range?.start ??
+              DateTime.now().subtract(const Duration(days: 7)),
+          to: range == null
+              ? null
+              : DateTime(range.end.year, range.end.month, range.end.day, 23,
+                  59, 59),
+        );
   }
 
   Future<void> _selectDateRange() async {
@@ -53,13 +72,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
       setState(() {
         _selectedDateRange = picked;
       });
+      _fetchOrders();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
-    final orders = data.orders.where((o) {
+    final orders = data.historyOrders.where((o) {
       if (o.status == 'active') {
         return false;
       }
@@ -94,6 +114,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final query = _searchQuery.toLowerCase();
         final matchesTable = o.tableLabel.toLowerCase() == query ||
             'table ${o.tableLabel}'.toLowerCase().contains(query) ||
+            'table ${o.tableNumber}'.toLowerCase() == query ||
             o.tableNumber.toString() == query;
         final matchesItems =
             o.items.any((item) => item.item.name.toLowerCase().contains(query));
@@ -215,6 +236,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           setState(() {
                             _selectedDateRange = null;
                           });
+                          _fetchOrders();
                         },
                         child: const Icon(
                           Icons.close,
@@ -317,7 +339,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               Text(
                                 order.tableNumber == 0
                                     ? 'Parcel Order'
-                                    : 'Table ${order.tableLabel}',
+                                    : order.tableLabel,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
@@ -506,7 +528,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                               title:
                                                   const Text('Cancel Order?'),
                                               content: Text(
-                                                'Are you sure you want to cancel this completed order for ${order.tableNumber == 0 ? 'Parcel Order' : 'Table ${order.tableLabel}'}?',
+                                                'Are you sure you want to cancel this completed order for ${order.tableNumber == 0 ? 'Parcel Order' : order.tableLabel}?',
                                               ),
                                               actions: [
                                                 TextButton(

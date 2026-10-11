@@ -133,8 +133,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final screens = [
       const TablesScreen(),
       const OrdersScreen(),
-      const HistoryScreen(),
-      if (canViewStats) const StatisticsScreen(),
+      HistoryScreen(isActive: _currentIndex == 2),
+      if (canViewStats) StatisticsScreen(isActive: _currentIndex == 3),
       const CategoriesItemsScreen(),
       ParcelOrderScreen(
         onOrderSuccess: () {

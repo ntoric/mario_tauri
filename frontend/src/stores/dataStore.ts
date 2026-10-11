@@ -67,6 +67,7 @@ interface DataState {
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
   cancelOrder: (id: string, reason?: string) => Promise<void>;
+  mergeOrders: (id: string, mergeOrderId: string) => Promise<void>;
   getActiveOrderByTable: (tableId: string) => Order | undefined;
   
   // Bills
@@ -511,6 +512,15 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.cancelOrder(id, reason);
+    await get().fetchOrders();
+  },
+
+  mergeOrders: async (id, mergeOrderId) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.mergeOrders(id, mergeOrderId);
     await get().fetchOrders();
   },
 

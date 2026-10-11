@@ -8,7 +8,11 @@ import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 
 class StatisticsScreen extends StatefulWidget {
-  const StatisticsScreen({super.key});
+  const StatisticsScreen({super.key, this.isActive = false});
+
+  // Whether this tab is currently visible inside HomeScreen's IndexedStack.
+  // Data is fetched lazily the first time the tab becomes active.
+  final bool isActive;
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
@@ -18,19 +22,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   bool _isLoading = true;
 
   @override
-  void initState() {
-    super.initState();
-    _loadStats();
+  void didUpdateWidget(StatisticsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _loadStats();
+    }
   }
 
   Future<void> _loadStats() async {
     final auth = context.read<AuthProvider>();
     final data = context.read<DataProvider>();
     if (auth.currentStore != null) {
+      final from = DateTime.now().subtract(const Duration(days: 30));
       await Future.wait([
         data.loadStats(),
-        data.loadBills(auth.currentStore!.id),
-        data.loadOrders(auth.currentStore!.id),
+        data.loadBills(auth.currentStore!.id, from: from),
+        data.loadHistoryOrders(auth.currentStore!.id, from: from),
       ]);
     } else {
       await data.loadStats();
@@ -51,8 +58,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       (sum, bill) => sum + bill.total,
     );
     
-    final completedOrders = data.orders.where((o) => o.isCompleted).length;
-    final activeOrders = data.orders.where((o) => o.isActive).length;
+    final completedOrders =
+        data.historyOrders.where((o) => o.isCompleted).length;
+    final activeOrders = data.activeOrders.length;
     
     final paymentMethods = <String, double>{};
     for (final bill in bills) {
@@ -113,7 +121,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           children: [
                             _buildDarkStatChip(
                               'Orders',
-                              '${data.orders.length}',
+                              '${data.historyOrders.length}',
                               Icons.receipt,
                             ),
                             const SizedBox(width: 12),
@@ -145,7 +153,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                       _buildStatCard(
                         'Total Orders',
-                        '${data.orders.length}',
+                        '${data.historyOrders.length}',
                         Icons.receipt,
                         AppColors.primary,
                       ),
@@ -323,7 +331,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               ),
                             ),
                             subtitle: Text(
-                              'Table ${bill.tableLabel} • ${dateFormat.format(bill.generatedAt)}',
+                              '${bill.tableLabel} • ${dateFormat.format(bill.generatedAt)}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.gray500,

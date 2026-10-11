@@ -99,9 +99,9 @@ class Bill {
     };
   }
 
-  // Display label: alphanumeric table name when set, else the table number.
+  // Display label: alphanumeric table name when set, else "T<tableNumber>".
   String get tableLabel =>
-      (tableName != null && tableName!.isNotEmpty) ? tableName! : '$tableNumber';
+      (tableName != null && tableName!.isNotEmpty) ? tableName! : 'T$tableNumber';
 }
 
 class BillItem {

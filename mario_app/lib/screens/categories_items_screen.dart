@@ -595,11 +595,15 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final query = _itemSearchController.text.toLowerCase().trim();
+    final categoryNames = {for (var c in data.categories) c.id: c.name};
 
     // Filter Items dynamically
     final filteredItems = data.items.where((item) {
+      final categoryName =
+          item.categoryName ?? categoryNames[item.categoryId] ?? '';
       final matchesQuery = item.name.toLowerCase().contains(query) ||
-          (item.description?.toLowerCase().contains(query) ?? false);
+          (item.description?.toLowerCase().contains(query) ?? false) ||
+          categoryName.toLowerCase().contains(query);
 
       final matchesCategory = _selectedCategoryId == 'all' ||
           item.categoryId == _selectedCategoryId;
@@ -781,8 +785,15 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     itemCount: filteredItems.length,
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
+                      final categoryName = (item.categoryName != null &&
+                              item.categoryName!.isNotEmpty)
+                          ? item.categoryName!
+                          : (categoryNames[item.categoryId] ??
+                              'Uncategorized');
 
-                      return Card(
+                      return Opacity(
+                        opacity: item.enabled ? 1 : 0.5,
+                        child: Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         elevation: 1,
                         shape: RoundedRectangleBorder(
@@ -845,7 +856,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      item.categoryName ?? 'Uncategorized',
+                                      categoryName,
                                       style: const TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
@@ -861,6 +872,17 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                                       color: AppColors.gray600,
                                     ),
                                   ),
+                                  if (!item.enabled) ...[
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Disabled',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.danger,
+                                      ),
+                                    ),
+                                  ],
                                   if (item.hsnCode != null) ...[
                                     const SizedBox(width: 8),
                                     Text(
@@ -894,6 +916,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                 ),
+                        ),
                         ),
                       );
                     },

@@ -9,6 +9,7 @@ class Item {
   final String? hsnCode;
   final double? taxPercent;
   final bool isActive;
+  final bool enabled;
   final bool isFavourite;
 
   Item({
@@ -22,6 +23,7 @@ class Item {
     this.hsnCode,
     this.taxPercent,
     required this.isActive,
+    this.enabled = true,
     this.isFavourite = false,
   });
 
@@ -48,6 +50,10 @@ class Item {
           json['category_id']?.toString() ??
           '',
 
+      categoryName:
+          json['categoryName']?.toString() ??
+          json['category_name']?.toString(),
+
       name: json['name']?.toString() ?? '',
 
       description:
@@ -69,6 +75,10 @@ class Item {
           json['is_active'] ??
           true,
 
+      enabled:
+          json['enabled'] ??
+          true,
+
       isFavourite:
           json['isFavourite'] ??
           json['is_favourite'] ??
@@ -88,6 +98,7 @@ class Item {
       'hsnCode': hsnCode,
       'taxPercent': taxPercent,
       'isActive': isActive,
+      'enabled': enabled,
       'isFavourite': isFavourite,
     };
   }

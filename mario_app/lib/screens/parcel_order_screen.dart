@@ -246,7 +246,14 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
+    // IDs of disabled categories — items belonging to these are hidden from ordering.
+    final disabledCategoryIds = data.categories
+        .where((c) => !c.enabled)
+        .map((c) => c.id)
+        .toSet();
+    final categoryNames = {for (var c in data.categories) c.id: c.name};
     final categories = data.categories
+        .where((c) => c.enabled)
         .toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
@@ -255,10 +262,14 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final items = data.items.where((item) {
+      if (!item.enabled) return false;
+      if (disabledCategoryIds.contains(item.categoryId)) return false;
       final matchesCategory =
           _selectedCategoryId == null || item.categoryId == _selectedCategoryId;
+      final query = _searchQuery.toLowerCase();
       final matchesSearch = _searchQuery.isEmpty ||
-          item.name.toLowerCase().contains(_searchQuery.toLowerCase());
+          item.name.toLowerCase().contains(query) ||
+          (categoryNames[item.categoryId] ?? '').toLowerCase().contains(query);
       return matchesCategory && matchesSearch;
     }).toList()
       ..sort((a, b) {

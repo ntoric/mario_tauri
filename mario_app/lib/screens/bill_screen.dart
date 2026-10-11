@@ -158,7 +158,7 @@ class _BillScreenState extends State<BillScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'Table ${order.tableLabel}',
+                      order.tableLabel,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

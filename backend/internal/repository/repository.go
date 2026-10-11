@@ -1161,7 +1161,16 @@ type OrderRepository struct {
 	db *sql.DB
 }
 
-func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([]models.Order, error) {
+// OrderFilter bounds the rows returned by GetAll. Empty fields are ignored,
+// so a zero-value filter reproduces the previous "everything" behaviour.
+type OrderFilter struct {
+	Statuses []string
+	From     *time.Time
+	To       *time.Time
+	Limit    int
+}
+
+func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFilter) ([]models.Order, error) {
 	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.table_name, o.status, o.order_type, o.customer_name, o.customer_mobile,
 		       o.total_amount, o.tax_amount, o.discount_amount,
@@ -1196,13 +1205,28 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID, status string) ([
 	args = append(args, storeID)
 	idx := 2
 
-	if status != "" {
-		sqlStr += fmt.Sprintf(" AND o.status = $%d", idx)
-		args = append(args, status)
+	if len(f.Statuses) > 0 {
+		sqlStr += fmt.Sprintf(" AND o.status = ANY($%d)", idx)
+		args = append(args, pq.Array(f.Statuses))
+		idx++
+	}
+	if f.From != nil {
+		sqlStr += fmt.Sprintf(" AND o.created_at >= $%d", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		sqlStr += fmt.Sprintf(" AND o.created_at <= $%d", idx)
+		args = append(args, *f.To)
 		idx++
 	}
 
 	sqlStr += " GROUP BY o.id ORDER BY o.created_at DESC"
+
+	if f.Limit > 0 {
+		sqlStr += fmt.Sprintf(" LIMIT $%d", idx)
+		args = append(args, f.Limit)
+	}
 
 	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
@@ -1475,6 +1499,93 @@ func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy string) err
 	return tx.Commit()
 }
 
+// ErrOrderNotMergeable is returned by MergeOrders when either order is missing
+// or no longer active (e.g. it was completed/cancelled concurrently).
+var ErrOrderNotMergeable = errors.New("order is not mergeable")
+
+// MergeOrders folds the secondary order into the primary one: its line items
+// are re-pointed at the primary order, its totals are added onto the primary
+// totals, and it is marked 'merged' which releases its table. combinedTableName,
+// when non-empty, replaces the primary order's table_name snapshot so
+// downstream bills reflect every table that fed into the order (e.g. "3 + 5").
+func (r *OrderRepository) MergeOrders(ctx context.Context, primaryID, secondaryID, combinedTableName, modifiedBy string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Lock both order rows so a concurrent complete/cancel can't race the merge.
+	type orderTotals struct {
+		status   string
+		total    float64
+		tax      float64
+		discount float64
+	}
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, COALESCE(status, ''), COALESCE(total_amount, 0), COALESCE(tax_amount, 0), COALESCE(discount_amount, 0)
+		FROM orders WHERE id IN ($1, $2) FOR UPDATE
+	`, primaryID, secondaryID)
+	if err != nil {
+		return err
+	}
+
+	totals := map[string]orderTotals{}
+	for rows.Next() {
+		var id string
+		var t orderTotals
+		if err := rows.Scan(&id, &t.status, &t.total, &t.tax, &t.discount); err != nil {
+			rows.Close()
+			return err
+		}
+		totals[id] = t
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	primary, okP := totals[primaryID]
+	secondary, okS := totals[secondaryID]
+	if !okP || !okS || primary.status != "active" || secondary.status != "active" {
+		return ErrOrderNotMergeable
+	}
+
+	_, err = tx.ExecContext(ctx,
+		"UPDATE order_items SET order_id = $1, modified_by = $3 WHERE order_id = $2",
+		primaryID, secondaryID, modifiedBy)
+	if err != nil {
+		return err
+	}
+
+	var tableName interface{}
+	if combinedTableName != "" {
+		tableName = combinedTableName
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE orders SET
+			total_amount = COALESCE(total_amount, 0) + $2,
+			tax_amount = COALESCE(tax_amount, 0) + $3,
+			discount_amount = COALESCE(discount_amount, 0) + $4,
+			table_name = COALESCE($5, table_name),
+			updated_at = CURRENT_TIMESTAMP,
+			modified_by = $6
+		WHERE id = $1
+	`, primaryID, secondary.total, secondary.tax, secondary.discount, tableName, modifiedBy)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE orders SET status = 'merged', updated_at = CURRENT_TIMESTAMP, modified_by = $2 WHERE id = $1
+	`, secondaryID, modifiedBy)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // ==========================================
 // BILL REPOSITORY
 // ==========================================
@@ -1484,7 +1595,14 @@ type BillRepository struct {
 	redis *RedisCache
 }
 
-func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.Bill, error) {
+// BillFilter bounds the rows returned by GetAll. Empty fields are ignored.
+type BillFilter struct {
+	From  *time.Time
+	To    *time.Time
+	Limit int
+}
+
+func (r *BillRepository) GetAll(ctx context.Context, storeID string, f BillFilter) ([]models.Bill, error) {
 	sqlStr := `
 		SELECT b.id, b.store_id, b.order_id, b.table_number, b.table_name, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
 		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.status, b.generated_at, b.generated_by,
@@ -1510,10 +1628,30 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string) ([]models.B
 		LEFT JOIN items i ON oi.item_id = i.id
 		LEFT JOIN categories c ON i.category_id = c.id
 		WHERE b.store_id = $1
-		GROUP BY b.id
-		ORDER BY b.generated_at DESC
 	`
-	rows, err := r.db.QueryContext(ctx, sqlStr, storeID)
+	var args []interface{}
+	args = append(args, storeID)
+	idx := 2
+
+	if f.From != nil {
+		sqlStr += fmt.Sprintf(" AND b.generated_at >= $%d", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		sqlStr += fmt.Sprintf(" AND b.generated_at <= $%d", idx)
+		args = append(args, *f.To)
+		idx++
+	}
+
+	sqlStr += " GROUP BY b.id ORDER BY b.generated_at DESC"
+
+	if f.Limit > 0 {
+		sqlStr += fmt.Sprintf(" LIMIT $%d", idx)
+		args = append(args, f.Limit)
+	}
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
 		return nil, err
 	}

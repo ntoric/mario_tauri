@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -18,7 +18,7 @@ import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShort
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
-  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection } = useDataStore();
+  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, mergeOrders, cancelOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -235,6 +235,16 @@ const Tables: React.FC = () => {
   const [changeTableDialog, setChangeTableDialog] = useState<{ fromTable: Table; order: any } | null>(null);
   const [confirmTableChange, setConfirmTableChange] = useState<Table | null>(null);
 
+  // Combine bill dialog state
+  const [combineDialog, setCombineDialog] = useState<{ intoTable: Table; order: any } | null>(null);
+  const [confirmCombineTable, setConfirmCombineTable] = useState<Table | null>(null);
+  const [isCombining, setIsCombining] = useState(false);
+
+  // Order preview dialog state
+  const [previewTable, setPreviewTable] = useState<Table | null>(null);
+  const [cancelOrderConfirm, setCancelOrderConfirm] = useState<any | null>(null);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+
   // Loading states
   const [isAddingTable, setIsAddingTable] = useState(false);
   const [loadingTableId, setLoadingTableId] = useState<string | null>(null);
@@ -351,6 +361,60 @@ const Tables: React.FC = () => {
     } catch (error) {
       console.error('Failed to change table:', error);
       setErrorDialog({ show: true, message: (error as Error).message || 'Failed to change table. Please try again.' });
+    }
+  };
+
+  const handleCombineClick = (e: React.MouseEvent, table: Table) => {
+    e.stopPropagation();
+    const activeOrder = getActiveOrderByTable(table.id);
+    if (activeOrder) {
+      setCombineDialog({ intoTable: table, order: activeOrder });
+    }
+  };
+
+  const handlePreviewClick = (e: React.MouseEvent, table: Table) => {
+    e.stopPropagation();
+    const activeOrder = getActiveOrderByTable(table.id);
+    if (activeOrder) {
+      setPreviewTable(table);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelOrderConfirm) return;
+    setIsCancellingOrder(true);
+    try {
+      await cancelOrder(cancelOrderConfirm.id);
+      setCancelOrderConfirm(null);
+      setPreviewTable(null);
+    } catch (error) {
+      console.error('Failed to cancel order:', error);
+      setErrorDialog({ show: true, message: (error as Error).message || 'Failed to cancel order. Please try again.' });
+    } finally {
+      setIsCancellingOrder(false);
+    }
+  };
+
+  const handleCombine = async () => {
+    if (!combineDialog || !confirmCombineTable) return;
+    const mergeOrder = getActiveOrderByTable(confirmCombineTable.id);
+    if (!mergeOrder) {
+      setConfirmCombineTable(null);
+      setCombineDialog(null);
+      setErrorDialog({ show: true, message: 'That table no longer has an active order.' });
+      return;
+    }
+
+    setIsCombining(true);
+    try {
+      await mergeOrders(combineDialog.order.id, mergeOrder.id);
+      setConfirmCombineTable(null);
+      setCombineDialog(null);
+    } catch (error) {
+      console.error('Failed to combine orders:', error);
+      setErrorDialog({ show: true, message: (error as Error).message || 'Failed to combine orders. Please try again.' });
+    } finally {
+      setIsCombining(false);
     }
   };
 
@@ -588,6 +652,12 @@ const Tables: React.FC = () => {
     (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
     : 0;
 
+  const previewOrder = previewTable ? getActiveOrderByTable(previewTable.id) : null;
+  const previewSubtotal = previewOrder ?
+    previewOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) : 0;
+  const previewTax = previewOrder && taxEnabled ?
+    previewOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0;
+
   // Sections come from the table_sections catalog (independent of tables).
   // We merge in any sections still referenced by tables so nothing is hidden
   // if the catalog and tables drift out of sync, plus the implicit "Ground
@@ -626,7 +696,8 @@ const Tables: React.FC = () => {
   }, [filteredTables.length]);
 
   const anyModalOpen = !!(
-    billDialogTable || confirmTableChange || changeTableDialog || deleteConfirmTable ||
+    billDialogTable || confirmTableChange || changeTableDialog || combineDialog ||
+    confirmCombineTable || deleteConfirmTable || previewTable || cancelOrderConfirm ||
     showAddModal || showSectionsModal || showStatusDropdown || showShortcutsHelp ||
     printerConfirm.show || errorDialog.show || sectionToDelete
   );
@@ -641,10 +712,14 @@ const Tables: React.FC = () => {
     if (billDialogTable) { if (!isPrinting) setBillDialogTable(null); return; }
     if (confirmTableChange) { setConfirmTableChange(null); return; }
     if (changeTableDialog) { setChangeTableDialog(null); return; }
+    if (confirmCombineTable) { setConfirmCombineTable(null); return; }
+    if (combineDialog) { setCombineDialog(null); return; }
+    if (cancelOrderConfirm) { if (!isCancellingOrder) setCancelOrderConfirm(null); return; }
+    if (previewTable) { setPreviewTable(null); return; }
     if (showStatusDropdown) { setShowStatusDropdown(false); return; }
     if (showSectionsModal) { setShowSectionsModal(false); return; }
     if (showAddModal) { setShowAddModal(false); return; }
-  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, showStatusDropdown, showSectionsModal, showAddModal]);
+  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showSectionsModal, showAddModal]);
 
   const openFocusedTable = useCallback((table: Table) => {
     if (checkingTableId) return;
@@ -871,7 +946,7 @@ const Tables: React.FC = () => {
                         </button>
                       )}
                       {activeOrder && (
-                        <>
+                        <div className="table-card-actions">
                           <button
                             className="table-bill-btn new-design"
                             onClick={(e) => handleBillClick(e, table)}
@@ -886,7 +961,21 @@ const Tables: React.FC = () => {
                           >
                             <ArrowRightLeft size={14} />
                           </button>
-                        </>
+                          <button
+                            className="table-combine-btn"
+                            onClick={(e) => handleCombineClick(e, table)}
+                            title="Combine Bill"
+                          >
+                            <Combine size={14} />
+                          </button>
+                          <button
+                            className="table-preview-btn"
+                            onClick={(e) => handlePreviewClick(e, table)}
+                            title="Preview Order"
+                          >
+                            <Eye size={14} />
+                          </button>
+                        </div>
                       )}
                       {activeOrder && (
                         <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
@@ -972,6 +1061,22 @@ const Tables: React.FC = () => {
                                   title="Change Table"
                                 >
                                   <ArrowRightLeft size={14} />
+                                </button>
+                                <button
+                                  className="action-btn"
+                                  style={{ background: 'rgba(245,166,35, 0.1)', color: 'var(--warning)' }}
+                                  onClick={(e) => handleCombineClick(e as any, table)}
+                                  title="Combine Bill"
+                                >
+                                  <Combine size={14} />
+                                </button>
+                                <button
+                                  className="action-btn"
+                                  style={{ background: 'rgba(45,55,72, 0.1)', color: 'var(--secondary)' }}
+                                  onClick={(e) => handlePreviewClick(e as any, table)}
+                                  title="Preview Order"
+                                >
+                                  <Eye size={14} />
                                 </button>
                               </>
                             )}
@@ -1231,6 +1336,188 @@ const Tables: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Combine Bill Dialog */}
+      {combineDialog && !confirmCombineTable && (
+        <div className="modal-overlay" onClick={() => setCombineDialog(null)}>
+          <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Combine Bill</h2>
+              <button className="close-btn" onClick={() => setCombineDialog(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '1rem', color: 'var(--gray-600)' }}>
+                Select an occupied table to merge into <strong>Table {tableLabel(combineDialog.intoTable)}</strong>'s order:
+              </p>
+              <div className="change-table-grid">
+                {tables
+                  .filter(t => t.id !== combineDialog.intoTable.id && getActiveOrderByTable(t.id))
+                  .sort((a, b) => a.number - b.number)
+                  .map(table => {
+                    const otherOrder = getActiveOrderByTable(table.id);
+                    return (
+                      <button
+                        key={table.id}
+                        className="change-table-option"
+                        onClick={() => setConfirmCombineTable(table)}
+                      >
+                        <span className="change-table-number">{tableLabel(table)}</span>
+                        <span className="change-table-seats">
+                          {otherOrder ? formatCurrencyInt(otherOrder.totalAmount) : `${table.seats} seats`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                {tables.filter(t => t.id !== combineDialog.intoTable.id && getActiveOrderByTable(t.id)).length === 0 && (
+                  <p style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>
+                    No other occupied tables to combine with
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setCombineDialog(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Combine Dialog */}
+      {combineDialog && confirmCombineTable && (
+        <div className="modal-overlay" onClick={() => !isCombining && setConfirmCombineTable(null)}>
+          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirm Combine</h2>
+              <button className="close-btn" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center' }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                background: 'rgba(245,166,35, 0.1)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 1.5rem'
+              }}>
+                <Combine size={32} style={{ color: 'var(--warning)' }} />
+              </div>
+              <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                Merge <strong>Table {tableLabel(confirmCombineTable)}</strong>'s order into <strong>Table {tableLabel(combineDialog.intoTable)}</strong>?
+              </p>
+              <p style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>
+                Table {tableLabel(confirmCombineTable)} will be freed and its items will appear on Table {tableLabel(combineDialog.intoTable)}'s bill.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleCombine} disabled={isCombining}>
+                {isCombining ? 'Combining...' : 'Confirm Combine'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Preview Dialog */}
+      {previewTable && previewOrder && (
+        <div className="modal-overlay" onClick={() => setPreviewTable(null)}>
+          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Order Details - Table {tableLabel(previewTable)}</h2>
+              <button className="close-btn" onClick={() => setPreviewTable(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="bill-items">
+                {previewOrder.items.map((oi: any, idx: number) => (
+                  <div className="bill-item" key={oi.itemId || idx}>
+                    <div className="bill-item-details">
+                      <div className="bill-item-name">{oi.item.name}</div>
+                      <div className="bill-item-qty">
+                        {oi.quantity} × {formatCurrency(oi.item.price)}
+                        {oi.notes ? ` — ${oi.notes}` : ''}
+                      </div>
+                    </div>
+                    <div className="bill-item-price">{formatCurrency(oi.item.price * oi.quantity)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="bill-totals">
+                <div className="bill-total-row">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(previewSubtotal)}</span>
+                </div>
+                {taxEnabled && (
+                  <div className="bill-total-row">
+                    <span>Tax</span>
+                    <span>{formatCurrency(previewTax)}</span>
+                  </div>
+                )}
+                <div className="bill-total-row grand-total">
+                  <span>Total</span>
+                  <span>{formatCurrency(previewSubtotal + previewTax)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <button
+                className="btn btn-danger"
+                onClick={() => setCancelOrderConfirm(previewOrder)}
+              >
+                Cancel Order
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setPreviewTable(null);
+                  setChangeTableDialog({ fromTable: previewTable, order: previewOrder });
+                }}
+              >
+                Move
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  const t = previewTable;
+                  setPreviewTable(null);
+                  setPaymentMethod('upi');
+                  setBillDialogTable(t);
+                }}
+              >
+                Bill
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate(`/order/${previewTable.id}`)}
+              >
+                Open Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!cancelOrderConfirm}
+        title="Cancel Order"
+        message={`Are you sure you want to cancel the order${previewTable ? ` on Table ${tableLabel(previewTable)}` : ''}? The table will be freed.`}
+        confirmLabel={isCancellingOrder ? 'Cancelling...' : 'Yes, Cancel Order'}
+        cancelLabel="No"
+        variant="danger"
+        onConfirm={handleCancelOrder}
+        onCancel={() => !isCancellingOrder && setCancelOrderConfirm(null)}
+      />
 
       <BillModal />
 

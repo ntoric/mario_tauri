@@ -75,6 +75,7 @@ func main() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Compress(5))
 
 	// JSON-lines request log, retained ~24h and purged daily at 03:00 IST.
 	if reqLogger, err := middleware.NewRequestLogger(cfg.RequestLogDir, sessionStore); err != nil {
@@ -178,6 +179,7 @@ func main() {
 		r.Put("/api/orders/{id}", h.UpdateOrder)
 		r.Patch("/api/orders/{id}/complete", h.CompleteOrder)
 		r.Patch("/api/orders/{id}/cancel", h.CancelOrder)
+		r.Post("/api/orders/{id}/merge", h.MergeOrders)
 
 		// Bills
 		r.Get("/api/bills", h.GetBills)

@@ -201,6 +201,7 @@ class _OrderScreenState extends State<OrderScreen> {
           final order = await data.createOrder(
             tableId: widget.table.id,
             tableNumber: widget.table.number,
+            tableName: widget.table.name,
             items: itemsData,
             totalAmount: _total,
             taxAmount: _taxAmount,
@@ -213,7 +214,7 @@ class _OrderScreenState extends State<OrderScreen> {
         // }
 
         if (order != null) {
-          _showFeedback('Order created for Table ${widget.table.label}');
+          _showFeedback('Order created for ${widget.table.label}');
           if (mounted) {
             Navigator.pop(context);
           }
@@ -255,7 +256,14 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
+    // IDs of disabled categories — items belonging to these are hidden from ordering.
+    final disabledCategoryIds = data.categories
+        .where((c) => !c.enabled)
+        .map((c) => c.id)
+        .toSet();
+    final categoryNames = {for (var c in data.categories) c.id: c.name};
     final categories = data.categories
+        .where((c) => c.enabled)
         .toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
@@ -264,10 +272,14 @@ class _OrderScreenState extends State<OrderScreen> {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final items = data.items.where((item) {
+      if (!item.enabled) return false;
+      if (disabledCategoryIds.contains(item.categoryId)) return false;
       final matchesCategory = _selectedCategoryId == null ||
           item.categoryId == _selectedCategoryId;
+      final query = _searchQuery.toLowerCase();
       final matchesSearch = _searchQuery.isEmpty ||
-          item.name.toLowerCase().contains(_searchQuery.toLowerCase());
+          item.name.toLowerCase().contains(query) ||
+          (categoryNames[item.categoryId] ?? '').toLowerCase().contains(query);
       return matchesCategory && matchesSearch;
     }).toList()
       ..sort((a, b) {
@@ -282,8 +294,8 @@ class _OrderScreenState extends State<OrderScreen> {
     return Scaffold(
       appBar: AppHeader(
         title: widget.isNewOrder
-            ? 'New Order - Table ${widget.table.label}'
-            : 'Edit Order - Table ${widget.table.label}',
+            ? 'New Order - ${widget.table.label}'
+            : 'Edit Order - ${widget.table.label}',
         actions: [
           TextButton.icon(
             onPressed: _isSaving ? null : _saveOrder,

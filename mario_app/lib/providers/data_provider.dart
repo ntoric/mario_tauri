@@ -15,7 +15,15 @@ class DataProvider extends ChangeNotifier {
   List<TableModel> _tables = [];
   List<Category> _categories = [];
   List<Item> _items = [];
+
+  // _orders holds only currently-active orders — the operational view.
+  // Historical orders live in _historyOrders and are fetched on demand with
+  // a date bound so the whole order history is never pulled at once.
   List<Order> _orders = [];
+  List<Order> _historyOrders = [];
+  DateTime? _historyFrom;
+  DateTime? _historyTo;
+  bool _historyLoaded = false;
   List<Bill> _bills = [];
   SystemStats? _stats;
   AppUpdate? _appUpdate;
@@ -27,6 +35,7 @@ class DataProvider extends ChangeNotifier {
   List<Category> get categories => _categories;
   List<Item> get items => _items;
   List<Order> get orders => _orders;
+  List<Order> get historyOrders => _historyOrders;
   List<Order> get activeOrders => _orders.where((o) => o.isActive).toList();
   List<Bill> get bills => _bills;
   SystemStats? get stats => _stats;
@@ -41,6 +50,10 @@ class DataProvider extends ChangeNotifier {
     _categories = [];
     _items = [];
     _orders = [];
+    _historyOrders = [];
+    _historyFrom = null;
+    _historyTo = null;
+    _historyLoaded = false;
     _bills = [];
     _stats = null;
     notifyListeners();
@@ -56,7 +69,6 @@ class DataProvider extends ChangeNotifier {
       loadCategories(storeId),
       loadItems(storeId),
       loadOrders(storeId),
-      loadBills(storeId),
     ]);
   }
 
@@ -90,9 +102,9 @@ class DataProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadOrders(String storeId) async {
+  Future<void> loadOrders(String storeId, {String status = 'active'}) async {
     try {
-      final data = await _backend.api.getOrders(storeId);
+      final data = await _backend.api.getOrders(storeId, status: status);
       _orders = data;
       notifyListeners();
     } catch (e) {
@@ -100,9 +112,43 @@ class DataProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadBills(String storeId) async {
+  /// Fetches historical orders (all statuses) for the given window. Used by
+  /// the history/statistics screens; kept separate from [_orders] so it never
+  /// disturbs the active-orders view.
+  Future<void> loadHistoryOrders(
+    String storeId, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
     try {
-      final data = await _backend.api.getBills(storeId);
+      final data = await _backend.api.getOrders(storeId, from: from, to: to);
+      _historyOrders = data;
+      _historyFrom = from;
+      _historyTo = to;
+      _historyLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+    }
+  }
+
+  // Refreshes the history window only if a screen has loaded it before, so
+  // status changes surface in Order History without eager polling.
+  Future<void> _refreshHistoryIfLoaded(String storeId) async {
+    if (_historyLoaded) {
+      await loadHistoryOrders(storeId, from: _historyFrom, to: _historyTo);
+    }
+  }
+
+  Future<void> loadBills(
+    String storeId, {
+    DateTime? from,
+    DateTime? to,
+    int? limit,
+  }) async {
+    try {
+      final data =
+          await _backend.api.getBills(storeId, from: from, to: to, limit: limit);
       _bills = data;
       notifyListeners();
     } catch (e) {
@@ -136,6 +182,7 @@ class DataProvider extends ChangeNotifier {
   Future<Order?> createOrder({
     required String tableId,
     required int tableNumber,
+    String? tableName,
     required List<Map<String, dynamic>> items,
     required double totalAmount,
     required double taxAmount,
@@ -145,6 +192,8 @@ class DataProvider extends ChangeNotifier {
       final orderData = {
         'tableId': tableId,
         'tableNumber': tableNumber,
+        if (tableName != null && tableName.isNotEmpty)
+          'tableName': tableName,
         'items': items,
         'totalAmount': totalAmount,
         'taxAmount': taxAmount,
@@ -185,6 +234,7 @@ class DataProvider extends ChangeNotifier {
       final order = await _backend.api.createParcelOrder(orderData);
       _orders.insert(0, order);
       notifyListeners();
+      _refreshHistoryIfLoaded(storeId);
       return order;
     } catch (e) {
       _error = e.toString();
@@ -230,7 +280,9 @@ class DataProvider extends ChangeNotifier {
       await _backend.api.completeOrder(orderId, paymentMethod: paymentMethod);
 
       final index = _orders.indexWhere((o) => o.id == orderId);
+      String? storeId;
       if (index >= 0) {
+        storeId = _orders[index].storeId;
         _orders[index] = Order(
           id: _orders[index].id,
           storeId: _orders[index].storeId,
@@ -250,6 +302,9 @@ class DataProvider extends ChangeNotifier {
         );
       }
       notifyListeners();
+      if (storeId != null) {
+        _refreshHistoryIfLoaded(storeId);
+      }
       return true;
     } catch (e) {
       _error = e.toString();
@@ -260,12 +315,16 @@ class DataProvider extends ChangeNotifier {
 
   Future<bool> cancelOrder(String orderId, {String? reason}) async {
     try {
-      final order = _orders.firstWhere((o) => o.id == orderId);
+      final order = _orders.firstWhere(
+        (o) => o.id == orderId,
+        orElse: () => _historyOrders.firstWhere((o) => o.id == orderId),
+      );
 
       await _backend.api.cancelOrder(orderId, reason: reason);
 
       // Reload orders from backend to ensure perfect sync
       await loadOrders(order.storeId);
+      _refreshHistoryIfLoaded(order.storeId);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -300,6 +359,26 @@ class DataProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
       return false;
+    }
+  }
+
+  /// Combines the order of another occupied table ([mergeOrderId]) into
+  /// [orderId]. The absorbed order is marked 'merged' server-side and its
+  /// table is freed; the returned order carries the combined items/totals.
+  Future<Order?> mergeOrders(String orderId, String mergeOrderId) async {
+    try {
+      final order = _orders.firstWhere((o) => o.id == orderId);
+
+      final merged = await _backend.api.mergeOrders(orderId, mergeOrderId);
+
+      // Reload orders from the backend to pick up the absorbed order's
+      // 'merged' status and the expanded primary order.
+      await loadOrders(order.storeId);
+      return merged;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return null;
     }
   }
 
@@ -349,7 +428,8 @@ class DataProvider extends ChangeNotifier {
   Future<bool> silentUpdateTablesAndOrders(String storeId) async {
     try {
       final newTables = await _backend.api.getTables(storeId);
-      final newOrders = await _backend.api.getOrders(storeId);
+      final newOrders =
+          await _backend.api.getOrders(storeId, status: 'active');
 
       bool tablesChanged = false;
       if (newTables.length != _tables.length) {

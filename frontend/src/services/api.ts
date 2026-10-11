@@ -405,6 +405,15 @@ class ApiService {
     });
   }
 
+  // Folds mergeOrderId's items/totals into order `id`; the merged order's
+  // table is released so a single bill can be generated for `id`.
+  async mergeOrders(id: string, mergeOrderId: string) {
+    return this.fetch(`/orders/${id}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ mergeOrderId }),
+    });
+  }
+
   // Bills
   async getBills(storeId: string) {
     return this.fetch(`/bills?storeId=${storeId}`);

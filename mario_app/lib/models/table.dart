@@ -17,8 +17,8 @@ class TableModel {
     required this.isActive,
   });
 
-  // Display label: alphanumeric name (e.g. "1A") when set, else the number.
-  String get label => (name != null && name!.isNotEmpty) ? name! : '$number';
+  // Display label: alphanumeric name (e.g. "1A") when set, else "T<number>".
+  String get label => (name != null && name!.isNotEmpty) ? name! : 'T$number';
 
   static int _parseInt(dynamic val) {
     if (val == null) return 0;

@@ -2,12 +2,15 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
+	"cafe-backend/internal/repository"
 
 	"fmt"
 	"github.com/go-chi/chi/v5"
@@ -18,6 +21,55 @@ import (
 // ORDER HANDLERS
 // ==========================================
 
+// maxListLimit caps client-supplied limit values on list endpoints so a
+// request can never pull an unbounded result set by accident.
+const maxListLimit = 1000
+
+// parseStatuses splits a comma-separated status query value
+// (e.g. "completed,cancelled") into a clean list. Empty input returns nil.
+func parseStatuses(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	statuses := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			statuses = append(statuses, s)
+		}
+	}
+	return statuses
+}
+
+// parseTimeQuery parses an RFC3339 or YYYY-MM-DD query value. Invalid or
+// absent values return nil so the filter is simply not applied.
+func parseTimeQuery(r *http.Request, key string) *time.Time {
+	raw := r.URL.Query().Get(key)
+	if raw == "" {
+		return nil
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return &t
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		return &t
+	}
+	return nil
+}
+
+// parseLimitQuery parses a positive integer limit, capped at max (0 = no
+// cap). Invalid or absent values return 0 meaning "no limit".
+func parseLimitQuery(r *http.Request, max int) int {
+	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	if max > 0 && n > max {
+		return max
+	}
+	return n
+}
+
 // GetOrders handles GET /api/orders
 func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
@@ -26,14 +78,19 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := r.URL.Query().Get("status")
+	filter := repository.OrderFilter{
+		Statuses: parseStatuses(r.URL.Query().Get("status")),
+		From:     parseTimeQuery(r, "from"),
+		To:       parseTimeQuery(r, "to"),
+		Limit:    parseLimitQuery(r, maxListLimit),
+	}
 
 	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
 	if !ok {
 		return
 	}
 
-	orders, err := h.Repo.Order.GetAll(r.Context(), targetStoreID, status)
+	orders, err := h.Repo.Order.GetAll(r.Context(), targetStoreID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -341,6 +398,92 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, order)
 }
 
+// MergeOrders handles POST /api/orders/:id/merge
+// Folds another active order (mergeOrderId) into this order: its items and
+// totals are moved over and it is marked 'merged', releasing its table.
+// A single bill can then be generated for the combined order.
+func (h *Handler) MergeOrders(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	orderStoreID, ok := h.recordStoreAccess(w, r, claims, "orders", id)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		MergeOrderID string `json:"mergeOrderId"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if req.MergeOrderID == "" || req.MergeOrderID == id {
+		h.writeError(w, http.StatusBadRequest, "A different order to combine is required")
+		return
+	}
+
+	// The order being folded in must belong to the same store.
+	if !h.requireRecordBelongsToStore(w, r, "orders", req.MergeOrderID, orderStoreID, "Order") {
+		return
+	}
+
+	primary, err := h.Repo.Order.GetByID(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	secondary, err := h.Repo.Order.GetByID(r.Context(), req.MergeOrderID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if primary == nil || secondary == nil {
+		h.writeError(w, http.StatusNotFound, "Order not found")
+		return
+	}
+	if primary.Status != "active" || secondary.Status != "active" {
+		h.writeError(w, http.StatusBadRequest, "Only active orders can be combined")
+		return
+	}
+
+	// Snapshot both table labels on the surviving order so downstream bills
+	// show which tables were combined (e.g. "3 + 5").
+	combinedName := orderTableLabel(primary) + " + " + orderTableLabel(secondary)
+
+	if err := h.Repo.Order.MergeOrders(r.Context(), id, req.MergeOrderID, combinedName, claims.ID); err != nil {
+		if errors.Is(err, repository.ErrOrderNotMergeable) {
+			h.writeError(w, http.StatusBadRequest, "Only active orders can be combined")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	order, errFetch := h.Repo.Order.GetByID(r.Context(), id)
+	if errFetch != nil || order == nil {
+		h.writeJSON(w, http.StatusOK, map[string]string{"message": "Orders combined successfully"})
+		return
+	}
+
+	h.broadcastTableStatusUpdate(order.StoreID, "order_updated")
+	h.writeJSON(w, http.StatusOK, order)
+}
+
+// orderTableLabel returns the display label for an order's table: the
+// alphanumeric name snapshot when set, otherwise the table number.
+func orderTableLabel(o *models.Order) string {
+	if o.TableName != "" {
+		return o.TableName
+	}
+	return fmt.Sprintf("%d", o.TableNumber)
+}
+
 // SaveEBill handles POST /api/orders/save-ebill
 // Creates an order, marks it as completed, and creates a bill atomically.
 // Used for recording orders without occupying a table (e.g., missed orders).
@@ -626,7 +769,13 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bills, err := h.Repo.Bill.GetAll(r.Context(), targetStoreID)
+	filter := repository.BillFilter{
+		From:  parseTimeQuery(r, "from"),
+		To:    parseTimeQuery(r, "to"),
+		Limit: parseLimitQuery(r, maxListLimit),
+	}
+
+	bills, err := h.Repo.Bill.GetAll(r.Context(), targetStoreID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

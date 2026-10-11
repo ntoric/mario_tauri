@@ -1038,7 +1038,7 @@ body {
 
 .tables-layout-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
   gap: 0.55rem 0.55rem;
   row-gap: 1.25rem;
   margin-bottom: 0.5rem;
@@ -1048,12 +1048,12 @@ body {
   background: var(--success-light);
   border: 2px solid var(--success);
   border-radius: var(--radius-sm);
-  padding: 0.55rem 0.35rem 1.2rem;
+  padding: 0.55rem 0.35rem 3.75rem;
   text-align: center;
   cursor: pointer;
   transition: var(--transition-3d);
   position: relative;
-  min-height: 88px;
+  min-height: 128px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1151,58 +1151,66 @@ body {
   border-radius: 8px;
 }
 
-/* Table Action Buttons - Stacked vertically on the right */
-/* Bill + Change buttons: sit on the bottom border, half inside / half outside */
-.table-bill-btn.new-design {
+/* Table Action Buttons - square buttons in a 2x2 footer strip inside the card */
+.table-card-actions {
   position: absolute;
-  bottom: -14px;
-  left: 50%;
-  transform: translateX(-50%) translateX(-15px);
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--light);
-  background: var(--primary);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  z-index: 6;
+  overflow: hidden;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0 0 calc(var(--radius-sm) - 2px) calc(var(--radius-sm) - 2px);
+}
+
+.table-bill-btn.new-design,
+.table-change-btn,
+.table-combine-btn,
+.table-preview-btn {
+  height: 26px;
+  border: none;
+  border-radius: 0;
   color: white;
-  border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: filter 0.15s;
   opacity: 1;
-  z-index: 6;
-  box-shadow: var(--shadow-3d);
+}
+
+.table-bill-btn.new-design {
+  background: var(--primary);
 }
 
 .table-bill-btn.new-design:hover {
   background: var(--primary-dark);
-  transform: translateX(-50%) translateX(-15px) scale(1.15);
 }
 
 .table-change-btn {
-  position: absolute;
-  bottom: -14px;
-  left: 50%;
-  transform: translateX(-50%) translateX(15px);
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--light);
   background: var(--info);
-  color: white;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  opacity: 1;
-  z-index: 6;
-  box-shadow: var(--shadow-3d);
 }
 
 .table-change-btn:hover {
   background: #1976d2;
-  transform: translateX(-50%) translateX(15px) scale(1.15);
+}
+
+.table-combine-btn {
+  background: var(--warning);
+}
+
+.table-combine-btn:hover {
+  background: #d18a0e;
+}
+
+.table-preview-btn {
+  background: var(--secondary);
+}
+
+.table-preview-btn:hover {
+  background: var(--darker);
 }
 
 .table-delete-btn {

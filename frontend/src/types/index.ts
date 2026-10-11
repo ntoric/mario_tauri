@@ -121,7 +121,7 @@ export interface OrderItem {
   notes?: string;
 }
 
-export type OrderStatus = 'active' | 'completed' | 'cancelled';
+export type OrderStatus = 'active' | 'completed' | 'cancelled' | 'merged';
 export type OrderType = 'dine_in' | 'parcel';
 
 export interface Order {
