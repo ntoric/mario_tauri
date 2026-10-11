@@ -48,6 +48,7 @@ Rules:
 - If the menu has no explicit categories, put all items under a single category named "Uncategorized".
 - Prices must be numbers (e.g. 120, 99.5), never strings. Strip currency symbols.
 - Group items under the category they belong to. Do not duplicate items.
+- If item name has serial numbers or indices (e.g. "1. Item", "A. Item"), remove them and keep only the item name.
 - Preserve original spelling and casing of names.
 - Do not invent data that is not in the menu.`
 
