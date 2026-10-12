@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/table.dart';
@@ -18,6 +19,12 @@ class ApiService {
   String _baseUrl = 'https://mario-v2-backend.ntoric.com/api';
   String? _token;
 
+  // Session tokens are Bearer credentials, so they live in the platform
+  // keystore (Keychain on iOS, Keystore on Android) rather than plain
+  // SharedPreferences.
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _tokenKey = 'auth_token';
+
   // A single long-lived client keeps TCP/TLS connections alive across
   // requests instead of paying a fresh handshake on every call.
   final http.Client _client = http.Client();
@@ -29,15 +36,16 @@ class ApiService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    // The session token is intentionally NOT persisted: sessions live
-    // server-side in Redis and the app must log in on every cold start.
     // final savedUrl = prefs.getString('api_url');
     // if (savedUrl != null) {
     //   _baseUrl = savedUrl;
     // }
     await prefs.setString('api_url', _baseUrl);
-    // Remove any token persisted by older builds.
+    // Remove any token persisted in SharedPreferences by older builds.
     await prefs.remove('auth_token');
+    // Restore the session token so a cold start stays logged in; the
+    // token is validated against the server by AuthProvider.initialize().
+    _token = await _secureStorage.read(key: _tokenKey);
   }
 
   Future<void> saveBaseUrl(String url) async {
@@ -78,14 +86,15 @@ class ApiService {
   }
 
   Future<void> setToken(String token) async {
-    // In-memory only — never written to persistent storage.
     _token = token;
+    await _secureStorage.write(key: _tokenKey, value: token);
   }
 
   String? get token => _token;
 
   Future<void> clearToken() async {
     _token = null;
+    await _secureStorage.delete(key: _tokenKey);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
   }

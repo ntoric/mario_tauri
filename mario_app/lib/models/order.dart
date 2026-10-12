@@ -8,11 +8,14 @@ class Order {
   final String? tableName;
   final List<OrderItem> items;
   final String status;
+  final String orderType;
   final double totalAmount;
   final double taxAmount;
   final double discountAmount;
   final String? paymentMethod;
   final String? paymentStatus;
+  final String? customerName;
+  final String? customerMobile;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String createdBy;
@@ -26,11 +29,14 @@ class Order {
     this.tableName,
     required this.items,
     required this.status,
+    this.orderType = 'dine_in',
     required this.totalAmount,
     required this.taxAmount,
     required this.discountAmount,
     this.paymentMethod,
     this.paymentStatus,
+    this.customerName,
+    this.customerMobile,
     required this.createdAt,
     required this.updatedAt,
     required this.createdBy,
@@ -93,6 +99,8 @@ class Order {
                 .toList() ??
             [],
         status: json['status']?.toString() ?? 'active',
+        orderType:
+            (json['orderType'] ?? json['order_type'] ?? 'dine_in').toString(),
         totalAmount:
             _parseDouble(json['totalAmount'] ?? json['total_amount']),
         taxAmount:
@@ -103,6 +111,10 @@ class Order {
             json['paymentMethod'] ?? json['payment_method'],
         paymentStatus:
             json['paymentStatus'] ?? json['payment_status'],
+        customerName:
+            json['customerName'] ?? json['customer_name'],
+        customerMobile:
+            json['customerMobile'] ?? json['customer_mobile'],
         createdAt:
             _parseDateTime(json['createdAt'] ?? json['created_at']),
         updatedAt:
@@ -125,11 +137,14 @@ class Order {
       if (tableName != null) 'tableName': tableName,
       'items': items.map((i) => i.toJson()).toList(),
       'status': status,
+      'orderType': orderType,
       'totalAmount': totalAmount,
       'taxAmount': taxAmount,
       'discountAmount': discountAmount,
       'paymentMethod': paymentMethod,
       'paymentStatus': paymentStatus,
+      'customerName': customerName,
+      'customerMobile': customerMobile,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'createdBy': createdBy,
@@ -141,6 +156,21 @@ class Order {
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
   bool get isMerged => status == 'merged';
+
+  // Parcel/takeaway orders have no table (tableNumber 0).
+  bool get isParcelOrder => orderType == 'parcel' || tableNumber == 0;
+
+  String get orderTypeLabel {
+    switch (orderType) {
+      case 'parcel':
+        return 'Parcel';
+      case 'delivery':
+      case 'takeaway':
+        return 'Takeaway';
+      default:
+        return tableNumber == 0 ? 'Parcel' : 'Dine In';
+    }
+  }
 
   // Display label: alphanumeric table name when set, else "T<tableNumber>".
   String get tableLabel =>

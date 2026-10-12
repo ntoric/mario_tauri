@@ -220,6 +220,20 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 			updates["table_number"] = val
 		}
 	}
+	if val, exists := raw["customerName"]; exists {
+		if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
+			updates["customer_name"] = strings.TrimSpace(s)
+		} else {
+			updates["customer_name"] = nil
+		}
+	}
+	if val, exists := raw["customerMobile"]; exists {
+		if s, ok := val.(string); ok && strings.TrimSpace(s) != "" {
+			updates["customer_mobile"] = strings.TrimSpace(s)
+		} else {
+			updates["customer_mobile"] = nil
+		}
+	}
 
 	// Extract items if present
 	var items []models.OrderItem

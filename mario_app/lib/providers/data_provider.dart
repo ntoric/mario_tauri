@@ -245,19 +245,23 @@ class DataProvider extends ChangeNotifier {
 
   Future<Order?> updateOrder({
     required String orderId,
-    required List<Map<String, dynamic>> items,
-    required double totalAmount,
-    required double taxAmount,
+    List<Map<String, dynamic>>? items,
+    double? totalAmount,
+    double? taxAmount,
     String? tableId,
     int? tableNumber,
+    String? customerName,
+    String? customerMobile,
   }) async {
     try {
       final orderData = {
-        'items': items,
-        'totalAmount': totalAmount,
-        'taxAmount': taxAmount,
+        if (items != null) 'items': items,
+        if (totalAmount != null) 'totalAmount': totalAmount,
+        if (taxAmount != null) 'taxAmount': taxAmount,
         if (tableId != null) 'tableId': tableId,
         if (tableNumber != null) 'tableNumber': tableNumber,
+        if (customerName != null) 'customerName': customerName,
+        if (customerMobile != null) 'customerMobile': customerMobile,
       };
 
       final order = await _backend.api.updateOrder(orderId, orderData);
@@ -291,11 +295,14 @@ class DataProvider extends ChangeNotifier {
           tableName: _orders[index].tableName,
           items: _orders[index].items,
           status: 'completed',
+          orderType: _orders[index].orderType,
           totalAmount: _orders[index].totalAmount,
           taxAmount: _orders[index].taxAmount,
           discountAmount: _orders[index].discountAmount,
           paymentMethod: paymentMethod,
           paymentStatus: 'paid',
+          customerName: _orders[index].customerName,
+          customerMobile: _orders[index].customerMobile,
           createdAt: _orders[index].createdAt,
           updatedAt: DateTime.now(),
           createdBy: _orders[index].createdBy,
@@ -490,7 +497,9 @@ class DataProvider extends ChangeNotifier {
         a.paymentMethod != b.paymentMethod ||
         a.paymentStatus != b.paymentStatus ||
         a.createdBy != b.createdBy ||
-        a.items.length != b.items.length) {
+        a.items.length != b.items.length ||
+        a.customerName != b.customerName ||
+        a.customerMobile != b.customerMobile) {
       return false;
     }
 

@@ -1,4 +1,3 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 export '../services/api_service.dart';
@@ -62,15 +61,7 @@ class BackendService {
     if (_currentToken == null) return false;
     try {
       final user = await _api.getMe();
-      _currentUser = {
-        'id': user.id,
-        'username': user.username,
-        'name': user.name,
-        'email': user.email,
-        'role': user.role,
-        'storeId': user.storeId,
-        'storeName': user.storeName,
-      };
+      _currentUser = user.toJson();
       return true;
     } catch (e) {
       return false;

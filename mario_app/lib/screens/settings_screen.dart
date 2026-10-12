@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
 import '../providers/theme_provider.dart';
@@ -24,13 +26,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isChangingPassword = false;
+  bool _passwordExpanded = false;
+  String _whatsappLink = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DataProvider>().loadAppUpdate(platform: 'mobile');
+      _loadSupportConfig();
     });
+  }
+
+  Future<void> _loadSupportConfig() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final response = await http.get(
+        Uri.parse('${auth.backend.api.baseUrl}/support-config'),
+      );
+      if (response.statusCode == 200 && mounted) {
+        final cfg = json.decode(response.body);
+        setState(() => _whatsappLink = cfg['whatsappLink'] ?? '');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _launchWhatsApp() async {
+    if (_whatsappLink.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('WhatsApp support is not configured'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+    String url = _whatsappLink;
+    if (url.startsWith('https://wa.me/')) {
+      url = 'whatsapp://send?phone=${url.replaceFirst('https://wa.me/', '')}';
+    }
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      final fallback = Uri.parse(_whatsappLink);
+      if (await canLaunchUrl(fallback)) {
+        await launchUrl(fallback, mode: LaunchMode.externalApplication);
+      }
+    }
   }
 
   @override
@@ -169,86 +212,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         children: [
+          // Profile card
           Container(
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [AppColors.cardDark, AppColors.cardDarkLight],
+                colors: [Color(0xFFFFDDB8), Color(0xFFFFF3E8)],
               ),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
+            clipBehavior: Clip.hardEdge,
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -40,
+                  top: -50,
+                  child: Container(
+                    width: 170,
+                    height: 170,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 36,
-                      color: Colors.white,
+                      color: Colors.white.withOpacity(0.28),
+                      shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    user?.name ?? 'Unknown',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user?.username ?? '',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
+                ),
+                Positioned(
+                  right: 30,
+                  bottom: -60,
+                  child: Container(
+                    width: 150,
+                    height: 150,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      (user?.role ?? 'unknown')
-                          .toUpperCase()
-                          .replaceAll('_', ' '),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryLight,
-                      ),
+                      color: AppColors.primary.withOpacity(0.10),
+                      shape: BoxShape.circle,
                     ),
                   ),
-                  if (auth.currentStore != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      auth.currentStore!.displayName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.5),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 66,
+                        height: 66,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [AppColors.primary, AppColors.primaryDark],
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          size: 34,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user?.name ?? 'Unknown',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              user?.username ?? '',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.gray600,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.75),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.workspace_premium,
+                                    size: 12,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    (user?.role ?? 'unknown')
+                                        .toUpperCase()
+                                        .replaceAll('_', ' '),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primaryDark,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (auth.currentStore != null) ...[
+                              const SizedBox(height: 7),
+                              Text(
+                                auth.currentStore!.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.gray600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           if (data.appUpdate != null &&
               data.appUpdate!.enabled &&
               VersionHelper.isNewerVersion(
@@ -273,7 +369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: AppColors.primary.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.system_update,
                             color: AppColors.primary,
                             size: 22,
@@ -364,11 +460,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-          _buildSectionTitle('Change Password'),
+          _buildSectionTitle('Account'),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.dark.withOpacity(0.04),
@@ -377,96 +473,175 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _currentPasswordController,
-                    obscureText: _obscureCurrentPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Current Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureCurrentPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+            child: Column(
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => setState(
+                      () => _passwordExpanded = !_passwordExpanded),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        _iconBox(
+                          Icons.lock_outline,
+                          AppColors.primary,
+                          AppColors.primarySoft.withOpacity(0.7),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureCurrentPassword = !_obscureCurrentPassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: _obscureNewPassword,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureNewPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Change password',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dark,
+                                ),
+                              ),
+                              Text(
+                                'Update your account password',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.gray500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureNewPassword = !_obscureNewPassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _confirmPasswordController,
-                    obscureText: _obscureConfirmPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirmPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                        AnimatedRotation(
+                          turns: _passwordExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: AppColors.gray500,
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
-                      ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isChangingPassword ? null : _changePassword,
-                      child: _isChangingPassword
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Change Password'),
+                ),
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 250),
+                  crossFadeState: _passwordExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      children: [
+                        Divider(height: 1, color: AppColors.gray200),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _currentPasswordController,
+                          obscureText: _obscureCurrentPassword,
+                          decoration: InputDecoration(
+                            labelText: 'Current Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureCurrentPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureCurrentPassword =
+                                      !_obscureCurrentPassword;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _newPasswordController,
+                          obscureText: _obscureNewPassword,
+                          decoration: InputDecoration(
+                            labelText: 'New Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureNewPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureNewPassword = !_obscureNewPassword;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscureConfirmPassword,
+                          decoration: InputDecoration(
+                            labelText: 'Confirm New Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed:
+                                _isChangingPassword ? null : _changePassword,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isChangingPassword
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white),
+                                  )
+                                : const Text(
+                                    'Change Password',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
           _buildSectionTitle('Appearance'),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.dark.withOpacity(0.04),
@@ -476,47 +651,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Color Theme',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: AppColors.dark,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Saved for ${user?.name ?? 'this user'} on this device',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.gray500,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ...themeProvider.availableThemes.map((option) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildThemeOptionTile(
-                        option: option,
-                        isSelected: themeProvider.currentThemeId == option.id,
-                        onTap: () => themeProvider.setTheme(option.id),
+                  Row(
+                    children: [
+                      _iconBox(
+                        Icons.palette_outlined,
+                        AppColors.primary,
+                        AppColors.primarySoft.withOpacity(0.7),
                       ),
-                    );
-                  }),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Color Theme',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              'Choose the app theme. Saved for ${user?.name ?? 'this user'} on this device.',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const spacing = 8.0;
+                      final cardWidth =
+                          (constraints.maxWidth - spacing * 2) / 3;
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: themeProvider.availableThemes.map((option) {
+                          return SizedBox(
+                            width: cardWidth,
+                            child: _buildThemeCard(
+                              option: option,
+                              isSelected:
+                                  themeProvider.currentThemeId == option.id,
+                              onTap: () => themeProvider.setTheme(option.id),
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          _buildSectionTitle('Data'),
+          const SizedBox(height: 22),
+          _buildSectionTitle('Support'),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.dark.withOpacity(0.04),
@@ -525,44 +728,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            child: Column(
-              children: [
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  _iconBox(
+                    Icons.chat_bubble_rounded,
+                    Colors.white,
+                    const Color(0xFF25D366),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'WhatsApp Support',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.dark,
+                          ),
+                        ),
+                        Text(
+                          'Need help? Chat with our support team',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.gray500,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.refresh,
-                        color: AppColors.primary, size: 22),
                   ),
-                  title: const Text('Refresh Data',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  subtitle: Text(
-                    '${data.tables.length} tables, ${data.items.length} items, ${data.orders.length} orders',
-                    style:
-                        const TextStyle(fontSize: 13, color: AppColors.gray500),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _launchWhatsApp,
+                    icon: const Icon(Icons.chat_bubble_outline, size: 15),
+                    label: const Text(
+                      'Chat',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
                   ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: AppColors.gray400),
-                  onTap: _refreshData,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
           _buildSectionTitle('App'),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.light,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.dark.withOpacity(0.04),
@@ -573,28 +802,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Column(
               children: [
-                if (user?.isSuperAdmin ?? false)
-                  ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.system_update_alt,
-                          color: AppColors.primary, size: 22),
-                    ),
-                    title: const Text('App Update Management',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15)),
-                    subtitle: const Text('Manage app update notifications',
-                        style:
-                            TextStyle(fontSize: 13, color: AppColors.gray500)),
-                    trailing: const Icon(Icons.chevron_right,
-                        color: AppColors.gray400),
+                if (user?.isSuperAdmin ?? false) ...[
+                  _settingsRow(
+                    icon: Icons.system_update_alt,
+                    iconColor: AppColors.primary,
+                    iconBg: AppColors.primarySoft.withOpacity(0.7),
+                    title: 'App Update Management',
+                    subtitle: 'Manage app update notifications',
                     onTap: () {
                       Navigator.push(
                         context,
@@ -603,48 +817,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-                if (user?.isSuperAdmin ?? false)
-                  const Divider(height: 1, indent: 20, endIndent: 20),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.info.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.info_outline,
-                        color: AppColors.info, size: 22),
-                  ),
-                  title: const Text('About',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  subtitle: const Text('Mario App v1.0.0',
-                      style: TextStyle(fontSize: 13, color: AppColors.gray500)),
+                  _rowDivider(),
+                ],
+                _settingsRow(
+                  icon: Icons.refresh,
+                  iconColor: AppColors.primary,
+                  iconBg: AppColors.primarySoft.withOpacity(0.7),
+                  title: 'Refresh Data',
+                  subtitle:
+                      '${data.tables.length} tables, ${data.items.length} items, ${data.orders.length} orders',
+                  onTap: _refreshData,
                 ),
-                const Divider(height: 1, indent: 20, endIndent: 20),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.logout,
-                        color: AppColors.danger, size: 22),
-                  ),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(
-                        color: AppColors.danger,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15),
-                  ),
+                _rowDivider(),
+                _settingsRow(
+                  icon: Icons.info_outline,
+                  iconColor: AppColors.info,
+                  iconBg: AppColors.info.withOpacity(0.12),
+                  title: 'About',
+                  subtitle:
+                      'Mario App v${AppConstants.appVersion}',
+                  onTap: null,
+                ),
+                _rowDivider(),
+                _settingsRow(
+                  icon: Icons.logout,
+                  iconColor: AppColors.danger,
+                  iconBg: AppColors.danger.withOpacity(0.10),
+                  title: 'Logout',
+                  titleColor: AppColors.danger,
                   onTap: _logout,
                 ),
               ],
@@ -657,87 +857,151 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12),
+      padding: const EdgeInsets.only(left: 4, bottom: 10),
       child: Text(
-        title.toUpperCase(),
+        title,
         style: const TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.gray500,
-          letterSpacing: 0.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.gray600,
         ),
       ),
     );
   }
 
-  Widget _buildThemeOptionTile({
+  Widget _iconBox(IconData icon, Color iconColor, Color bgColor) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: iconColor, size: 20),
+    );
+  }
+
+  Widget _rowDivider() {
+    return Divider(height: 1, indent: 66, endIndent: 16,
+        color: AppColors.gray200);
+  }
+
+  Widget _settingsRow({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    String? subtitle,
+    Color? titleColor,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            _iconBox(icon, iconColor, iconBg),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: titleColor ?? AppColors.dark,
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                color: AppColors.gray400, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard({
     required AppThemeOption option,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? option.primarySoft.withOpacity(0.55)
-                : AppColors.gray100,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isSelected
-                  ? option.primary.withOpacity(0.45)
-                  : Colors.white.withOpacity(0.65),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? option.primarySoft.withOpacity(0.4)
+              : AppColors.gray100,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? option.primary : Colors.transparent,
+            width: 1.6,
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildThemeSwatch(option.primary),
+                const SizedBox(width: 5),
+                _buildThemeSwatch(option.primaryLight),
+                const SizedBox(width: 5),
+                _buildThemeSwatch(option.primarySoft),
+              ],
             ),
-          ),
-          child: Row(
-            children: [
-              Row(
-                children: [
-                  _buildThemeSwatch(option.primary),
-                  const SizedBox(width: 6),
-                  _buildThemeSwatch(option.primaryLight),
-                  const SizedBox(width: 6),
-                  _buildThemeSwatch(option.backgroundSecondary),
-                ],
+            const SizedBox(height: 8),
+            Text(
+              option.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.dark,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      option.label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w600,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      option.description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.gray500,
-                      ),
-                    ),
-                  ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              option.description,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 9,
+                height: 1.2,
+                color: AppColors.gray500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? option.primary : AppColors.gray400,
+                  width: isSelected ? 5 : 1.5,
                 ),
+                color: Colors.white,
               ),
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: isSelected ? option.primary : AppColors.gray400,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -745,8 +1009,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildThemeSwatch(Color color) {
     return Container(
-      width: 18,
-      height: 18,
+      width: 16,
+      height: 16,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,

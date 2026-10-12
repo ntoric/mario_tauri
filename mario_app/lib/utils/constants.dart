@@ -9,27 +9,35 @@ class AppConstants {
 }
 
 class AppColors {
-  static const Color primary = Color(0xFFFF8A1F);
-  static const Color primaryDark = Color(0xFFE56F00);
-  static const Color primaryLight = Color(0xFFFFB86B);
-  static const Color primarySoft = Color(0xFFFFE6CC);
+  // Theme-driven colors delegate to the active AppThemeOption, applied by
+  // ThemeProvider whenever the user picks a theme in Settings.
+  static AppThemeOption _theme = AppThemeOptions.defaultOption;
+
+  static AppThemeOption get theme => _theme;
+  static void apply(AppThemeOption option) => _theme = option;
+
+  static Color get primary => _theme.primary;
+  static Color get primaryDark => _theme.primaryDark;
+  static Color get primaryLight => _theme.primaryLight;
+  static Color get primarySoft => _theme.primarySoft;
+  static Color get background => _theme.background;
+  static Color get backgroundSecondary => _theme.backgroundSecondary;
+  static Color get gray100 => _theme.cardColor;
+  static Color get gray200 => _theme.backgroundSecondary;
+  static Color get clayPink => _theme.primarySoft;
+  static Color get clayBlue => _theme.primarySoft;
+  static Color get clayPeach => _theme.accentTint;
+
   static const Color secondary = Color(0xFF1E1A17);
   static const Color dark = Color(0xFF151515);
   static const Color darker = Color(0xFF090909);
   static const Color light = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFF8F2EB);
-  static const Color backgroundSecondary = Color(0xFFF1E7DD);
-  static const Color gray100 = Color(0xFFFFFCF8);
-  static const Color gray200 = Color(0xFFF5ECE2);
   static const Color gray300 = Color(0xFFE7D8C8);
   static const Color gray400 = Color(0xFFD0C0B0);
   static const Color gray500 = Color(0xFFA89584);
   static const Color gray600 = Color(0xFF7A6859);
   static const Color gray700 = Color(0xFF4F433A);
   static const Color gray800 = Color(0xFF2B2622);
-  static const Color clayPink = Color(0xFFFFE1D1);
-  static const Color clayBlue = Color(0xFFFFF0E1);
-  static const Color clayPeach = Color(0xFFFFD4AD);
   static const Color success = Color(0xFF00C896);
   static const Color warning = Color(0xFFFFB547);
   static const Color danger = Color(0xFFFF6B6B);
@@ -245,11 +253,26 @@ class AppThemeOptions {
     accentTint: Color(0xFFE5D8FF),
   );
 
+  static const ruby = AppThemeOption(
+    id: 'ruby',
+    label: 'Ruby Red',
+    description: 'Bold ruby and blush',
+    primary: Color(0xFFE0245E),
+    primaryDark: Color(0xFFB31544),
+    primaryLight: Color(0xFFF5729B),
+    primarySoft: Color(0xFFFBE0E8),
+    background: Color(0xFFFBF1F3),
+    backgroundSecondary: Color(0xFFF5E3E7),
+    cardColor: Color(0xFFFFFDFE),
+    accentTint: Color(0xFFF6CFD9),
+  );
+
   static const List<AppThemeOption> all = [
     sunset,
     ocean,
     forest,
     plum,
+    ruby,
   ];
 
   static const AppThemeOption defaultOption = sunset;
@@ -409,9 +432,9 @@ class AppTheme {
           color: AppColors.gray600,
         ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.transparent,
-        selectedItemColor: AppColors.primary,
+        selectedItemColor: option.primary,
         unselectedItemColor: AppColors.gray500,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -421,8 +444,8 @@ class AppTheme {
         foregroundColor: AppColors.light,
         elevation: 0,
       ),
-      dividerTheme: const DividerThemeData(
-        color: AppColors.gray200,
+      dividerTheme: DividerThemeData(
+        color: option.backgroundSecondary,
         thickness: 1,
         space: 1,
       ),

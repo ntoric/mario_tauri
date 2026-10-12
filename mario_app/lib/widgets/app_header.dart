@@ -221,7 +221,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     final allActions = <Widget>[
       if (stores.isNotEmpty)
         PopupMenuButton<Store>(
-          icon: const _HeaderIconShell(
+          icon: _HeaderIconShell(
             icon: Icons.storefront,
             color: AppColors.primary,
           ),
@@ -347,13 +347,13 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
 class _HeaderIconShell extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final Color accentColor;
+  final Color? accentColor;
   final double size;
 
   const _HeaderIconShell({
     required this.icon,
     required this.color,
-    this.accentColor = AppColors.gray100,
+    this.accentColor,
     this.size = 48,
   });
 
@@ -369,7 +369,7 @@ class _HeaderIconShell extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             Colors.white,
-            accentColor,
+            accentColor ?? AppColors.gray100,
           ],
         ),
       ),

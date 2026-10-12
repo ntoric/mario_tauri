@@ -10,7 +10,6 @@ import '../models/order.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 import '../widgets/order_timer.dart';
-import '../widgets/tilt_3d_card.dart';
 import '../main.dart';
 import 'order_screen.dart';
 import 'bill_screen.dart';
@@ -27,6 +26,8 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   StreamSubscription? _tableStatusSubscription;
   Timer? _wsReconnectTimer;
   bool _isSocketActive = false;
+
+  _TableStatusFilter _statusFilter = _TableStatusFilter.all;
 
   @override
   void initState() {
@@ -230,7 +231,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         showDialog(
                           context: navigator.context,
                           barrierDismissible: false,
-                          builder: (loadingContext) => const Center(
+                          builder: (loadingContext) => Center(
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
@@ -338,6 +339,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
+  // ignore: unused_element — kept for re-enabling Combine Bill
   void _showCombineTableDialog(
       Order order, List<TableModel> tables, DataProvider data) {
     final parentContext = context;
@@ -416,7 +418,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         showDialog(
                           context: navigator.context,
                           barrierDismissible: false,
-                          builder: (loadingContext) => const Center(
+                          builder: (loadingContext) => Center(
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
@@ -526,308 +528,850 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   void _showTableOptions(TableModel table, Order? order, DataProvider data) {
     final parentContext = context;
     final auth = parentContext.read<AuthProvider>();
+    final isOccupied = order != null;
 
     showModalBottomSheet(
       context: parentContext,
       backgroundColor: Colors.transparent,
-      elevation: 0,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-          decoration:
-              ClayStyles.surface(radiusValue: 32, boxShadow: const []),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Drag handle
               Container(
                 width: 42,
-                height: 6,
+                height: 5,
                 decoration: BoxDecoration(
-                  color: AppColors.gray400.withOpacity(0.7),
+                  color: AppColors.gray300,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
-              const SizedBox(height: 20),
-              Text(
-                table.label,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.dark,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: order != null
-                    ? ClayStyles.accent(
-                        accent: AppColors.primary,
-                        radiusValue: 20,
-                        opacity: 0.12)
-                    : ClayStyles.accent(
-                        accent: AppColors.success,
-                        radiusValue: 20,
-                        opacity: 0.10),
-                child: Text(
-                  order != null ? 'Occupied' : 'Available',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color:
-                        order != null ? AppColors.primary : AppColors.success,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              if (order == null)
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  tileColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24)),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: ClayStyles.surface(
-                      radiusValue: 14,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white,
-                          AppColors.primarySoft,
-                        ],
-                      ),
-                    ),
-                    child: const Icon(Icons.add_circle,
-                        color: AppColors.primary, size: 22),
-                  ),
-                  title: const Text('Create Order',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (_) => OrderScreen(
-                          table: table,
-                          isNewOrder: true,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              if (order != null) ...[
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
+              const SizedBox(height: 14),
+
+              // Header: table tile + info + amount/duration card
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 62,
+                    height: 62,
                     decoration: BoxDecoration(
-                      color: AppColors.info.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: AppColors.primarySoft.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child:
-                        const Icon(Icons.edit, color: AppColors.info, size: 22),
+                    child: Icon(
+                      Icons.table_restaurant,
+                      size: 32,
+                      color: isOccupied
+                          ? AppColors.primary
+                          : AppColors.gray500,
+                    ),
                   ),
-                  title: const Text('Edit Order',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (_) => OrderScreen(
-                          table: table,
-                          order: order,
-                          isNewOrder: false,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          table.label,
+                          style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.dark,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                if (auth.currentStore?.remoteBillingEnabled == true)
-                  ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                    leading: Container(
-                      width: 40,
-                      height: 40,
+                        Text(
+                          '${table.seats} seats',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.gray500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isOccupied
+                                ? AppColors.primary.withOpacity(0.12)
+                                : AppColors.success.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isOccupied
+                                    ? Icons.people
+                                    : Icons.check_circle_outline,
+                                size: 12,
+                                color: isOccupied
+                                    ? AppColors.primary
+                                    : AppColors.success,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isOccupied ? 'Occupied' : 'Available',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isOccupied
+                                      ? AppColors.primary
+                                      : AppColors.success,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (order != null)
+                    Container(
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.gray100,
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(Icons.receipt,
-                          color: AppColors.success, size: 22),
-                    ),
-                    title: const Text('Generate Bill',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 16)),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      Navigator.push(
-                        parentContext,
-                        MaterialPageRoute(
-                          builder: (_) => BillScreen(order: order),
-                        ),
-                      );
-                    },
-                  ),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.swap_horiz,
-                        color: AppColors.warning, size: 22),
-                  ),
-                  title: const Text('Move to Another Table',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showChangeTableDialog(order, data.tables, data);
-                  },
-                ),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.merge_type,
-                        color: AppColors.success, size: 22),
-                  ),
-                  title: const Text('Combine Bill',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showCombineTableDialog(order, data.tables, data);
-                  },
-                ),
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.cancel,
-                        color: AppColors.danger, size: 22),
-                  ),
-                  title: const Text('Cancel Order',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: AppColors.danger)),
-                  onTap: () async {
-                    final navigator = Navigator.of(parentContext);
-                    final scaffoldMessenger =
-                        ScaffoldMessenger.of(parentContext);
-
-                    Navigator.pop(sheetContext); // Dismiss bottom options sheet
-
-                    final confirm = await showDialog<bool>(
-                      context: navigator.context,
-                      builder: (dialogContext) => AlertDialog(
-                        title: const Text('Cancel Order?'),
-                        content: const Text(
-                            'Are you sure you want to cancel this order?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.pop(dialogContext, false),
-                            child: const Text('No'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.credit_card,
+                                  size: 13, color: AppColors.gray500),
+                              SizedBox(width: 5),
+                              Text(
+                                'Current Amount',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.gray500,
+                                ),
+                              ),
+                            ],
                           ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(dialogContext, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.danger,
+                          const SizedBox(height: 3),
+                          Text(
+                            '₹${order.totalAmount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
                             ),
-                            child: const Text('Yes, Cancel'),
+                          ),
+                          const SizedBox(height: 6),
+                          OrderTimer(
+                            order: order,
+                            showIcon: true,
+                            iconSize: 12,
+                            textStyle: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          const Text(
+                            'Order duration',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: AppColors.gray500,
+                            ),
                           ),
                         ],
                       ),
+                    ),
+                ],
+              ),
+
+              if (!isOccupied) ...[
+                const SizedBox(height: 16),
+                _sheetRowCard(
+                  icon: Icons.add_circle,
+                  iconColor: AppColors.primary,
+                  iconBg: AppColors.primarySoft.withOpacity(0.7),
+                  title: 'Create Order',
+                  subtitle: 'Start a new dine-in order',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.push(
+                      parentContext,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            OrderScreen(table: table, isNewOrder: true),
+                      ),
                     );
-
-                    if (confirm == true) {
-                      // Show progress indicator overlay using captured navigator context
-                      showDialog(
-                        context: navigator.context,
-                        barrierDismissible: false,
-                        builder: (loadingContext) => const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      );
-
-                      try {
-                        final success = await data.cancelOrder(order.id);
-
-                        // Dismiss progress indicator using captured navigator
-                        navigator.pop();
-
-                        if (success) {
-                          scaffoldMessenger.showSnackBar(
-                            const SnackBar(
-                              content:
-                                  Text('Order cancelled and table released'),
-                              backgroundColor: AppColors.danger,
-                            ),
-                          );
-                        } else {
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text(data.error ?? 'Failed to cancel order.'),
-                              backgroundColor: AppColors.danger,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        // Dismiss progress indicator using captured navigator
-                        navigator.pop();
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text('Error: ${e.toString()}'),
-                            backgroundColor: AppColors.danger,
-                          ),
-                        );
-                      }
-                    }
                   },
                 ),
               ],
-              const SizedBox(height: 8),
+
+              if (isOccupied) ...[
+                const SizedBox(height: 14),
+
+                // Order Summary row
+                _sheetRowCard(
+                  icon: Icons.description_outlined,
+                  iconColor: AppColors.info,
+                  iconBg: AppColors.info.withOpacity(0.12),
+                  title: 'Order Summary',
+                  subtitle: 'View items, quantities, discounts and total',
+                  onTap: () => _showOrderSummarySheet(order),
+                ),
+                const SizedBox(height: 10),
+
+                // 3 action cards
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _actionCard(
+                          bg: const Color(0xFFEAF2FF),
+                          accent: AppColors.info,
+                          icon: Icons.edit,
+                          title: 'Edit Order',
+                          desc: 'Add, remove or modify items',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            Navigator.push(
+                              parentContext,
+                              MaterialPageRoute(
+                                builder: (_) => OrderScreen(
+                                  table: table,
+                                  order: order,
+                                  isNewOrder: false,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _actionCard(
+                          bg: const Color(0xFFFFF4DB),
+                          accent: AppColors.warning,
+                          icon: Icons.swap_horiz,
+                          title: 'Move to Another Table',
+                          desc: 'Transfer this order to a different table',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            _showChangeTableDialog(
+                                order, data.tables, data);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _actionCard(
+                          bg: const Color(0xFFFFEAEA),
+                          accent: AppColors.danger,
+                          icon: Icons.delete_outline,
+                          title: 'Cancel Order',
+                          desc: 'Cancel this order permanently',
+                          titleColor: AppColors.danger,
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            _cancelOrderFlow(order, data);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Quick Actions
+                Row(
+                  children: [
+                    const Text(
+                      'Quick Actions',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(sheetContext),
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: AppColors.gray200,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          size: 14,
+                          color: AppColors.gray600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _quickAction(
+                        icon: Icons.person_add_alt_outlined,
+                        label: 'Add Customer',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _showAddCustomerDialog(order, data);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _quickAction(
+                        icon: Icons.print_outlined,
+                        label: 'Print Bill',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          if (auth.currentStore?.remoteBillingEnabled ==
+                              true) {
+                            Navigator.push(
+                              parentContext,
+                              MaterialPageRoute(
+                                builder: (_) => BillScreen(order: order),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Remote billing is not enabled for this store'),
+                                backgroundColor: AppColors.warning,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _quickAction(
+                        icon: Icons.more_horiz,
+                        label: 'More Options',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _showCombineTableDialog(
+                              order, data.tables, data);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+
+              // Close button
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text(
+                    'Close',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.gray200,
+                    foregroundColor: AppColors.gray700,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _sheetRowCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.gray200),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 19),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 18, color: AppColors.gray500),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionCard({
+    required Color bg,
+    required Color accent,
+    required IconData icon,
+    required String title,
+    required String desc,
+    required VoidCallback onTap,
+    Color? titleColor,
+  }) {
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 16, color: accent),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: titleColor ?? AppColors.dark,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                desc,
+                maxLines: 2,
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  height: 1.25,
+                  color: AppColors.gray600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.chevron_right, size: 13, color: accent),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _quickAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.gray200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: AppColors.dark),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.dark,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 14, color: AppColors.gray500),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOrderSummarySheet(Order order) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.gray300,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Order Summary',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.dark,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: order.items.length,
+                  separatorBuilder: (_, __) =>
+                      Divider(height: 16, color: AppColors.gray200),
+                  itemBuilder: (_, i) {
+                    final oi = order.items[i];
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            oi.item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '× ${oi.quantity}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.gray500,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        SizedBox(
+                          width: 72,
+                          child: Text(
+                            '₹${oi.totalPrice.toStringAsFixed(2)}',
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              Divider(height: 24, color: AppColors.gray200),
+              _summaryLine('Subtotal', order.subtotal),
+              if (order.discountAmount > 0) ...[
+                const SizedBox(height: 6),
+                _summaryLine('Discount', -order.discountAmount),
+              ],
+              const SizedBox(height: 6),
+              _summaryLine('Tax', order.taxAmount),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                  Text(
+                    '₹${order.totalAmount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryLine(String label, double amount) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: AppColors.gray600),
+        ),
+        Text(
+          '₹${amount.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.dark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddCustomerDialog(Order order, DataProvider data) {
+    final nameController =
+        TextEditingController(text: order.customerName ?? '');
+    final mobileController =
+        TextEditingController(text: order.customerMobile ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Customer Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Customer Name',
+                hintText: 'e.g. Ravi Kumar',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: mobileController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Mobile Number',
+                hintText: 'e.g. 9876543210',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final navigator = Navigator.of(dialogContext);
+              final messenger = ScaffoldMessenger.of(context);
+              navigator.pop();
+
+              final updated = await data.updateOrder(
+                orderId: order.id,
+                customerName: nameController.text.trim(),
+                customerMobile: mobileController.text.trim(),
+              );
+
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    updated != null
+                        ? 'Customer details saved'
+                        : (data.error ?? 'Failed to save customer'),
+                  ),
+                  backgroundColor:
+                      updated != null ? AppColors.success : AppColors.danger,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _cancelOrderFlow(Order order, DataProvider data) async {
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    final confirm = await showDialog<bool>(
+      context: navigator.context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel Order?'),
+        content:
+            const Text('Are you sure you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      showDialog(
+        context: navigator.context,
+        barrierDismissible: false,
+        builder: (loadingContext) => Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+          ),
+        ),
+      );
+
+      try {
+        final success = await data.cancelOrder(order.id);
+        navigator.pop();
+
+        if (success) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Order cancelled and table released'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        } else {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content:
+                  Text(data.error ?? 'Failed to cancel order.'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      } catch (e) {
+        navigator.pop();
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  _TableStatusFilter _statusFor(TableModel table, DataProvider data) {
+    if (data.isTableOccupied(table.id)) return _TableStatusFilter.occupied;
+    return table.isActive
+        ? _TableStatusFilter.available
+        : _TableStatusFilter.reserved;
+  }
+
+  List<TableModel> _filteredTables(
+      List<TableModel> tables, DataProvider data) {
+    if (_statusFilter == _TableStatusFilter.all) return tables;
+    return tables
+        .where((table) => _statusFor(table, data) == _statusFilter)
+        .toList();
   }
 
   @override
@@ -836,7 +1380,15 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     final data = context.watch<DataProvider>();
     final tables = data.tables;
 
-    final isTablet = ResponsiveHelper.isTablet(context);
+    final occupiedCount = tables
+        .where((t) => _statusFor(t, data) == _TableStatusFilter.occupied)
+        .length;
+    final reservedCount = tables
+        .where((t) => _statusFor(t, data) == _TableStatusFilter.reserved)
+        .length;
+    final availableCount =
+        tables.length - occupiedCount - reservedCount;
+    final filteredTables = _filteredTables(tables, data);
     final crossAxisCount = ResponsiveHelper.getGridCrossAxisCount(context);
 
     return Scaffold(
@@ -844,135 +1396,365 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
       appBar: const AppHeader(
         title: 'Tables',
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        color: AppColors.primary,
-        child: tables.isEmpty
-            ? SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: _buildFilterPills(
+              total: tables.length,
+              occupied: occupiedCount,
+              available: availableCount,
+              reserved: reservedCount,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refreshData,
+              color: AppColors.primary,
+              child: tables.isEmpty
+                  ? _buildEmptyState()
+                  : filteredTables.isEmpty
+                      ? _buildNoResultsState()
+                      : SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              const spacing = 12.0;
+                              final cardWidth = (constraints.maxWidth -
+                                      spacing * (crossAxisCount - 1)) /
+                                  crossAxisCount;
+                              return Wrap(
+                                spacing: spacing,
+                                runSpacing: spacing,
+                                children: [
+                                  for (final table in filteredTables)
+                                    SizedBox(
+                                      width: cardWidth,
+                                      child: _buildTableCard(table, data),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPills({
+    required int total,
+    required int occupied,
+    required int available,
+    required int reserved,
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _statFilterPill(
+            icon: Icons.grid_view_rounded,
+            label: 'All',
+            count: total,
+            value: _TableStatusFilter.all,
+          ),
+          const SizedBox(width: 8),
+          _statFilterPill(
+            icon: Icons.people_alt_outlined,
+            label: 'Occupied',
+            count: occupied,
+            value: _TableStatusFilter.occupied,
+          ),
+          const SizedBox(width: 8),
+          _statFilterPill(
+            icon: Icons.table_restaurant,
+            label: 'Available',
+            count: available,
+            value: _TableStatusFilter.available,
+          ),
+          const SizedBox(width: 8),
+          _statFilterPill(
+            icon: Icons.schedule,
+            label: 'Reserved',
+            count: reserved,
+            value: _TableStatusFilter.reserved,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statFilterPill({
+    required IconData icon,
+    required String label,
+    required int count,
+    required _TableStatusFilter value,
+  }) {
+    final selected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _statusFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.gray300,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: AppColors.gray500.withOpacity(0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: selected ? Colors.white : AppColors.gray600,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$label ($count)',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.gray700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableCard(TableModel table, DataProvider data) {
+    final order = data.getOrderForTable(table.id);
+    final status = _statusFor(table, data);
+    final isOccupied = status == _TableStatusFilter.occupied;
+    final isReserved = status == _TableStatusFilter.reserved;
+
+    final Color cardBg;
+    final Color badgeColor;
+    final IconData badgeIcon;
+    if (isOccupied) {
+      cardBg = const Color(0xFFFFEEE0);
+      badgeColor = AppColors.primary;
+      badgeIcon = Icons.people;
+    } else if (isReserved) {
+      cardBg = const Color(0xFFEAF2FE);
+      badgeColor = AppColors.info;
+      badgeIcon = Icons.schedule;
+    } else {
+      cardBg = const Color(0xFFE7F7EC);
+      badgeColor = AppColors.success;
+      badgeIcon = Icons.check;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (isReserved) {
+            _showTableOptions(table, order, data);
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OrderScreen(
+                table: table,
+                order: order,
+                isNewOrder: order == null,
+              ),
+            ),
+          );
+        },
+        onLongPress: () => _showTableOptions(table, order, data),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: badgeColor.withOpacity(0.10),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.topRight,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showTableOptions(table, order, data),
+                  child: const Padding(
+                    padding: EdgeInsets.fromLTRB(14, 4, 10, 2),
+                    child: Icon(
+                      Icons.more_vert,
+                      size: 17,
+                      color: AppColors.gray600,
+                    ),
+                  ),
+                ),
+              ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  SizedBox(
+                    width: 58,
+                    height: 58,
+                    child: CustomPaint(
+                      painter: _DiningSetPainter(
+                        tableColor: badgeColor.withOpacity(0.35),
+                        chairColor: badgeColor,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 21,
+                      height: 21,
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: Icon(
+                        badgeIcon,
+                        size: 11,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                table.label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.dark,
+                  height: 1.15,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                '${table.seats} ${table.seats == 1 ? 'seat' : 'seats'}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.gray600,
+                ),
+              ),
+              const SizedBox(height: 9),
+              if (!isOccupied)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isReserved
+                          ? AppColors.info
+                          : AppColors.success,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 92,
-                          height: 92,
-                          decoration: ClayStyles.surface(
-                            radiusValue: 28,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white,
-                                AppColors.primarySoft,
-                              ],
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.table_restaurant_outlined,
-                            size: 40,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'No tables available yet',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.dark,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        if (isReserved) ...[
+                          const Icon(Icons.schedule,
+                              size: 11, color: Colors.white),
+                          const SizedBox(width: 4),
+                        ],
                         Text(
-                          'Pull to refresh after tables are synced from the store',
-                          style: TextStyle(
-                            color: AppColors.gray500,
-                            fontSize: 14,
+                          isReserved ? 'Reserved' : 'Available',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              )
-            : GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: isTablet ? 1.1 : 0.75,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
+              if (isOccupied) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '₹${order!.totalAmount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      OrderTimer(
+                        order: order,
+                        showIcon: false,
+                        textStyle: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                itemCount: tables.length,
-                itemBuilder: (context, index) {
-                  final table = tables[index];
-                  final order = data.getOrderForTable(table.id);
-                  final isOccupied = order != null;
-
-                  return Tilt3DCard(
-                    child: Container(
-                      decoration: isOccupied
-                          ? BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppColors.primary,
-                                  AppColors.primaryDark,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(28),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white.withOpacity(0.45),
-                                  blurRadius: 8,
-                                  offset: const Offset(-3, -3),
-                                ),
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.30),
-                                  blurRadius: 14,
-                                  offset: const Offset(4, 6),
-                                ),
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.18),
-                                  blurRadius: 12,
-                                  offset: const Offset(2, 4),
-                                ),
-                              ],
-                            )
-                          : BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.white,
-                                  AppColors.gray200,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(28),
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 1.2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white,
-                                  blurRadius: 8,
-                                  offset: const Offset(-3, -3),
-                                ),
-                                BoxShadow(
-                                  color: AppColors.gray500.withOpacity(0.22),
-                                  blurRadius: 14,
-                                  offset: const Offset(5, 7),
-                                ),
-                              ],
-                            ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
+                const SizedBox(height: 10),
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Color(0x33D97B23)),
+                    ),
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        _cardAction(
+                          icon: Icons.description_outlined,
+                          color: AppColors.dark,
+                          onTap: () => _showOrderSummarySheet(order),
+                        ),
+                        _cardAction(
+                          icon: Icons.edit_outlined,
+                          color: AppColors.dark,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -980,138 +1762,192 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                                 builder: (_) => OrderScreen(
                                   table: table,
                                   order: order,
-                                  isNewOrder: order == null,
+                                  isNewOrder: false,
                                 ),
                               ),
                             );
                           },
-                          onLongPress: () =>
-                              _showTableOptions(table, order, data),
-                          borderRadius: BorderRadius.circular(28),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final compact = constraints.maxHeight < 180 ||
-                                  constraints.maxWidth < 120;
-                              final iconBoxSize = compact ? 46.0 : 54.0;
-                              final titleSize = compact ? 14.0 : 16.0;
-                              final metaSize = compact ? 11.0 : 12.0;
-                              final amountSize = compact ? 12.0 : 14.0;
-
-                              return Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: compact ? 8 : 12,
-                                  vertical: compact ? 10 : 14,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: iconBoxSize,
-                                      height: iconBoxSize,
-                                      decoration: isOccupied
-                                          ? BoxDecoration(
-                                              color: Colors.white
-                                                  .withOpacity(0.18),
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withOpacity(0.18),
-                                                  blurRadius: 6,
-                                                  offset: const Offset(2, 3),
-                                                ),
-                                              ],
-                                            )
-                                          : ClayStyles.surface(
-                                              radiusValue: iconBoxSize / 2,
-                                              gradient: LinearGradient(
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
-                                                colors: [
-                                                  Colors.white,
-                                                  AppColors.gray200,
-                                                ],
-                                              ),
-                                            ),
-                                      child: Icon(
-                                        Icons.table_restaurant,
-                                        size: compact ? 20 : 22,
-                                        color: isOccupied
-                                            ? Colors.white
-                                            : AppColors.gray500,
-                                      ),
-                                    ),
-                                    SizedBox(height: compact ? 6 : 8),
-                                    Text(
-                                      table.label,
-                                      style: TextStyle(
-                                        fontSize: titleSize,
-                                        fontWeight: FontWeight.w700,
-                                        color: isOccupied
-                                            ? Colors.white
-                                            : AppColors.dark,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${table.seats} seats',
-                                      style: TextStyle(
-                                        fontSize: metaSize,
-                                        fontWeight: FontWeight.w600,
-                                        color: isOccupied
-                                            ? Colors.white.withOpacity(0.9)
-                                            : AppColors.gray600,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (isOccupied) ...[
-                                      SizedBox(height: compact ? 6 : 8),
-                                      Text(
-                                        '₹${order.totalAmount.toStringAsFixed(0)}',
-                                        style: TextStyle(
-                                          fontSize: amountSize,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Flexible(
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: OrderTimer(
-                                            order: order,
-                                            showIcon: false,
-                                            textStyle: TextStyle(
-                                              fontSize: compact ? 10 : 11,
-                                              fontWeight: FontWeight.w600,
-                                              color:
-                                                  Colors.white.withOpacity(0.9),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
                         ),
-                      ),
+                        _cardAction(
+                          icon: Icons.close,
+                          color: AppColors.danger,
+                          onTap: () => _cancelOrderFlow(order, data),
+                          isLast: true,
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
+
+  Widget _cardAction({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool isLast = false,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: 42,
+          decoration: BoxDecoration(
+            border: isLast
+                ? null
+                : const Border(
+                    right: BorderSide(color: Color(0x33D97B23)),
+                  ),
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.5,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 92,
+                height: 92,
+                decoration: ClayStyles.surface(
+                  radiusValue: 28,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white,
+                      AppColors.primarySoft,
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.table_restaurant_outlined,
+                  size: 40,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'No tables available yet',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Pull to refresh after tables are synced from the store',
+                style: TextStyle(
+                  color: AppColors.gray500,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.4,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off, size: 40, color: AppColors.gray400),
+              SizedBox(height: 12),
+              Text(
+                'No tables match your filters',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.gray500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _TableStatusFilter { all, occupied, available, reserved }
+
+/// Top-down dining set illustration: a center table with 4 chairs.
+class _DiningSetPainter extends CustomPainter {
+  final Color tableColor;
+  final Color chairColor;
+
+  _DiningSetPainter({required this.tableColor, required this.chairColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final chairPaint = Paint()..color = chairColor;
+    final tablePaint = Paint()..color = tableColor;
+
+    const chairR = Radius.circular(3.5);
+    // Left & right chairs
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, h * 0.28, w * 0.17, h * 0.44), chairR),
+      chairPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(w * 0.83, h * 0.28, w * 0.17, h * 0.44), chairR),
+      chairPaint,
+    );
+    // Top & bottom chairs
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(w * 0.28, 0, w * 0.44, h * 0.17), chairR),
+      chairPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(w * 0.28, h * 0.83, w * 0.44, h * 0.17), chairR),
+      chairPaint,
+    );
+    // Table body + inner plate
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.24, h * 0.24, w * 0.52, h * 0.52),
+        const Radius.circular(8),
+      ),
+      tablePaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * 0.31, h * 0.31, w * 0.38, h * 0.38),
+        const Radius.circular(5),
+      ),
+      Paint()..color = chairColor.withOpacity(0.45),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DiningSetPainter old) =>
+      old.tableColor != tableColor || old.chairColor != chairColor;
 }

@@ -19,6 +19,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
   late TabController _tabController;
   final TextEditingController _itemSearchController = TextEditingController();
   String _selectedCategoryId = 'all';
+  String _sortMode = 'name';
+  bool _gridView = false;
 
   @override
   void initState() {
@@ -315,55 +317,132 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppHeader(
-        title: 'Menu List',
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(76),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.gray200,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.65)),
-                boxShadow: ClayStyles.raisedShadow(
-                  blur: 18,
-                  darkOffset: const Offset(8, 8),
-                  lightOffset: const Offset(-6, -6),
+      appBar: const AppHeader(title: 'Menu List'),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Column(
+              children: [
+                // Segmented Categories / Food Items control
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: ClayStyles.raisedShadow(
+                      blur: 16,
+                      darkOffset: const Offset(6, 6),
+                      lightOffset: const Offset(-6, -6),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildMenuTabSelector(
+                          icon: Icons.grid_view_rounded,
+                          label: 'Categories',
+                          index: 0,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildMenuTabSelector(
+                          icon: Icons.restaurant_menu,
+                          label: 'Food Items',
+                          index: 1,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildMenuTabSelector(
-                      icon: Icons.category_outlined,
-                      label: 'Categories',
-                      index: 0,
+                const SizedBox(height: 12),
+                // Search + sort sheet button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: ClayStyles.raisedShadow(
+                            blur: 14,
+                            darkOffset: const Offset(5, 5),
+                            lightOffset: const Offset(-5, -5),
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _itemSearchController,
+                          decoration: InputDecoration(
+                            hintText: _tabController.index == 0
+                                ? 'Search categories...'
+                                : 'Search food or beverages...',
+                            hintStyle: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.gray400,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: AppColors.gray500,
+                              size: 20,
+                            ),
+                            suffixIcon: _itemSearchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: AppColors.gray500,
+                                    ),
+                                    onPressed: () =>
+                                        _itemSearchController.clear(),
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 13),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _buildMenuTabSelector(
-                      icon: Icons.fastfood_outlined,
-                      label: 'Food Items',
-                      index: 1,
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: _showSortSheet,
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: ClayStyles.raisedShadow(
+                            blur: 14,
+                            darkOffset: const Offset(5, 5),
+                            lightOffset: const Offset(-5, -5),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.tune_rounded,
+                          color: AppColors.gray700,
+                          size: 20,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildCategoriesTab(data, isStaff),
-          _buildItemsTab(data, isStaff),
+          const SizedBox(height: 12),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildCategoriesTab(data, isStaff),
+                _buildItemsTab(data, isStaff),
+              ],
+            ),
+          ),
         ],
       ),
-      floatingActionButton: null,
     );
   }
 
@@ -377,30 +456,33 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
-      decoration: isSelected
-          ? ClayStyles.accent(
-              accent: AppColors.primary,
-              radiusValue: 20,
-              opacity: 0.16,
-            )
-          : BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
+      decoration: BoxDecoration(
+        color: isSelected ? AppColors.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
           onTap: () => _tabController.animateTo(index),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
                   size: 18,
-                  color: isSelected ? AppColors.primary : AppColors.gray600,
+                  color: isSelected ? Colors.white : AppColors.gray600,
                 ),
                 const SizedBox(width: 8),
                 Flexible(
@@ -410,9 +492,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w600,
-                      color: isSelected ? AppColors.primary : AppColors.gray600,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? Colors.white : AppColors.gray600,
                     ),
                   ),
                 ),
@@ -424,164 +505,397 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
     );
   }
 
-  // --- Categories List Panel ---
-  Widget _buildCategoriesTab(DataProvider data, bool isStaff) {
-    final categories = data.categories
-        .toList()
-      ..sort((a, b) {
-        final af = a.isFavourite ? 1 : 0;
-        final bf = b.isFavourite ? 1 : 0;
-        if (af != bf) return bf - af;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
-
-    if (categories.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.category_outlined,
-                    size: 64,
-                    color: AppColors.gray400,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No categories found',
-                    style: TextStyle(fontSize: 18, color: AppColors.gray600),
-                  ),
-                  if (!isStaff) ...[
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _showCategoryDialog(),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Category'),
-                    ),
-                  ],
-                ],
+  void _showSortSheet() {
+    final isItems = _tabController.index == 1;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        Widget option(String mode, String label) {
+          final selected = _sortMode == mode;
+          return ListTile(
+            onTap: () {
+              setState(() => _sortMode = mode);
+              Navigator.pop(ctx);
+            },
+            leading: Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off_outlined,
+              color: selected ? AppColors.primary : AppColors.gray500,
+              size: 20,
+            ),
+            title: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? AppColors.primary : AppColors.dark,
               ),
             ),
+          );
+        }
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-        ),
-      );
-    }
+          padding: const EdgeInsets.fromLTRB(8, 14, 8, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(
+                  'Sort by',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.dark,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              option('name', 'Name (A–Z)'),
+              option('name_desc', 'Name (Z–A)'),
+              if (isItems) ...[
+                option('price_asc', 'Price: Low to High'),
+                option('price_desc', 'Price: High to Low'),
+              ] else
+                option('items_desc', 'Most items first'),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-    final isTablet = ResponsiveHelper.isTablet(context) ||
-        ResponsiveHelper.isDesktop(context);
+  int _compareNames(String a, String b) =>
+      a.toLowerCase().compareTo(b.toLowerCase());
 
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: isTablet ? 3 : 1,
-          childAspectRatio: isTablet ? 2.5 : 3.8,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: categories.length,
-        itemBuilder: (context, index) {
-          final cat = categories[index];
-          final itemsCount =
-              data.items.where((i) => i.categoryId == cat.id).length;
+  Widget _thumbBox(IconData icon,
+      {double size = 56, double? iconSize, double radius = 12}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child:
+          Icon(icon, size: iconSize ?? size * 0.45, color: AppColors.primary),
+    );
+  }
 
-          return Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  void _showItemDetails(Item item, String categoryName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        Widget row(String label, String value) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.category,
-                      color: AppColors.primary,
-                      size: 24,
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.gray600)),
+                  Flexible(
+                    child: Text(
+                      value,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
                     ),
                   ),
+                ],
+              ),
+            );
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _thumbBox(Icons.fastfood_outlined, size: 44),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          cat.name,
+                          item.name,
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.dark,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (cat.isFavourite) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.star,
-                                size: 14,
-                                color: Colors.amber[600],
-                              ),
-                              const SizedBox(width: 2),
-                              const Text(
-                                'Favourite',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.amber,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (cat.description != null &&
-                            cat.description!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            cat.description!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.gray600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
                         Text(
-                          '$itemsCount items linked',
+                          categoryName,
                           style: const TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
+                            color: AppColors.gray500,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  Text(
+                    '₹${item.price.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ],
+              ),
+              if (item.description != null && item.description!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  item.description!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.gray600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Divider(height: 1, color: AppColors.gray200),
+              row('Category', categoryName),
+              Divider(height: 1, color: AppColors.gray200),
+              row('Price', '₹${item.price.toStringAsFixed(2)}'),
+              Divider(height: 1, color: AppColors.gray200),
+              row('Tax', '${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%'),
+              Divider(height: 1, color: AppColors.gray200),
+              row('HSN', item.hsnCode ?? '-'),
+              Divider(height: 1, color: AppColors.gray200),
+              row('Status', item.enabled ? 'Enabled' : 'Disabled'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- Categories List Panel ---
+  Widget _buildCategoriesTab(DataProvider data, bool isStaff) {
+    final query = _itemSearchController.text.toLowerCase().trim();
+    final itemCounts = <String, int>{
+      for (final c in data.categories)
+        c.id: data.items.where((i) => i.categoryId == c.id).length,
+    };
+
+    final categories = data.categories
+        .where((c) => query.isEmpty || c.name.toLowerCase().contains(query))
+        .toList()
+      ..sort((a, b) {
+        final af = a.isFavourite ? 1 : 0;
+        final bf = b.isFavourite ? 1 : 0;
+        if (af != bf) return bf - af;
+        switch (_sortMode) {
+          case 'name_desc':
+            return _compareNames(b.name, a.name);
+          case 'items_desc':
+            return (itemCounts[b.id] ?? 0).compareTo(itemCounts[a.id] ?? 0);
+          default:
+            return _compareNames(a.name, b.name);
+        }
+      });
+
+    Widget listContent() {
+      if (categories.isEmpty) {
+        return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.4,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.category_outlined,
+                      size: 64,
+                      color: AppColors.gray400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      query.isNotEmpty
+                          ? 'No categories match your search'
+                          : 'No categories found',
+                      style: const TextStyle(
+                          fontSize: 16, color: AppColors.gray600),
+                    ),
+                    if (!isStaff && query.isEmpty) ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => _showCategoryDialog(),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Category'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+
+      return ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        itemCount: categories.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10, right: 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${categories.length} ${categories.length == 1 ? 'Category' : 'Categories'}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.gray500,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final cat = categories[index - 1];
+          final itemsCount = itemCounts[cat.id] ?? 0;
+          final isFav = cat.isFavourite;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: isFav
+                  ? AppColors.primarySoft.withOpacity(0.45)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  setState(() => _selectedCategoryId = cat.id);
+                  _tabController.animateTo(1);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: isFav
+                        ? Border.all(
+                            color: AppColors.primary.withOpacity(0.35),
+                          )
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      _thumbBox(Icons.lunch_dining, size: 54, radius: 12),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    cat.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                ),
+                                if (isFav) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          AppColors.primary.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.star,
+                                          size: 11,
+                                          color: AppColors.primary,
+                                        ),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'Favourite',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$itemsCount ${itemsCount == 1 ? 'item' : 'items'}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: AppColors.gray100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: isFav ? AppColors.primary : AppColors.gray500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           );
         },
-      ),
-    );
+      );
+    }
+
+    return RefreshIndicator(onRefresh: _refreshData, child: listContent());
   }
 
   // --- Items List Panel with Search & Filter ---
@@ -592,12 +906,11 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
         if (af != bf) return bf - af;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        return _compareNames(a.name, b.name);
       });
     final query = _itemSearchController.text.toLowerCase().trim();
     final categoryNames = {for (var c in data.categories) c.id: c.name};
 
-    // Filter Items dynamically
     final filteredItems = data.items.where((item) {
       final categoryName =
           item.categoryName ?? categoryNames[item.categoryId] ?? '';
@@ -614,131 +927,118 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
         if (af != bf) return bf - af;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        switch (_sortMode) {
+          case 'name_desc':
+            return _compareNames(b.name, a.name);
+          case 'price_asc':
+            return a.price.compareTo(b.price);
+          case 'price_desc':
+            return b.price.compareTo(a.price);
+          default:
+            return _compareNames(a.name, b.name);
+        }
       });
+
+    String categoryNameFor(Item item) =>
+        (item.categoryName != null && item.categoryName!.isNotEmpty)
+            ? item.categoryName!
+            : (categoryNames[item.categoryId] ?? 'Uncategorized');
+
+    final sortLabel = switch (_sortMode) {
+      'name_desc' => 'Name Z–A',
+      'price_asc' => 'Price ↑',
+      'price_desc' => 'Price ↓',
+      'items_desc' => 'Items ↓',
+      _ => 'Name',
+    };
 
     return Column(
       children: [
-        // Search and Filter Bar
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
+        // Category chips strip
+        SizedBox(
+          height: 86,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _itemSearchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search food or beverages...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _itemSearchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () => _itemSearchController.clear(),
-                              )
-                            : null,
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 0, horizontal: 16),
-                        fillColor: AppColors.light,
-                      ),
-                    ),
-                  ),
-                ],
+              _buildAllChip(),
+              ...categories.map((cat) => _buildCategoryChip(cat)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+
+        // Count + sort + view toggle
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                '${filteredItems.length} ${filteredItems.length == 1 ? 'Item' : 'Items'}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.dark,
+                ),
               ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Text(
-                      'Filter: ',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.gray700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() => _selectedCategoryId = 'all');
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedCategoryId == 'all'
-                              ? AppColors.primary.withOpacity(0.2)
-                              : AppColors.gray200,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.transparent),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.dark.withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'All Categories',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: _selectedCategoryId == 'all'
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: AppColors.primary,
-                          ),
+              const Spacer(),
+              const Text(
+                'Sort by',
+                style: TextStyle(fontSize: 11, color: AppColors.gray500),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _showSortSheet,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        sortLabel,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
                         ),
                       ),
-                    ),
-                    ...categories.map((cat) {
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() => _selectedCategoryId = cat.id);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedCategoryId == cat.id
-                                  ? AppColors.primary.withOpacity(0.2)
-                                  : AppColors.gray200,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.transparent),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.dark.withOpacity(0.15),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              cat.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: _selectedCategoryId == cat.id
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: AppColors.gray600,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _gridView = !_gridView),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _gridView ? Icons.view_list_rounded : Icons.grid_view,
+                    size: 17,
+                    color: AppColors.gray700,
+                  ),
                 ),
               ),
             ],
           ),
         ),
+        const SizedBox(height: 10),
 
-        // Items Grid/List
+        // Items list / grid
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refreshData,
@@ -746,7 +1046,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 ? SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     child: SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.6,
+                      height: MediaQuery.of(context).size.height * 0.45,
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -758,7 +1058,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              query.isNotEmpty || _selectedCategoryId != 'all'
+                              query.isNotEmpty ||
+                                      _selectedCategoryId != 'all'
                                   ? 'No matching food items found'
                                   : 'No food items added yet',
                               style: const TextStyle(
@@ -779,151 +1080,322 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                       ),
                     ),
                   )
-                : ListView.builder(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    itemCount: filteredItems.length,
-                    itemBuilder: (context, index) {
-                      final item = filteredItems[index];
-                      final categoryName = (item.categoryName != null &&
-                              item.categoryName!.isNotEmpty)
-                          ? item.categoryName!
-                          : (categoryNames[item.categoryId] ??
-                              'Uncategorized');
-
-                      return Opacity(
-                        opacity: item.enabled ? 1 : 0.5,
-                        child: Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: AppColors.gray200,
-                            width: 1,
-                          ),
+                : _gridView
+                    ? GridView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.82,
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
-                            child: const Icon(
-                              Icons.restaurant_menu,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              if (item.isFavourite) ...[
-                                Icon(
-                                  Icons.star,
-                                  size: 16,
-                                  color: Colors.amber[600],
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '₹${item.price.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.gray200,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      categoryName,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.gray700,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Tax: ${item.taxPercent}%',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.gray600,
-                                    ),
-                                  ),
-                                  if (!item.enabled) ...[
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Disabled',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.danger,
-                                      ),
-                                    ),
-                                  ],
-                                  if (item.hsnCode != null) ...[
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'HSN: ${item.hsnCode}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.gray600,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              if (item.description != null &&
-                                  item.description!.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  item.description!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.gray600,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          ),
-                          trailing: isStaff
-                              ? null
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                ),
-                        ),
-                        ),
-                      );
-                    },
-                  ),
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) => _buildItemGridCard(
+                            filteredItems[index],
+                            categoryNameFor(filteredItems[index])),
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        itemCount: filteredItems.length,
+                        itemBuilder: (context, index) => _buildItemListCard(
+                            filteredItems[index],
+                            categoryNameFor(filteredItems[index])),
+                      ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAllChip() {
+    final selected = _selectedCategoryId == 'all';
+    return GestureDetector(
+      onTap: () => setState(() => _selectedCategoryId = 'all'),
+      child: Container(
+        width: 58,
+        margin: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: selected
+              ? null
+              : Border.all(color: AppColors.gray200, width: 1),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.grid_view_rounded,
+              size: 20,
+              color: selected ? Colors.white : AppColors.gray600,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'All',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.gray600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(Category cat) {
+    final selected = _selectedCategoryId == cat.id;
+    return GestureDetector(
+      onTap: () =>
+          setState(() => _selectedCategoryId = selected ? 'all' : cat.id),
+      child: Container(
+        width: 58,
+        margin: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primarySoft : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.gray200,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 17,
+              backgroundColor: AppColors.primary.withOpacity(0.12),
+              child: Icon(
+                Icons.lunch_dining,
+                size: 17,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              cat.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.primary : AppColors.gray700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemListCard(Item item, String categoryName) {
+    return Opacity(
+      opacity: item.enabled ? 1 : 0.55,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _thumbBox(Icons.fastfood_outlined, size: 62, radius: 12),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      categoryName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                  ),
+                  if (item.description != null &&
+                      item.description!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      item.description!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.gray500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 5),
+                  Text(
+                    'Tax: ${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%   HSN: ${item.hsnCode ?? '-'}',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      item.isFavourite
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      size: 18,
+                      color: item.isFavourite
+                          ? AppColors.danger
+                          : AppColors.gray500,
+                    ),
+                    const SizedBox(width: 2),
+                    GestureDetector(
+                      onTap: () => _showItemDetails(item, categoryName),
+                      child: const Icon(
+                        Icons.more_vert,
+                        size: 18,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 26),
+                Text(
+                  '₹${item.price.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemGridCard(Item item, String categoryName) {
+    return Opacity(
+      opacity: item.enabled ? 1 : 0.55,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _thumbBox(
+                      Icons.fastfood_outlined,
+                      size: double.infinity,
+                      iconSize: 30,
+                      radius: 10,
+                    ),
+                  ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Icon(
+                      item.isFavourite
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      size: 17,
+                      color: item.isFavourite
+                          ? AppColors.danger
+                          : AppColors.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: AppColors.dark,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              categoryName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.gray500,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '₹${item.price.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => _showItemDetails(item, categoryName),
+                  child: const Icon(
+                    Icons.more_vert,
+                    size: 16,
+                    color: AppColors.gray500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

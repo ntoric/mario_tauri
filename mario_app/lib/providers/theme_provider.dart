@@ -29,6 +29,7 @@ class ThemeProvider extends ChangeNotifier {
     }
 
     _currentThemeId = AppThemeOptions.fromId(themeId).id;
+    AppColors.apply(currentTheme);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, _currentThemeId);
     notifyListeners();
@@ -41,6 +42,7 @@ class ThemeProvider extends ChangeNotifier {
         AppThemeOptions.defaultOption.id;
 
     _currentThemeId = AppThemeOptions.fromId(savedThemeId).id;
+    AppColors.apply(currentTheme);
     _isLoaded = true;
     notifyListeners();
   }

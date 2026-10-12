@@ -56,8 +56,19 @@ class AuthProvider extends ChangeNotifier {
       }
     }
 
-    // Sessions are server-side (Redis) and the token is never persisted, so a
-    // cold start always requires a fresh login.
+    // A token restored from secure storage is only useful while the backend
+    // is reachable, so validate it with /auth/me before marking the user
+    // authenticated. Invalid or expired sessions fall through to login.
+    if (_isBackendConnected && _backend.currentToken != null) {
+      final valid = await _backend.validateToken();
+      if (valid && _backend.currentUser != null) {
+        _user = User.fromJson(_backend.currentUser!);
+        _isAuthenticated = true;
+        _currentStore = _resolveCurrentStore(_user!);
+      } else {
+        _backend.logout();
+      }
+    }
 
     notifyListeners();
   }
