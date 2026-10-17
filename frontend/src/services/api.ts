@@ -235,6 +235,13 @@ class ApiService {
     });
   }
 
+  async reorderCategories(storeId: string, categoryIds: string[]) {
+    return this.fetch('/categories/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, categoryIds }),
+    });
+  }
+
   // Items
   async getItems(storeId: string, includeProfit = false) {
     let url = `/items?storeId=${storeId}`;

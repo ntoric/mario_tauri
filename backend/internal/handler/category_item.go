@@ -101,6 +101,36 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, req)
 }
 
+// ReorderCategories handles POST /api/categories/reorder
+func (h *Handler) ReorderCategories(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		StoreID     string   `json:"storeId"`
+		CategoryIDs []string `json:"categoryIds"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
+	}
+
+	if err := h.Repo.Category.Reorder(r.Context(), targetStoreID, req.CategoryIDs, claims.ID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Categories reordered"})
+}
+
 // DeleteCategory handles DELETE /api/categories/:id
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())

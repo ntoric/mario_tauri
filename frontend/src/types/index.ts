@@ -45,6 +45,7 @@ export interface Category {
   isActive: boolean;
   enabled?: boolean;
   isFavourite?: boolean;
+  sortOrder?: number;
 }
 
 export interface Item {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star, ArrowUpDown, GripVertical } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled, getDefaultTaxPercent } from '../utils/tax';
+import { sortCategories } from '../utils/category';
 import { api } from '../services/api';
 import type { Category, Item, ItemExpense } from '../types';
 
@@ -25,7 +26,7 @@ const newDraftId = () => `draft-${Date.now()}-${Math.random().toString(36).slice
 const emptyExpenseForm = () => ({ name: '', description: '', amount: '' });
 
 const Items: React.FC = () => {
-  const { categories, items, stores, createCategory, updateCategory, deleteCategory, createItem, updateItem, deleteItem, fetchCategories, fetchItems } = useDataStore();
+  const { categories, items, stores, createCategory, updateCategory, deleteCategory, reorderCategories, createItem, updateItem, deleteItem, fetchCategories, fetchItems } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const taxEnabled = isTaxEnabled(currentStore);
@@ -74,6 +75,10 @@ const Items: React.FC = () => {
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   const [loadingCategoryId, setLoadingCategoryId] = useState<string | null>(null);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [sortList, setSortList] = useState<Category[]>([]);
+  const [sortDragIndex, setSortDragIndex] = useState<number | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
 
   const editingItem = itemModal.data;
   const isCreating = !editingItem;
@@ -355,12 +360,7 @@ const Items: React.FC = () => {
       category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
       (category.description && category.description.toLowerCase().includes(categorySearchQuery.toLowerCase()))
     );
-    return [...matched].sort((a, b) => {
-      const af = a.isFavourite ? 1 : 0;
-      const bf = b.isFavourite ? 1 : 0;
-      if (af !== bf) return bf - af;
-      return a.name.localeCompare(b.name);
-    });
+    return sortCategories(matched);
   }, [categories, categorySearchQuery]);
 
   const paginatedItems = useMemo(() => {
@@ -454,6 +454,34 @@ const Items: React.FC = () => {
       await updateCategory(category.id, { ...category, isFavourite: !category.isFavourite });
     } finally {
       setLoadingCategoryId(null);
+    }
+  };
+
+  const openSortModal = () => {
+    setSortList(sortCategories(categories));
+    setSortDragIndex(null);
+    setSortModalOpen(true);
+  };
+
+  const handleSortDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (sortDragIndex === null || sortDragIndex === index) return;
+    setSortList(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(sortDragIndex, 1);
+      next.splice(index, 0, moved);
+      return next;
+    });
+    setSortDragIndex(index);
+  };
+
+  const handleSortSave = async () => {
+    setIsReordering(true);
+    try {
+      await reorderCategories(sortList.map(c => c.id));
+      setSortModalOpen(false);
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -845,6 +873,10 @@ const Items: React.FC = () => {
                   className="search-input"
                 />
               </div>
+              <button className="btn btn-secondary" onClick={openSortModal} disabled={categories.length < 2} title="Drag and drop to set the category order on the order page">
+                <ArrowUpDown size={18} />
+                Sort Order
+              </button>
               <button className="btn btn-primary" onClick={() => openCategoryForm()}>
                 <Plus size={18} />
                 Add Category
@@ -920,6 +952,63 @@ const Items: React.FC = () => {
               pageSize={PAGE_SIZE}
               onPageChange={setCategoryPage}
             />
+          </div>
+        </div>
+      )}
+
+      {sortModalOpen && (
+        <div className="modal-overlay" onClick={() => setSortModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Sort Categories</h2>
+              <button className="close-btn" onClick={() => setSortModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+                Drag categories to reorder them. This order is used on the order page. Favourite categories always appear first.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {sortList.map((cat, index) => (
+                  <div
+                    key={cat.id}
+                    draggable
+                    onDragStart={() => setSortDragIndex(index)}
+                    onDragOver={e => handleSortDragOver(e, index)}
+                    onDragEnd={() => setSortDragIndex(null)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.55rem 0.75rem',
+                      border: '1px solid var(--gray-200)',
+                      borderRadius: '8px',
+                      background: sortDragIndex === index ? 'var(--gray-100)' : 'var(--white, #fff)',
+                      cursor: 'grab',
+                      opacity: cat.enabled === false ? 0.55 : 1,
+                    }}
+                  >
+                    <GripVertical size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
+                    <span style={{ fontWeight: 500, flex: 1 }}>{cat.name}</span>
+                    {cat.isFavourite && (
+                      <Star size={13} fill="currentColor" style={{ color: '#f5a623', flexShrink: 0 }} />
+                    )}
+                    {cat.enabled === false && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--gray-500)' }}>Disabled</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <Button type="button" variant="secondary" onClick={() => setSortModalOpen(false)} disabled={isReordering}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" isLoading={isReordering} loadingText="Saving..." onClick={handleSortSave}>
+                Save Order
+              </Button>
+            </div>
           </div>
         </div>
       )}

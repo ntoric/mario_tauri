@@ -59,6 +59,7 @@ type Category struct {
 	IsActive    bool      `json:"isActive"`
 	Enabled     bool      `json:"enabled"`
 	IsFavourite bool      `json:"isFavourite"`
+	SortOrder   int       `json:"sortOrder"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
 	ModifiedBy  string    `json:"modifiedBy,omitempty"`
 }

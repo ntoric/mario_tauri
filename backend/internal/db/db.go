@@ -334,6 +334,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// top of the categories and items sections on the order create/edit page.
 		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
 		`ALTER TABLE items ADD COLUMN IF NOT EXISTS is_favourite BOOLEAN DEFAULT false`,
+		// Manual display order for categories on the order create/edit page.
+		// Favourite categories always rank first; sort_order breaks ties
+		// between non-favourites (0 means "not explicitly ordered").
+		`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`,
 		// Desktop app version telemetry — the Tauri app reports its version so
 		// superadmins can see which release each store is running.
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version VARCHAR(64)`,

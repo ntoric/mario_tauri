@@ -39,6 +39,7 @@ interface DataState {
   createCategory: (category: Omit<Category, 'id' | 'storeId' | 'isActive'> & Partial<Pick<Category, 'isActive'>>) => Promise<void>;
   updateCategory: (id: string, category: Partial<Category>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+  reorderCategories: (categoryIds: string[]) => Promise<void>;
   
   // Items
   fetchItems: (options?: { includeProfit?: boolean }) => Promise<void>;
@@ -279,6 +280,16 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.deleteCategory(id);
+    cache.delete(cacheKeys.categories(currentStoreId));
+    await get().fetchCategories();
+  },
+
+  reorderCategories: async (categoryIds) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.reorderCategories(currentStoreId, categoryIds);
     cache.delete(cacheKeys.categories(currentStoreId));
     await get().fetchCategories();
   },

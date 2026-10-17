@@ -145,6 +145,7 @@ func main() {
 		// Categories
 		r.Get("/api/categories", h.GetCategories)
 		r.Post("/api/categories", h.CreateCategory)
+		r.Post("/api/categories/reorder", h.ReorderCategories)
 		r.Put("/api/categories/{id}", h.UpdateCategory)
 		r.Delete("/api/categories/{id}", h.DeleteCategory)
 

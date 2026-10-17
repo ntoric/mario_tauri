@@ -3,6 +3,7 @@ import { X, Plus, Minus, Trash2, Search, Printer, Package, ChevronDown } from 'l
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
+import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -80,13 +81,13 @@ const ParcelOrderModal: React.FC = () => {
     categories.filter(c => c.enabled === false).map(c => c.id)
   );
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = sortItemsByCategoryOrder(items.filter(item => {
     if (item.enabled === false) return false;
     if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }), categories);
 
   const addItemToOrder = (item: Item) => {
     const existingItem = orderItems.find(oi => oi.itemId === item.id);
@@ -130,7 +131,7 @@ const ParcelOrderModal: React.FC = () => {
   const total = calculateTotal() + calculateTax();
 
   // Calculate visible and overflow categories (exclude disabled categories)
-  const enabledCategories = categories.filter(c => c.enabled !== false);
+  const enabledCategories = sortCategories(categories.filter(c => c.enabled !== false));
   const allCategories = ['all', ...enabledCategories.map(cat => cat.id)];
   const visibleCategories = allCategories.slice(0, visibleCategoryCount);
   const overflowCategories = allCategories.slice(visibleCategoryCount);

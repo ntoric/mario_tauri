@@ -3,6 +3,7 @@ import { X, Plus, Minus, Trash2, Receipt, Search, Printer, ChevronDown } from 'l
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
+import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -95,13 +96,13 @@ const OrderModal: React.FC = () => {
     categories.filter(c => c.enabled === false).map(c => c.id)
   );
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = sortItemsByCategoryOrder(items.filter(item => {
     if (item.enabled === false) return false;
     if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }), categories);
 
   const addItemToOrder = (item: Item) => {
     if (viewOnly) return;
@@ -407,7 +408,7 @@ const OrderModal: React.FC = () => {
   const total = calculateTotal() + calculateTax();
 
   // Calculate visible and overflow categories (exclude disabled categories)
-  const enabledCategories = categories.filter(c => c.enabled !== false);
+  const enabledCategories = sortCategories(categories.filter(c => c.enabled !== false));
   const allCategories = ['all', ...enabledCategories.map(cat => cat.id)];
   const visibleCategories = allCategories.slice(0, visibleCategoryCount);
   const overflowCategories = allCategories.slice(visibleCategoryCount);

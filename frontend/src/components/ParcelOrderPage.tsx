@@ -8,6 +8,7 @@ import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
 import { isTaxEnabled } from '../utils/tax';
+import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
 import type { OrderItem, Item } from '../types';
 
 const ParcelOrderPage: React.FC = () => {
@@ -90,22 +91,17 @@ const ParcelOrderPage: React.FC = () => {
     categories.filter(c => c.enabled === false).map(c => c.id)
   );
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = sortItemsByCategoryOrder(items.filter(item => {
     if (item.enabled === false) return false;
     if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const category = categories.find(cat => cat.id === item.categoryId);
     const categoryName = category?.name || '';
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch = searchQuery === '' ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       categoryName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  }).sort((a, b) => {
-    const af = a.isFavourite ? 1 : 0;
-    const bf = b.isFavourite ? 1 : 0;
-    if (af !== bf) return bf - af;
-    return a.name.localeCompare(b.name);
-  });
+  }), categories);
 
   const addItemToOrder = (item: Item) => {
     const existingItem = orderItems.find(oi => oi.itemId === item.id);
@@ -366,12 +362,7 @@ const ParcelOrderPage: React.FC = () => {
             >
               All Items
             </button>
-            {categories.filter(c => c.enabled !== false).sort((a, b) => {
-              const af = a.isFavourite ? 1 : 0;
-              const bf = b.isFavourite ? 1 : 0;
-              if (af !== bf) return bf - af;
-              return a.name.localeCompare(b.name);
-            }).map(cat => (
+            {sortCategories(categories.filter(c => c.enabled !== false)).map(cat => (
               <button
                 key={cat.id}
                 className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}

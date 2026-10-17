@@ -590,7 +590,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 		}
 	}
 
-	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, name, description, is_active, enabled, is_favourite FROM categories WHERE store_id = $1 AND is_active = true ORDER BY is_favourite DESC, name", storeID)
+	rows, err := r.db.QueryContext(ctx, "SELECT id, store_id, name, description, is_active, enabled, is_favourite, sort_order FROM categories WHERE store_id = $1 AND is_active = true ORDER BY is_favourite DESC, sort_order, name", storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +600,7 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 	for rows.Next() {
 		var c models.Category
 		var desc sql.NullString
-		if err := rows.Scan(&c.ID, &c.StoreID, &c.Name, &desc, &c.IsActive, &c.Enabled, &c.IsFavourite); err != nil {
+		if err := rows.Scan(&c.ID, &c.StoreID, &c.Name, &desc, &c.IsActive, &c.Enabled, &c.IsFavourite, &c.SortOrder); err != nil {
 			return nil, err
 		}
 		c.Description = desc.String
@@ -616,12 +616,43 @@ func (r *CategoryRepository) GetAll(ctx context.Context, storeID string) ([]mode
 }
 
 func (r *CategoryRepository) Create(ctx context.Context, c models.Category) error {
-	_, err := r.db.ExecContext(ctx, "INSERT INTO categories (id, store_id, name, description, enabled, is_favourite) VALUES ($1, $2, $3, $4, $5, $6)",
+	// New categories are appended to the end of the manual sort order.
+	_, err := r.db.ExecContext(ctx, "INSERT INTO categories (id, store_id, name, description, enabled, is_favourite, sort_order) VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories WHERE store_id = $2))",
 		c.ID, c.StoreID, c.Name, c.Description, c.Enabled, c.IsFavourite)
 	if err == nil && r.redis != nil {
 		r.redis.Delete(ctx, "categories:"+c.StoreID)
 	}
 	return err
+}
+
+// Reorder assigns sequential sort_order values (1..N) to the given category
+// IDs, in the order provided. IDs that do not belong to the store are ignored.
+func (r *CategoryRepository) Reorder(ctx context.Context, storeID string, orderedIDs []string, modifiedBy string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, "UPDATE categories SET sort_order = $1, modified_by = $2 WHERE id = $3 AND store_id = $4")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for i, id := range orderedIDs {
+		if _, err := stmt.ExecContext(ctx, i+1, modifiedBy, id, storeID); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if r.redis != nil {
+		r.redis.Delete(ctx, "categories:"+storeID)
+	}
+	return nil
 }
 
 func (r *CategoryRepository) Update(ctx context.Context, c models.Category) error {
