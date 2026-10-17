@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import {
   PieChart, Download, Loader2, Search, ChevronDown, ChevronRight,
   Package, TrendingUp, ShoppingBag, DollarSign, Receipt, BarChart3, Percent, Layers,
 } from 'lucide-react';
-import { useAuthStore, useDataStore } from '../stores';
+import { useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
-import type { ItemProfitReport, ItemProfitEntry, OrderItem } from '../types';
+import type { ItemProfitEntry } from '../types';
 import { Button } from './ui/Button';
+import { DonutChart, ChartLegend } from './ui/Charts';
+import Pagination from './ui/Pagination';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type MenuSortField = 'name' | 'category' | 'price' | 'cost' | 'profit' | 'profitPercent';
@@ -29,6 +31,34 @@ interface SalesProfitRow {
   hasCostData: boolean;
 }
 
+interface SalesProfitResponse {
+  rows: SalesProfitRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  unitsSold: number;
+  revenue: number;
+  prepCost: number;
+  profit: number;
+  trackedRevenue: number;
+  untrackedRevenue: number;
+  itemsSold: number;
+  itemsWithCostSold: number;
+}
+
+interface MenuProfitResponse {
+  rows: ItemProfitEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  itemsWithCostCount: number;
+  totalSellingValue: number;
+  totalCost: number;
+  totalProfit: number;
+  averageProfitPercent: number;
+}
+
 const rangeLabel: Record<DateRange, string> = {
   today: 'Today',
   week: 'Last 7 Days',
@@ -36,205 +66,143 @@ const rangeLabel: Record<DateRange, string> = {
   all: 'All Time',
 };
 
+const formatLocalDate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const ItemProfitReportPage: React.FC = () => {
   const { currentStoreId } = useAuthStore();
-  const { orders, bills, fetchOrders, fetchBills } = useDataStore();
-  const [report, setReport] = useState<ItemProfitReport | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [menuReport, setMenuReport] = useState<MenuProfitResponse | null>(null);
+  const [salesReport, setSalesReport] = useState<SalesProfitResponse | null>(null);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [dateRange, setDateRange] = useState<DateRange>('month');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [menuSearchInput, setMenuSearchInput] = useState('');
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [salesSearchInput, setSalesSearchInput] = useState('');
   const [salesSearchQuery, setSalesSearchQuery] = useState('');
   const [menuSortField, setMenuSortField] = useState<MenuSortField>('profitPercent');
   const [salesSortField, setSalesSortField] = useState<SalesSortField>('profit');
   const [menuSortDir, setMenuSortDir] = useState<SortDir>('desc');
   const [salesSortDir, setSalesSortDir] = useState<SortDir>('desc');
+  const [menuPage, setMenuPage] = useState(1);
+  const [menuPageSize, setMenuPageSize] = useState(25);
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(25);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const menuSeq = useRef(0);
+  const salesSeq = useRef(0);
 
   useReportPageHeader({
     title: 'Item Profit Report',
     subtitle: 'Menu margins and sales-based profit from preparation costs',
   });
 
-  const fetchReport = async () => {
-    if (!currentStoreId) return;
-    setIsLoading(true);
-    try {
-      const data = await api.getItemProfitReport(currentStoreId);
-      setReport(data);
-    } catch (error) {
-      console.error('Failed to fetch item profit report:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Debounce both search boxes so each keystroke doesn't hit the server.
+  useEffect(() => {
+    const t = setTimeout(() => { setMenuSearchQuery(menuSearchInput.trim()); setMenuPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [menuSearchInput]);
 
   useEffect(() => {
-    fetchReport();
-    fetchOrders();
-    fetchBills(true);
-  }, [currentStoreId, fetchOrders, fetchBills]);
+    const t = setTimeout(() => { setSalesSearchQuery(salesSearchInput.trim()); setSalesPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [salesSearchInput]);
 
-  const getRangeStart = (range: DateRange): Date => {
+  const getStartDate = (range: DateRange): string | undefined => {
     const d = new Date();
-    if (range === 'today') {
-      d.setHours(0, 0, 0, 0);
-    } else if (range === 'week') {
+    if (range === 'week') {
       d.setDate(d.getDate() - 6);
-      d.setHours(0, 0, 0, 0);
     } else if (range === 'month') {
       d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-    } else {
-      return new Date(0);
+    } else if (range === 'all') {
+      return undefined;
     }
-    return d;
+    return formatLocalDate(d);
   };
 
-  const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange]);
+  // Menu profit breakdown (not date-ranged — unit economics of the menu).
+  useEffect(() => {
+    if (!currentStoreId) return;
+    const id = ++menuSeq.current;
+    setMenuLoading(true);
+    api.getMenuProfitReport(currentStoreId, {
+      search: menuSearchQuery || undefined,
+      sort: menuSortField,
+      dir: menuSortDir,
+      page: menuPage,
+      pageSize: menuPageSize,
+    })
+      .then(res => { if (id === menuSeq.current) setMenuReport(res); })
+      .catch(err => { if (id === menuSeq.current) console.error('Failed to fetch menu profit report:', err); })
+      .finally(() => { if (id === menuSeq.current) setMenuLoading(false); });
+  }, [currentStoreId, menuSearchQuery, menuSortField, menuSortDir, menuPage, menuPageSize, refreshKey]);
 
-  const filteredBills = useMemo(
-    () => bills.filter(b => b.status !== 'cancelled' && new Date(b.generatedAt) >= rangeStart),
-    [bills, rangeStart]
-  );
+  // Sales-based profit by item for the selected period.
+  useEffect(() => {
+    if (!currentStoreId) return;
+    const id = ++salesSeq.current;
+    setSalesLoading(true);
+    api.getSalesProfitReport(currentStoreId, {
+      startDate: getStartDate(dateRange),
+      search: salesSearchQuery || undefined,
+      sort: salesSortField,
+      dir: salesSortDir,
+      page: salesPage,
+      pageSize: salesPageSize,
+    })
+      .then(res => { if (id === salesSeq.current) setSalesReport(res); })
+      .catch(err => { if (id === salesSeq.current) console.error('Failed to fetch sales profit report:', err); })
+      .finally(() => { if (id === salesSeq.current) setSalesLoading(false); });
+  }, [currentStoreId, dateRange, salesSearchQuery, salesSortField, salesSortDir, salesPage, salesPageSize, refreshKey]);
 
-  const completedOrders = useMemo(
-    () => orders.filter(o => new Date(o.createdAt) >= rangeStart && o.status === 'completed'),
-    [orders, rangeStart]
-  );
+  const menuRows = menuReport?.rows ?? [];
+  const menuTotal = menuReport?.total ?? 0;
+  const menuTotalPages = Math.max(1, Math.ceil(menuTotal / menuPageSize));
+  const salesRows = salesReport?.rows ?? [];
+  const salesTotal = salesReport?.total ?? 0;
+  const salesTotalPages = Math.max(1, Math.ceil(salesTotal / salesPageSize));
 
-  const profitByItemId = useMemo(() => {
-    const map = new Map<string, ItemProfitEntry>();
-    report?.items.forEach(entry => map.set(entry.item.id, entry));
-    return map;
-  }, [report]);
+  // Clamp pages if a filtered set shrank underneath us.
+  useEffect(() => {
+    if (menuTotal > 0 && menuPage > menuTotalPages) setMenuPage(menuTotalPages);
+  }, [menuTotal, menuPage, menuTotalPages]);
+  useEffect(() => {
+    if (salesTotal > 0 && salesPage > salesTotalPages) setSalesPage(salesTotalPages);
+  }, [salesTotal, salesPage, salesTotalPages]);
 
-  const salesRows = useMemo(() => {
-    const map = new Map<string, SalesProfitRow>();
-
-    const processLineItems = (lineItems: OrderItem[] | undefined) => {
-      lineItems?.forEach(oi => {
-        const id = oi.itemId;
-        const entry = profitByItemId.get(id);
-        const unitPrice = oi.unitPrice ?? oi.item?.price ?? entry?.item.price ?? 0;
-        const unitCost = entry?.totalCost ?? 0;
-        const hasCostData = unitCost > 0;
-
-        if (!map.has(id)) {
-          map.set(id, {
-            itemId: id,
-            name: oi.item?.name || entry?.item.name || id,
-            category: entry?.item.categoryName || oi.item?.categoryName || '—',
-            qtySold: 0,
-            revenue: 0,
-            prepCost: 0,
-            profit: 0,
-            profitPercent: 0,
-            hasCostData,
-          });
-        }
-
-        const row = map.get(id)!;
-        row.qtySold += oi.quantity;
-        row.revenue += oi.quantity * unitPrice;
-        if (hasCostData) {
-          row.prepCost += oi.quantity * unitCost;
-          row.profit += oi.quantity * (unitPrice - unitCost);
-          row.hasCostData = true;
-        }
-      });
-    };
-
-    filteredBills.forEach(bill => processLineItems(bill.items));
-    if (map.size === 0) {
-      completedOrders.forEach(order => processLineItems(order.items));
-    }
-
-    return Array.from(map.values()).map(row => ({
-      ...row,
-      profitPercent: row.revenue > 0 && row.hasCostData ? (row.profit / row.revenue) * 100 : 0,
-    }));
-  }, [filteredBills, completedOrders, profitByItemId]);
-
-  const salesSummary = useMemo(() => {
-    const withCost = salesRows.filter(r => r.hasCostData);
-    const revenue = salesRows.reduce((s, r) => s + r.revenue, 0);
-    const prepCost = withCost.reduce((s, r) => s + r.prepCost, 0);
-    const profit = withCost.reduce((s, r) => s + r.profit, 0);
-    const unitsSold = salesRows.reduce((s, r) => s + r.qtySold, 0);
-    const trackedRevenue = withCost.reduce((s, r) => s + r.revenue, 0);
-
-    return {
-      unitsSold,
-      revenue,
-      prepCost,
-      profit,
-      itemsSold: salesRows.length,
-      itemsWithCostSold: withCost.length,
-      marginPercent: trackedRevenue > 0 ? (profit / trackedRevenue) * 100 : 0,
-      untrackedRevenue: salesRows.filter(r => !r.hasCostData).reduce((s, r) => s + r.revenue, 0),
-    };
-  }, [salesRows]);
+  const salesSummary = {
+    unitsSold: salesReport?.unitsSold ?? 0,
+    revenue: salesReport?.revenue ?? 0,
+    prepCost: salesReport?.prepCost ?? 0,
+    profit: salesReport?.profit ?? 0,
+    itemsSold: salesReport?.itemsSold ?? 0,
+    itemsWithCostSold: salesReport?.itemsWithCostSold ?? 0,
+    marginPercent:
+      (salesReport?.trackedRevenue ?? 0) > 0
+        ? ((salesReport?.profit ?? 0) / (salesReport?.trackedRevenue ?? 0)) * 100
+        : 0,
+    untrackedRevenue: salesReport?.untrackedRevenue ?? 0,
+  };
 
   const toggleMenuSort = (field: MenuSortField) => {
+    setMenuPage(1);
     if (menuSortField === field) setMenuSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setMenuSortField(field); setMenuSortDir('desc'); }
   };
 
   const toggleSalesSort = (field: SalesSortField) => {
+    setSalesPage(1);
     if (salesSortField === field) setSalesSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSalesSortField(field); setSalesSortDir('desc'); }
   };
 
   const sortIcon = (field: string, current: string, dir: SortDir) =>
     current === field ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
-
-  const filteredMenuRows = useMemo(() => {
-    if (!report) return [];
-    let rows = [...report.items];
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      rows = rows.filter(r =>
-        r.item.name.toLowerCase().includes(q) ||
-        (r.item.categoryName && r.item.categoryName.toLowerCase().includes(q))
-      );
-    }
-    rows.sort((a, b) => {
-      let cmp = 0;
-      switch (menuSortField) {
-        case 'name': cmp = a.item.name.localeCompare(b.item.name); break;
-        case 'category': cmp = (a.item.categoryName || '').localeCompare(b.item.categoryName || ''); break;
-        case 'price': cmp = a.item.price - b.item.price; break;
-        case 'cost': cmp = a.totalCost - b.totalCost; break;
-        case 'profit': cmp = a.profit - b.profit; break;
-        case 'profitPercent': cmp = a.profitPercent - b.profitPercent; break;
-      }
-      return menuSortDir === 'asc' ? cmp : -cmp;
-    });
-    return rows;
-  }, [report, searchQuery, menuSortField, menuSortDir]);
-
-  const filteredSalesRows = useMemo(() => {
-    let rows = [...salesRows];
-    if (salesSearchQuery) {
-      const q = salesSearchQuery.toLowerCase();
-      rows = rows.filter(r =>
-        r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)
-      );
-    }
-    rows.sort((a, b) => {
-      let cmp = 0;
-      switch (salesSortField) {
-        case 'name': cmp = a.name.localeCompare(b.name); break;
-        case 'qtySold': cmp = a.qtySold - b.qtySold; break;
-        case 'revenue': cmp = a.revenue - b.revenue; break;
-        case 'prepCost': cmp = a.prepCost - b.prepCost; break;
-        case 'profit': cmp = a.profit - b.profit; break;
-        case 'profitPercent': cmp = a.profitPercent - b.profitPercent; break;
-      }
-      return salesSortDir === 'asc' ? cmp : -cmp;
-    });
-    return rows;
-  }, [salesRows, salesSearchQuery, salesSortField, salesSortDir]);
 
   const getProfitColor = (value: number, hasData = true) => {
     if (!hasData) return 'var(--gray-500)';
@@ -270,6 +238,15 @@ const ItemProfitReportPage: React.FC = () => {
   };
 
   const exportSalesReport = async () => {
+    if (!currentStoreId) return;
+    const res: SalesProfitResponse = await api.getSalesProfitReport(currentStoreId, {
+      startDate: getStartDate(dateRange),
+      search: salesSearchQuery || undefined,
+      sort: salesSortField,
+      dir: salesSortDir,
+      all: true,
+    });
+
     const rows: string[][] = [
       ['Sales-Based Profit by Item'],
       ['Period', rangeLabel[dateRange]],
@@ -284,7 +261,7 @@ const ItemProfitReportPage: React.FC = () => {
       ['Item', 'Category', 'Qty Sold', 'Revenue', 'Prep Cost', 'Profit', 'Margin %'],
     ];
 
-    for (const row of filteredSalesRows) {
+    for (const row of res.rows ?? []) {
       rows.push([
         row.name,
         row.category,
@@ -300,23 +277,29 @@ const ItemProfitReportPage: React.FC = () => {
   };
 
   const exportMenuReport = async () => {
-    if (!report) return;
+    if (!currentStoreId || !menuReport) return;
+    const res: MenuProfitResponse = await api.getMenuProfitReport(currentStoreId, {
+      search: menuSearchQuery || undefined,
+      sort: menuSortField,
+      dir: menuSortDir,
+      all: true,
+    });
 
     const rows: string[][] = [
       ['Menu Item Profit Breakdown'],
       [''],
       ['Summary'],
-      ['Total Items', String(report.items.length)],
-      ['Items with Cost Data', String(report.itemsWithCostCount)],
-      ['Total List Price', report.totalSellingValue.toFixed(2)],
-      ['Total Prep Cost', report.totalCost.toFixed(2)],
-      ['Total Unit Profit', report.totalProfit.toFixed(2)],
-      ['Avg Unit Margin %', `${report.averageProfitPercent.toFixed(1)}%`],
+      ['Total Items', String(menuReport.totalItems)],
+      ['Items with Cost Data', String(menuReport.itemsWithCostCount)],
+      ['Total List Price', menuReport.totalSellingValue.toFixed(2)],
+      ['Total Prep Cost', menuReport.totalCost.toFixed(2)],
+      ['Total Unit Profit', menuReport.totalProfit.toFixed(2)],
+      ['Avg Unit Margin %', `${menuReport.averageProfitPercent.toFixed(1)}%`],
       [''],
       ['Item', 'Category', 'Price', 'Prep Cost', 'Unit Profit', 'Margin %', 'Expenses'],
     ];
 
-    for (const entry of filteredMenuRows) {
+    for (const entry of res.rows ?? []) {
       const breakdown = entry.expenses.length > 0
         ? entry.expenses.map(e => `${e.name}: ${e.amount.toFixed(2)}`).join('; ')
         : 'None';
@@ -334,7 +317,7 @@ const ItemProfitReportPage: React.FC = () => {
     await exportCsvWithToast(toCsv(rows), 'menu-item-profit-breakdown.csv', 'Menu Item Profit Breakdown');
   };
 
-  if (isLoading && !report) {
+  if (menuReport === null && menuLoading) {
     return (
       <div className="loading-state" style={{ padding: '3rem' }}>
         <Loader2 size={32} className="animate-spin" />
@@ -355,20 +338,20 @@ const ItemProfitReportPage: React.FC = () => {
             <button
               key={r}
               className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
-              onClick={() => setDateRange(r)}
+              onClick={() => { setDateRange(r); setSalesPage(1); }}
             >
               {rangeLabel[r]}
             </button>
           ))}
         </div>
         <div className="header-actions">
-          <Button variant="secondary" onClick={fetchReport} isLoading={isLoading} loadingText="Refreshing...">
+          <Button variant="secondary" onClick={() => setRefreshKey(k => k + 1)} isLoading={menuLoading || salesLoading} loadingText="Refreshing...">
             Refresh
           </Button>
         </div>
       </div>
 
-      {report && (
+      {salesReport && (
         <>
           {/* Sales-Based KPIs */}
           <div className="kpi-section-label">
@@ -440,6 +423,42 @@ const ItemProfitReportPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Profit Composition */}
+          {salesSummary.revenue > 0 && (
+            <div className="report-widget-grid">
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">Revenue Composition</span>
+                </div>
+                <div className="card-body">
+                  {(() => {
+                    const splitData = [
+                      { label: 'Profit', value: Math.max(salesSummary.profit, 0), color: 'var(--success)' },
+                      { label: 'Prep Cost', value: salesSummary.prepCost, color: 'var(--danger)' },
+                      { label: 'Untracked Revenue', value: salesSummary.untrackedRevenue, color: '#b794f4' },
+                    ].filter(d => d.value > 0);
+                    return (
+                      <div className="chart-split">
+                        <DonutChart
+                          data={splitData}
+                          size={150}
+                          thickness={20}
+                          centerValue={salesSummary.prepCost > 0 ? `${salesSummary.marginPercent.toFixed(0)}%` : '—'}
+                          centerLabel="margin"
+                        />
+                        <ChartLegend data={splitData} formatValue={formatCurrency} />
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {menuReport && (
+        <>
           {/* Menu KPIs */}
           <div className="kpi-section-label">
             <Package size={18} />
@@ -452,7 +471,7 @@ const ItemProfitReportPage: React.FC = () => {
                 <Layers size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{report.items.length}</div>
+                <div className="stat-value">{menuReport.totalItems}</div>
                 <div className="stat-label">Menu Items</div>
               </div>
             </div>
@@ -461,7 +480,7 @@ const ItemProfitReportPage: React.FC = () => {
                 <Receipt size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{report.itemsWithCostCount}</div>
+                <div className="stat-value">{menuReport.itemsWithCostCount}</div>
                 <div className="stat-label">With Cost Data</div>
               </div>
             </div>
@@ -470,7 +489,7 @@ const ItemProfitReportPage: React.FC = () => {
                 <DollarSign size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{formatCurrency(report.totalSellingValue)}</div>
+                <div className="stat-value">{formatCurrency(menuReport.totalSellingValue)}</div>
                 <div className="stat-label">Total List Price</div>
               </div>
             </div>
@@ -479,7 +498,7 @@ const ItemProfitReportPage: React.FC = () => {
                 <Receipt size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: 'var(--danger)' }}>{formatCurrency(report.totalCost)}</div>
+                <div className="stat-value" style={{ color: 'var(--danger)' }}>{formatCurrency(menuReport.totalCost)}</div>
                 <div className="stat-label">Total Prep Cost</div>
               </div>
             </div>
@@ -488,8 +507,8 @@ const ItemProfitReportPage: React.FC = () => {
                 <TrendingUp size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: getProfitColor(report.totalProfit, report.totalCost > 0) }}>
-                  {report.totalCost > 0 ? formatCurrency(report.totalProfit) : '—'}
+                <div className="stat-value" style={{ color: getProfitColor(menuReport.totalProfit, menuReport.totalCost > 0) }}>
+                  {menuReport.totalCost > 0 ? formatCurrency(menuReport.totalProfit) : '—'}
                 </div>
                 <div className="stat-label">Unit Profit (all items)</div>
               </div>
@@ -499,8 +518,8 @@ const ItemProfitReportPage: React.FC = () => {
                 <Percent size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: getProfitColor(report.averageProfitPercent, report.itemsWithCostCount > 0) }}>
-                  {report.itemsWithCostCount > 0 ? `${report.averageProfitPercent.toFixed(1)}%` : '—'}
+                <div className="stat-value" style={{ color: getProfitColor(menuReport.averageProfitPercent, menuReport.itemsWithCostCount > 0) }}>
+                  {menuReport.itemsWithCostCount > 0 ? `${menuReport.averageProfitPercent.toFixed(1)}%` : '—'}
                 </div>
                 <div className="stat-label">Avg Unit Margin</div>
               </div>
@@ -522,58 +541,78 @@ const ItemProfitReportPage: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search sold items..."
-                value={salesSearchQuery}
-                onChange={e => setSalesSearchQuery(e.target.value)}
+                value={salesSearchInput}
+                onChange={e => setSalesSearchInput(e.target.value)}
                 className="search-input"
               />
             </div>
-            <Button variant="secondary" size="sm" onClick={exportSalesReport} disabled={filteredSalesRows.length === 0}>
+            <select
+              className="form-input"
+              value={salesPageSize}
+              onChange={e => { setSalesPageSize(Number(e.target.value)); setSalesPage(1); }}
+              style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
+              title="Rows per page"
+            >
+              {[10, 25, 50, 100].map(n => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+            <Button variant="secondary" size="sm" onClick={exportSalesReport} disabled={salesTotal === 0}>
               <Download size={16} />
               Export
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="reports-table">
-            <thead>
-              <tr>
-                <th onClick={() => toggleSalesSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', salesSortField, salesSortDir)}</th>
-                <th>Category</th>
-                <th onClick={() => toggleSalesSort('qtySold')} style={{ cursor: 'pointer' }}>Qty Sold{sortIcon('qtySold', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('revenue')} style={{ cursor: 'pointer' }}>Revenue{sortIcon('revenue', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('prepCost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('prepCost', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('profit')} style={{ cursor: 'pointer' }}>Profit{sortIcon('profit', salesSortField, salesSortDir)}</th>
-                <th onClick={() => toggleSalesSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', salesSortField, salesSortDir)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSalesRows.length === 0 ? (
+        <div className="card-body" style={{ padding: 0 }}>
+          <div style={{ overflowX: 'auto', opacity: salesLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+            <table className="reports-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-                    No sales in this period.
-                  </td>
+                  <th onClick={() => toggleSalesSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', salesSortField, salesSortDir)}</th>
+                  <th>Category</th>
+                  <th onClick={() => toggleSalesSort('qtySold')} style={{ cursor: 'pointer' }}>Qty Sold{sortIcon('qtySold', salesSortField, salesSortDir)}</th>
+                  <th onClick={() => toggleSalesSort('revenue')} style={{ cursor: 'pointer' }}>Revenue{sortIcon('revenue', salesSortField, salesSortDir)}</th>
+                  <th onClick={() => toggleSalesSort('prepCost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('prepCost', salesSortField, salesSortDir)}</th>
+                  <th onClick={() => toggleSalesSort('profit')} style={{ cursor: 'pointer' }}>Profit{sortIcon('profit', salesSortField, salesSortDir)}</th>
+                  <th onClick={() => toggleSalesSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', salesSortField, salesSortDir)}</th>
                 </tr>
-              ) : (
-                filteredSalesRows.map(row => (
-                  <tr key={row.itemId}>
-                    <td><strong>{row.name}</strong></td>
-                    <td><span className="badge badge-primary">{row.category}</span></td>
-                    <td>{row.qtySold}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(row.revenue)}</td>
-                    <td style={{ color: 'var(--gray-600)' }}>
-                      {row.hasCostData ? formatCurrency(row.prepCost) : '—'}
-                    </td>
-                    <td style={{ fontWeight: 600, color: getProfitColor(row.profit, row.hasCostData) }}>
-                      {row.hasCostData ? formatCurrency(row.profit) : '—'}
-                    </td>
-                    <td style={{ fontWeight: 600, color: getProfitColor(row.profitPercent, row.hasCostData) }}>
-                      {row.hasCostData ? `${row.profitPercent.toFixed(1)}%` : '—'}
+              </thead>
+              <tbody>
+                {salesRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
+                      {salesLoading ? 'Loading…' : 'No sales in this period.'}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  salesRows.map(row => (
+                    <tr key={row.itemId}>
+                      <td><strong>{row.name}</strong></td>
+                      <td><span className="badge badge-primary">{row.category}</span></td>
+                      <td>{row.qtySold}</td>
+                      <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(row.revenue)}</td>
+                      <td style={{ color: 'var(--gray-600)' }}>
+                        {row.hasCostData ? formatCurrency(row.prepCost) : '—'}
+                      </td>
+                      <td style={{ fontWeight: 600, color: getProfitColor(row.profit, row.hasCostData) }}>
+                        {row.hasCostData ? formatCurrency(row.profit) : '—'}
+                      </td>
+                      <td style={{ fontWeight: 600, color: getProfitColor(row.profitPercent, row.hasCostData) }}>
+                        {row.hasCostData ? `${row.profitPercent.toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            currentPage={salesPage}
+            totalPages={salesTotalPages}
+            totalItems={salesTotal}
+            pageSize={salesPageSize}
+            onPageChange={setSalesPage}
+          />
         </div>
       </div>
 
@@ -590,92 +629,112 @@ const ItemProfitReportPage: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search menu items..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                value={menuSearchInput}
+                onChange={e => setMenuSearchInput(e.target.value)}
                 className="search-input"
               />
             </div>
-            <Button variant="secondary" size="sm" onClick={exportMenuReport} disabled={!report || filteredMenuRows.length === 0}>
+            <select
+              className="form-input"
+              value={menuPageSize}
+              onChange={e => { setMenuPageSize(Number(e.target.value)); setMenuPage(1); }}
+              style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
+              title="Rows per page"
+            >
+              {[10, 25, 50, 100].map(n => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+            <Button variant="secondary" size="sm" onClick={exportMenuReport} disabled={!menuReport || menuTotal === 0}>
               <Download size={16} />
               Export
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="reports-table">
-            <thead>
-              <tr>
-                <th style={{ width: '32px' }}></th>
-                <th onClick={() => toggleMenuSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', menuSortField, menuSortDir)}</th>
-                <th onClick={() => toggleMenuSort('category')} style={{ cursor: 'pointer' }}>Category{sortIcon('category', menuSortField, menuSortDir)}</th>
-                <th onClick={() => toggleMenuSort('price')} style={{ cursor: 'pointer' }}>Price{sortIcon('price', menuSortField, menuSortDir)}</th>
-                <th onClick={() => toggleMenuSort('cost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('cost', menuSortField, menuSortDir)}</th>
-                <th onClick={() => toggleMenuSort('profit')} style={{ cursor: 'pointer' }}>Unit Profit{sortIcon('profit', menuSortField, menuSortDir)}</th>
-                <th onClick={() => toggleMenuSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', menuSortField, menuSortDir)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMenuRows.length === 0 ? (
+        <div className="card-body" style={{ padding: 0 }}>
+          <div style={{ overflowX: 'auto', opacity: menuLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+            <table className="reports-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-                    {report ? 'No items match your search.' : 'No data available.'}
-                  </td>
+                  <th style={{ width: '32px' }}></th>
+                  <th onClick={() => toggleMenuSort('name')} style={{ cursor: 'pointer' }}>Item{sortIcon('name', menuSortField, menuSortDir)}</th>
+                  <th onClick={() => toggleMenuSort('category')} style={{ cursor: 'pointer' }}>Category{sortIcon('category', menuSortField, menuSortDir)}</th>
+                  <th onClick={() => toggleMenuSort('price')} style={{ cursor: 'pointer' }}>Price{sortIcon('price', menuSortField, menuSortDir)}</th>
+                  <th onClick={() => toggleMenuSort('cost')} style={{ cursor: 'pointer' }}>Prep Cost{sortIcon('cost', menuSortField, menuSortDir)}</th>
+                  <th onClick={() => toggleMenuSort('profit')} style={{ cursor: 'pointer' }}>Unit Profit{sortIcon('profit', menuSortField, menuSortDir)}</th>
+                  <th onClick={() => toggleMenuSort('profitPercent')} style={{ cursor: 'pointer' }}>Margin %{sortIcon('profitPercent', menuSortField, menuSortDir)}</th>
                 </tr>
-              ) : (
-                filteredMenuRows.map(entry => {
-                  const isExpanded = expandedItems.has(entry.item.id);
-                  return (
-                    <React.Fragment key={entry.item.id}>
-                      <tr
-                        onClick={() => entry.expenses.length > 0 && toggleExpanded(entry.item.id)}
-                        style={{ cursor: entry.expenses.length > 0 ? 'pointer' : 'default' }}
-                      >
-                        <td>
-                          {entry.expenses.length > 0 && (
-                            isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
-                          )}
-                        </td>
-                        <td><strong>{entry.item.name}</strong></td>
-                        <td><span className="badge badge-primary">{entry.item.categoryName || '—'}</span></td>
-                        <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(entry.item.price)}</td>
-                        <td style={{ color: 'var(--gray-600)' }}>
-                          {entry.totalCost > 0 ? formatCurrency(entry.totalCost) : '—'}
-                        </td>
-                        <td style={{ fontWeight: 600, color: getProfitColor(entry.profit, entry.totalCost > 0) }}>
-                          {entry.totalCost > 0 ? formatCurrency(entry.profit) : '—'}
-                        </td>
-                        <td style={{ fontWeight: 600, color: getProfitColor(entry.profitPercent, entry.totalCost > 0) }}>
-                          {entry.totalCost > 0 ? `${entry.profitPercent.toFixed(1)}%` : '—'}
-                        </td>
-                      </tr>
-                      {isExpanded && entry.expenses.length > 0 && (
-                        <tr>
-                          <td colSpan={7} style={{ background: 'var(--gray-50)', padding: '0.75rem 1.5rem' }}>
-                            <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--gray-700)' }}>
-                              Expense Breakdown
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
-                              {entry.expenses.map(expense => (
-                                <div key={expense.id} style={{ background: 'white', border: '1px solid var(--gray-200)', borderRadius: '6px', padding: '0.5rem 0.75rem' }}>
-                                  <div style={{ fontWeight: 500 }}>{expense.name}</div>
-                                  {expense.description && (
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{expense.description}</div>
-                                  )}
-                                  <div style={{ fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem' }}>
-                                    {formatCurrency(expense.amount)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+              </thead>
+              <tbody>
+                {menuRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
+                      {menuLoading ? 'Loading…' : menuReport ? 'No items match your search.' : 'No data available.'}
+                    </td>
+                  </tr>
+                ) : (
+                  menuRows.map(entry => {
+                    const isExpanded = expandedItems.has(entry.item.id);
+                    return (
+                      <React.Fragment key={entry.item.id}>
+                        <tr
+                          onClick={() => entry.expenses.length > 0 && toggleExpanded(entry.item.id)}
+                          style={{ cursor: entry.expenses.length > 0 ? 'pointer' : 'default' }}
+                        >
+                          <td>
+                            {entry.expenses.length > 0 && (
+                              isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
+                            )}
+                          </td>
+                          <td><strong>{entry.item.name}</strong></td>
+                          <td><span className="badge badge-primary">{entry.item.categoryName || '—'}</span></td>
+                          <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(entry.item.price)}</td>
+                          <td style={{ color: 'var(--gray-600)' }}>
+                            {entry.totalCost > 0 ? formatCurrency(entry.totalCost) : '—'}
+                          </td>
+                          <td style={{ fontWeight: 600, color: getProfitColor(entry.profit, entry.totalCost > 0) }}>
+                            {entry.totalCost > 0 ? formatCurrency(entry.profit) : '—'}
+                          </td>
+                          <td style={{ fontWeight: 600, color: getProfitColor(entry.profitPercent, entry.totalCost > 0) }}>
+                            {entry.totalCost > 0 ? `${entry.profitPercent.toFixed(1)}%` : '—'}
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        {isExpanded && entry.expenses.length > 0 && (
+                          <tr>
+                            <td colSpan={7} style={{ background: 'var(--gray-50)', padding: '0.75rem 1.5rem' }}>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--gray-700)' }}>
+                                Expense Breakdown
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                                {entry.expenses.map(expense => (
+                                  <div key={expense.id} style={{ background: 'var(--surface)', border: '1px solid var(--gray-200)', borderRadius: '6px', padding: '0.5rem 0.75rem' }}>
+                                    <div style={{ fontWeight: 500 }}>{expense.name}</div>
+                                    {expense.description && (
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{expense.description}</div>
+                                    )}
+                                    <div style={{ fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem' }}>
+                                      {formatCurrency(expense.amount)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            currentPage={menuPage}
+            totalPages={menuTotalPages}
+            totalItems={menuTotal}
+            pageSize={menuPageSize}
+            onPageChange={setMenuPage}
+          />
         </div>
       </div>
 

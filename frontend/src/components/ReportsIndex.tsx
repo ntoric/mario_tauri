@@ -27,42 +27,42 @@ const ReportsIndex: React.FC = () => {
     {
       title: 'Sales Analytics',
       description: 'Overview of revenue, orders, payment methods, and daily trends',
-      icon: <BarChart2 size={32} />,
+      icon: <BarChart2 size={24} />,
       path: '/reports/sales-analytics',
       color: 'var(--primary)',
     },
     {
       title: 'Top Selling Items',
       description: 'Detailed item-wise sales report with quantity and revenue data',
-      icon: <ShoppingBag size={32} />,
+      icon: <ShoppingBag size={24} />,
       path: '/reports/top-items',
       color: '#63b3ed',
     },
     {
       title: 'Top Selling Categories',
       description: 'Category-wise sales analysis with performance metrics',
-      icon: <Tag size={32} />,
+      icon: <Tag size={24} />,
       path: '/reports/top-categories',
       color: '#b794f4',
     },
     {
       title: 'Profit Report',
       description: 'Combined sales, revenue, and expense analysis with profit tracking',
-      icon: <DollarSign size={32} />,
+      icon: <DollarSign size={24} />,
       path: '/reports/revenue',
       color: '#f5a623',
     },
     {
       title: 'Item Profit Report',
       description: 'Per-item preparation costs, profit margins, and expense breakdown',
-      icon: <PieChart size={32} />,
+      icon: <PieChart size={24} />,
       path: '/reports/item-profit',
       color: '#2196f3',
     },
     {
       title: 'Expense Reports',
       description: 'Analyze business expenses by category and date',
-      icon: <TrendingUp size={32} />,
+      icon: <TrendingUp size={24} />,
       path: '/expense-reports',
       color: '#2ba54a',
     },
@@ -70,82 +70,40 @@ const ReportsIndex: React.FC = () => {
 
   return (
     <div className="reports-index-page">
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '1.5rem',
-        padding: '1rem 0'
-      }}>
+      <div className="reports-index-grid">
         {reportCards.map((card) => (
           <div
             key={card.path}
-            className="card"
+            className="card report-nav-card"
             onClick={() => navigate(card.path)}
-            style={{
-              cursor: 'pointer',
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-            }}
           >
-            <div className="card-body" style={{ padding: '1.5rem' }}>
+            <div className="card-body" style={{ padding: '1.25rem', position: 'relative' }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: '1rem',
-                marginBottom: '1rem'
+                gap: '0.9rem',
               }}>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '12px',
-                  background: `${card.color}15`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: card.color,
-                  flexShrink: 0
-                }}>
+                <div
+                  className="report-nav-icon"
+                  style={{
+                    background: `linear-gradient(135deg, ${card.color} 0%, ${card.color} 55%, rgba(0,0,0,0.25) 160%)`,
+                    backgroundColor: card.color,
+                  }}
+                >
                   {card.icon}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{
-                    margin: '0 0 0.5rem 0',
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-800)'
-                  }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 className="report-nav-title">
                     {card.title}
                   </h3>
-                  <p style={{
-                    margin: 0,
-                    fontSize: '0.9rem',
-                    color: 'var(--gray-600)',
-                    lineHeight: 1.5
-                  }}>
+                  <p className="report-nav-desc">
                     {card.description}
                   </p>
                 </div>
               </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                color: card.color,
-                fontWeight: 500,
-                fontSize: '0.9rem',
-                marginTop: '0.5rem'
-              }}>
+              <div className="report-nav-cta" style={{ color: card.color }}>
                 View Report
-                <ArrowRight size={16} />
+                <ArrowRight size={15} />
               </div>
             </div>
           </div>

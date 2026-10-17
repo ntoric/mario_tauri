@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
 const OSK_STORAGE_KEY = 'onscreen-keyboard-enabled';
+const COLOR_MODE_KEY = 'app-color-mode';
+
+export type ColorMode = 'light' | 'dark' | 'system';
 
 const getInitialOskEnabled = () => {
   try {
@@ -9,6 +12,40 @@ const getInitialOskEnabled = () => {
     return false;
   }
 };
+
+const getInitialColorMode = (): ColorMode => {
+  try {
+    const stored = localStorage.getItem(COLOR_MODE_KEY);
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+  } catch {
+    // localStorage unavailable
+  }
+  return 'system';
+};
+
+const systemPrefersDark = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+export const getEffectiveColorMode = (mode: ColorMode): 'light' | 'dark' =>
+  mode === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : mode;
+
+const applyColorModeToDom = (mode: ColorMode) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = getEffectiveColorMode(mode);
+};
+
+// Apply the persisted mode as early as possible (avoids a flash on login/app load)
+// and keep following OS changes while in 'system' mode.
+applyColorModeToDom(getInitialColorMode());
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    applyColorModeToDom(getInitialColorMode());
+  });
+} catch {
+  // matchMedia unavailable
+}
 
 interface ModalState {
   isOpen: boolean;
@@ -33,6 +70,9 @@ interface UIState {
 
   // On-screen keyboard
   onScreenKeyboardEnabled: boolean;
+
+  // Color mode (light / dark / system)
+  colorMode: ColorMode;
 
   // Notifications
   notifications: Array<{
@@ -64,6 +104,7 @@ interface UIState {
   closeStoreSwitcher: () => void;
   toggleSidebar: () => void;
   toggleOnScreenKeyboard: () => void;
+  setColorMode: (mode: ColorMode) => void;
   addNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   removeNotification: (id: string) => void;
 }
@@ -81,6 +122,7 @@ export const useUIStore = create<UIState>((set) => ({
   storeSwitcherModal: false,
   sidebarOpen: true,
   onScreenKeyboardEnabled: getInitialOskEnabled(),
+  colorMode: getInitialColorMode(),
   notifications: [],
 
   openOrderModal: (data) => set({ orderModal: { isOpen: true, data } }),
@@ -123,6 +165,16 @@ export const useUIStore = create<UIState>((set) => ({
     }
     return { onScreenKeyboardEnabled: next };
   }),
+
+  setColorMode: (mode) => {
+    try {
+      localStorage.setItem(COLOR_MODE_KEY, mode);
+    } catch {
+      // localStorage unavailable
+    }
+    applyColorModeToDom(mode);
+    set({ colorMode: mode });
+  },
   
   addNotification: (type, message) => {
     const id = Math.random().toString(36).substring(7);

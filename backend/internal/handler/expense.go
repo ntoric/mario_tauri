@@ -374,8 +374,9 @@ func (h *Handler) GetRevenueReport(w http.ResponseWriter, r *http.Request) {
 
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
+	summaryOnly := r.URL.Query().Get("summaryOnly") == "true"
 
-	report, err := h.Repo.RevenueReport.GetRevenueReport(r.Context(), storeID, startDate, endDate)
+	report, err := h.Repo.RevenueReport.GetRevenueReport(r.Context(), storeID, startDate, endDate, summaryOnly)
 	if err != nil {
 		log.Printf("[Revenue Report] Database error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "Failed to fetch revenue report")

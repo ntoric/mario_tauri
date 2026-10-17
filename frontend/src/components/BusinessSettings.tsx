@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent, Package } from 'lucide-react';
-import { useDataStore, useAuthStore } from '../stores';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent, Package, Sun, Moon, Monitor, Usb, ChefHat, Wifi, Zap, LifeBuoy, Sparkles } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { useDataStore, useAuthStore, useUIStore, ColorMode } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
 import SoftwareUpdates from './SoftwareUpdates';
+import StoreSupport from './StoreSupport';
+import notify from '../utils/toast';
 
 interface PrinterDevice {
   name: string;
@@ -18,6 +21,8 @@ interface PrinterDevice {
 const BusinessSettings: React.FC = () => {
   const { currentStoreId, user, ensureStoreSelected } = useAuthStore();
   const { stores, updateStore, fetchStores } = useDataStore();
+  const colorMode = useUIStore((state) => state.colorMode);
+  const setColorMode = useUIStore((state) => state.setColorMode);
   const { setHeaderContent } = usePageHeader();
   
   // Ensure store is selected on mount (for business_admin and staff)
@@ -31,10 +36,19 @@ const BusinessSettings: React.FC = () => {
   }, [fetchStores]);
   
   const currentStore = stores.find(s => s.id === currentStoreId);
+  const location = useLocation();
   
-  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance' | 'software-updates'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance' | 'software-updates' | 'support'>('general');
+
+  // Allow deep linking via ?tab=support
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab === 'support') {
+      setActiveTab('support');
+    }
+  }, [location.search]);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   // Available printers from printer service
   const [availablePrinters, setAvailablePrinters] = useState<PrinterDevice[]>([]);
@@ -129,8 +143,7 @@ const BusinessSettings: React.FC = () => {
     }
   };
 
-  const handlePrinterSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const printerName = e.target.value;
+  const selectPrinter = (printerName: string) => {
     setSelectedPrinterName(printerName);
 
     if (!printerName) {
@@ -156,10 +169,9 @@ const BusinessSettings: React.FC = () => {
     setIsSaving(true);
     try {
       await updateStore(currentStore.id, generalSettings);
-      setSaveMessage('Settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.success('Settings saved successfully');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      notify.error('Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -179,10 +191,9 @@ const BusinessSettings: React.FC = () => {
         kotPrintEnabled: printerSettings.kotPrintEnabled,
         remoteBillingEnabled: printerSettings.remoteBillingEnabled,
       });
-      setSaveMessage('Printer settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.success('Printer settings saved');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      notify.error('Failed to save printer settings');
     } finally {
       setIsSaving(false);
     }
@@ -197,10 +208,9 @@ const BusinessSettings: React.FC = () => {
       await updateStore(currentStore.id, {
         themeColor: appearanceSettings.themeColor || '',
       });
-      setSaveMessage('Appearance settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.success('Appearance settings saved');
     } catch (error) {
-      setSaveMessage('Failed to save settings');
+      notify.error('Failed to save appearance settings');
     } finally {
       setIsSaving(false);
     }
@@ -216,10 +226,9 @@ const BusinessSettings: React.FC = () => {
         taxEnabled: taxSettings.taxEnabled,
         defaultTaxPercent: taxSettings.defaultTaxPercent,
       });
-      setSaveMessage('Tax settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.success('Tax settings saved');
     } catch (error) {
-      setSaveMessage('Failed to save tax settings');
+      notify.error('Failed to save tax settings');
     } finally {
       setIsSaving(false);
     }
@@ -232,15 +241,13 @@ const BusinessSettings: React.FC = () => {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      setSaveMessage('Please select an image file');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.warning('Please select an image file');
       return;
     }
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      setSaveMessage('Image size should be less than 2MB');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.warning('Image size should be less than 2MB');
       return;
     }
 
@@ -257,13 +264,11 @@ const BusinessSettings: React.FC = () => {
     setIsUploadingLogo(true);
     try {
       await api.uploadStoreLogo(currentStore.id, logoPreview);
-      setSaveMessage('Logo uploaded successfully!');
+      notify.success('Logo uploaded successfully');
       // Refresh stores to get updated logo URL
       await fetchStores();
-      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      setSaveMessage('Failed to upload logo');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.error('Failed to upload logo');
     } finally {
       setIsUploadingLogo(false);
     }
@@ -278,13 +283,11 @@ const BusinessSettings: React.FC = () => {
     try {
       await api.deleteStoreLogo(currentStore.id);
       setLogoPreview(null);
-      setSaveMessage('Logo removed successfully!');
+      notify.success('Logo removed');
       // Refresh stores to get updated logo URL
       await fetchStores();
-      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      setSaveMessage('Failed to remove logo');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.error('Failed to remove logo');
     } finally {
       setIsUploadingLogo(false);
     }
@@ -354,19 +357,14 @@ const BusinessSettings: React.FC = () => {
           <Package size={18} />
           Software Updates
         </button>
+        <button
+          className={`tab ${activeTab === 'support' ? 'active' : ''}`}
+          onClick={() => setActiveTab('support')}
+        >
+          <LifeBuoy size={18} />
+          Support
+        </button>
       </div>
-
-      {saveMessage && (
-        <div style={{ 
-          padding: '1rem', 
-          background: saveMessage.includes('success') ? 'rgba(43,165,74, 0.1)' : 'rgba(229,57,53, 0.1)',
-          color: saveMessage.includes('success') ? 'var(--success)' : 'var(--danger)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem'
-        }}>
-          {saveMessage}
-        </div>
-      )}
 
       {activeTab === 'general' && (
         <div className="card">
@@ -542,11 +540,10 @@ const BusinessSettings: React.FC = () => {
                     type="checkbox"
                     checked={taxSettings.taxEnabled}
                     onChange={e => setTaxSettings({ ...taxSettings, taxEnabled: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
                   />
                   <span style={{ fontWeight: 600 }}>Enable Tax</span>
                 </label>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '52px' }}>
                   When enabled, tax percentages on items and tax totals on orders/bills will be calculated and displayed. When disabled, all tax fields are hidden and tax amounts are treated as zero.
                 </p>
               </div>
@@ -580,6 +577,68 @@ const BusinessSettings: React.FC = () => {
       )}
 
       {activeTab === 'appearance' && (
+        <>
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <span className="card-title">Display Mode</span>
+          </div>
+          <div className="card-body">
+            <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
+              Choose between light and dark appearance for this device. "System" follows your operating system's setting.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
+              {([
+                { id: 'light' as ColorMode, name: 'Light', icon: Sun, preview: 'linear-gradient(135deg, #ffffff 0%, #f4f6f9 100%)' },
+                { id: 'dark' as ColorMode, name: 'Dark', icon: Moon, preview: 'linear-gradient(135deg, #1c2330 0%, #10151d 100%)' },
+                { id: 'system' as ColorMode, name: 'System', icon: Monitor, preview: 'linear-gradient(135deg, #ffffff 0%, #ffffff 49%, #1c2330 50%, #10151d 100%)' },
+              ]).map((mode) => {
+                const selected = colorMode === mode.id;
+                const ModeIcon = mode.icon;
+                return (
+                  <label
+                    key={mode.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      padding: '1rem',
+                      border: '2px solid',
+                      borderColor: selected ? 'var(--primary)' : 'var(--gray-200)',
+                      borderRadius: 'var(--radius)',
+                      background: selected ? 'var(--primary-50)' : 'var(--surface)',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="colorMode"
+                      value={mode.id}
+                      checked={selected}
+                      onChange={() => setColorMode(mode.id)}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: mode.preview,
+                      border: '1px solid var(--gray-300)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <ModeIcon size={18} color={mode.id === 'light' ? '#f5a623' : mode.id === 'dark' ? '#a3adc0' : 'var(--gray-500)'} />
+                    </div>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{mode.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         <div className="card">
           <div className="card-header">
             <span className="card-title">UI Theme Color</span>
@@ -603,7 +662,7 @@ const BusinessSettings: React.FC = () => {
                     border: '2px solid',
                     borderColor: !appearanceSettings.themeColor ? 'var(--primary)' : 'var(--gray-200)',
                     borderRadius: 'var(--radius)',
-                    background: !appearanceSettings.themeColor ? 'rgba(245,130,32,0.05)' : 'white',
+                    background: !appearanceSettings.themeColor ? 'rgba(245,130,32,0.05)' : 'var(--surface)',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -643,7 +702,7 @@ const BusinessSettings: React.FC = () => {
                         border: '2px solid',
                         borderColor: selected ? preset.primary : 'var(--gray-200)',
                         borderRadius: 'var(--radius)',
-                        background: selected ? `${preset.primary}10` : 'white',
+                        background: selected ? `${preset.primary}10` : 'var(--surface)',
                         transition: 'all 0.2s ease',
                       }}
                     >
@@ -735,134 +794,103 @@ const BusinessSettings: React.FC = () => {
             </div>
           </form>
         </div>
+        </>
       )}
 
       {activeTab === 'printer' && (
-        <div className="card">
+        <div className="card printer-config">
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-title">Printer Configuration</span>
-            <button 
-              type="button" 
-              className="btn btn-sm btn-secondary"
-              onClick={fetchPrinters}
-              disabled={isLoadingPrinters}
-            >
-              <RefreshCw size={14} style={{ marginRight: '0.5rem', animation: isLoadingPrinters ? 'spin 1s linear infinite' : 'none' }} />
-              Refresh
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              {!isLoadingPrinters && !printerError && (
+                <span className={`pc-count-badge ${availablePrinters.length === 0 ? 'muted' : ''}`}>
+                  {availablePrinters.length} detected
+                </span>
+              )}
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={fetchPrinters}
+                disabled={isLoadingPrinters}
+              >
+                <RefreshCw size={14} style={{ animation: isLoadingPrinters ? 'spin 1s linear infinite' : 'none' }} />
+                Refresh
+              </button>
+            </div>
           </div>
           <form onSubmit={handleSavePrinter}>
             <div className="card-body">
+              {printerError && (
+                <div className="pc-alert pc-alert-error">
+                  <AlertCircle size={16} />
+                  <span>{printerError}</span>
+                </div>
+              )}
+
               {/* Printer Selection */}
-              <div className="form-group">
-                <label>Select Printer</label>
-                {printerError && (
-                  <div style={{ 
-                    padding: '0.75rem', 
-                    background: 'rgba(229,57,53, 0.1)', 
-                    color: 'var(--danger)',
-                    borderRadius: 'var(--radius)',
-                    marginBottom: '0.75rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <AlertCircle size={16} />
-                    <span style={{ fontSize: '0.85rem' }}>{printerError}</span>
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <div className="pc-section-label">
+                  <Usb size={13} />
+                  Receipt Printer
+                </div>
+                {isLoadingPrinters ? (
+                  <div className="pc-printer-list">
+                    <div className="pc-skeleton" />
+                    <div className="pc-skeleton" />
                   </div>
-                )}
-                <select
-                  value={selectedPrinterName}
-                  onChange={handlePrinterSelect}
-                  disabled={isLoadingPrinters || availablePrinters.length === 0}
-                  style={{ width: '100%' }}
-                >
-                  <option value="">
-                    {isLoadingPrinters 
-                      ? 'Detecting printers...' 
-                      : availablePrinters.length === 0 
-                        ? 'No printers detected - Enter manually below'
-                        : '-- Select a printer --'
-                    }
-                  </option>
-                  {availablePrinters.map((printer) => (
-                    <option key={printer.name} value={printer.name}>
-                      {printer.name} {printer.type && `(${printer.type})`}
-                    </option>
-                  ))}
-                </select>
-                {availablePrinters.length > 0 && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                    Select a printer from the list above or enter details manually below
-                  </p>
+                ) : availablePrinters.length > 0 ? (
+                  <div className="pc-printer-list">
+                    {availablePrinters.map((printer) => (
+                      <button
+                        type="button"
+                        key={printer.name}
+                        className={`pc-printer-option ${selectedPrinterName === printer.name ? 'selected' : ''}`}
+                        onClick={() => selectPrinter(printer.name)}
+                      >
+                        <div className="pc-icon-tile">
+                          <Printer size={18} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="pc-printer-name">
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {printer.name}
+                            </span>
+                            {printer.type && <span className="pc-type-badge">{printer.type}</span>}
+                          </div>
+                          {(printer.vendor_id || printer.product_id || printer.address) && (
+                            <div className="pc-printer-ids">
+                              {printer.vendor_id && <span className="pc-mono">VID {printer.vendor_id}</span>}
+                              {printer.product_id && <span className="pc-mono">PID {printer.product_id}</span>}
+                              {printer.address && <span className="pc-printer-address">{printer.address}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <span className="pc-check">
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="pc-empty">
+                    <Printer size={28} />
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>No printers detected</span>
+                    <span style={{ fontSize: '0.76rem' }}>
+                      Connect a printer and hit Refresh to scan again
+                    </span>
+                  </div>
                 )}
               </div>
 
-              {/* Manual Configuration */}
-              <div style={{ 
-                marginTop: '1.5rem', 
-                padding: '1rem', 
-                background: 'var(--gray-50)', 
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--gray-200)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                  {selectedPrinterName && availablePrinters.find(p => p.name === selectedPrinterName) ? (
-                    <>
-                      <Check size={16} style={{ color: 'var(--success)' }} />
-                      <span style={{ fontWeight: 600, color: 'var(--success)' }}>Auto-configured from selected printer</span>
-                    </>
-                  ) : (
-                    <span style={{ fontWeight: 600 }}>Manual Configuration</span>
-                  )}
+              {/* Invoice Size */}
+              <div className="form-group" style={{ marginTop: '1.75rem' }}>
+                <div className="pc-section-label">
+                  <Receipt size={13} />
+                  Invoice & Thermal Paper Size
                 </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Vendor ID</label>
-                    <input
-                      type="text"
-                      value={printerSettings.printerVendorId}
-                      onChange={e => setPrinterSettings({ ...printerSettings, printerVendorId: e.target.value })}
-                      placeholder="e.g., 0x0fe6"
-                    />
-                    <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
-                      USB Vendor ID (e.g., 0x0fe6)
-                    </small>
-                  </div>
-                  <div className="form-group">
-                    <label>Product ID</label>
-                    <input
-                      type="text"
-                      value={printerSettings.printerProductId}
-                      onChange={e => setPrinterSettings({ ...printerSettings, printerProductId: e.target.value })}
-                      placeholder="e.g., 0x811e"
-                    />
-                    <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
-                      USB Product ID (e.g., 0x811e)
-                    </small>
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginTop: '1.5rem' }}>
-                <label>Invoice Size</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
-                  <label 
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      padding: '1rem',
-                      border: '2px solid',
-                      borderColor: printerSettings.invoiceSize === '2inch' ? 'var(--primary)' : 'var(--gray-200)',
-                      borderRadius: 'var(--radius)',
-                      background: printerSettings.invoiceSize === '2inch' ? 'rgba(59, 130, 246, 0.05)' : 'white',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
+                <div className="pc-size-grid">
+                  {/* 2 Inch / 58mm Option */}
+                  <label className={`pc-size-card ${printerSettings.invoiceSize === '2inch' ? 'selected' : ''}`}>
                     <input
                       type="radio"
                       name="invoiceSize"
@@ -871,25 +899,63 @@ const BusinessSettings: React.FC = () => {
                       onChange={e => setPrinterSettings({ ...printerSettings, invoiceSize: e.target.value })}
                       style={{ display: 'none' }}
                     />
-                    <Receipt size={32} style={{ color: printerSettings.invoiceSize === '2inch' ? 'var(--primary)' : 'var(--gray-400)' }} />
-                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>2 Inch</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>58mm paper</span>
+                    <div className="pc-size-card-header">
+                      <div className="pc-size-radio">
+                        <span className="pc-radio-dot">
+                          <Check size={11} strokeWidth={3.5} />
+                        </span>
+                      </div>
+                      <div className="pc-size-meta">
+                        <div className="pc-size-title-row">
+                          <span className="pc-size-title">2 Inch</span>
+                          <span className="pc-size-pill">58mm Roll</span>
+                        </div>
+                        <span className="pc-size-subtitle">Compact bill • Takeaway & Quick POS</span>
+                      </div>
+                    </div>
+
+                    {/* Printer Slot & Realistic Emerging Paper */}
+                    <div className="pc-dispenser">
+                      <div className="pc-dispenser-slot">
+                        <div className="pc-slot-slit" />
+                      </div>
+                      <div className="pc-paper-wrap pc-paper-2inch">
+                        <div className="pc-mock-receipt">
+                          <div className="pc-rcpt-header">
+                            <span className="pc-rcpt-store">CAFE MARIO</span>
+                            <span className="pc-rcpt-subhead">#102 • Table 3</span>
+                          </div>
+                          <div className="pc-rcpt-dash">------------------------</div>
+                          <div className="pc-rcpt-items">
+                            <div className="pc-rcpt-row">
+                              <span>1x Cold Coffee</span>
+                              <span>₹120.00</span>
+                            </div>
+                            <div className="pc-rcpt-row">
+                              <span>1x Veg Sandwich</span>
+                              <span>₹140.00</span>
+                            </div>
+                          </div>
+                          <div className="pc-rcpt-dash">------------------------</div>
+                          <div className="pc-rcpt-total-row">
+                            <span className="pc-rcpt-total-lbl">TOTAL</span>
+                            <span className="pc-rcpt-total-val">₹260.00</span>
+                          </div>
+                          <div className="pc-rcpt-cutter" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Feature Chips */}
+                    <div className="pc-size-features">
+                      <span className="pc-feat-chip">32 chars/line</span>
+                      <span className="pc-feat-chip">Paper saving</span>
+                      <span className="pc-feat-chip">Compact footprint</span>
+                    </div>
                   </label>
-                  <label 
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      padding: '1rem',
-                      border: '2px solid',
-                      borderColor: printerSettings.invoiceSize === '3inch' ? 'var(--primary)' : 'var(--gray-200)',
-                      borderRadius: 'var(--radius)',
-                      background: printerSettings.invoiceSize === '3inch' ? 'rgba(59, 130, 246, 0.05)' : 'white',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
+
+                  {/* 3 Inch / 80mm Option */}
+                  <label className={`pc-size-card ${printerSettings.invoiceSize === '3inch' ? 'selected' : ''}`}>
                     <input
                       type="radio"
                       name="invoiceSize"
@@ -898,60 +964,144 @@ const BusinessSettings: React.FC = () => {
                       onChange={e => setPrinterSettings({ ...printerSettings, invoiceSize: e.target.value })}
                       style={{ display: 'none' }}
                     />
-                    <Receipt size={32} style={{ color: printerSettings.invoiceSize === '3inch' ? 'var(--primary)' : 'var(--gray-400)' }} />
-                    <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>3 Inch</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>80mm paper</span>
+                    <div className="pc-size-card-header">
+                      <div className="pc-size-radio">
+                        <span className="pc-radio-dot">
+                          <Check size={11} strokeWidth={3.5} />
+                        </span>
+                      </div>
+                      <div className="pc-size-meta">
+                        <div className="pc-size-title-row">
+                          <span className="pc-size-title">3 Inch</span>
+                          <span className="pc-size-pill">80mm Roll</span>
+                          <span className="pc-recommended-badge">
+                            <Sparkles size={10} />
+                            Recommended
+                          </span>
+                        </div>
+                        <span className="pc-size-subtitle">Standard bill • Dine-in & Itemized GST</span>
+                      </div>
+                    </div>
+
+                    {/* Printer Slot & Realistic Emerging Paper */}
+                    <div className="pc-dispenser">
+                      <div className="pc-dispenser-slot">
+                        <div className="pc-slot-slit" />
+                      </div>
+                      <div className="pc-paper-wrap pc-paper-3inch">
+                        <div className="pc-mock-receipt">
+                          <div className="pc-rcpt-header">
+                            <span className="pc-rcpt-store">CAFE MARIO & RESTAURANT</span>
+                            <span className="pc-rcpt-subhead">Tax Invoice #INV-1042 • Table 12</span>
+                          </div>
+                          <div className="pc-rcpt-dash">--------------------------------</div>
+                          <div className="pc-rcpt-col-head">
+                            <span>ITEM</span>
+                            <span>QTY</span>
+                            <span>RATE</span>
+                            <span>AMT</span>
+                          </div>
+                          <div className="pc-rcpt-items">
+                            <div className="pc-rcpt-row-4col">
+                              <span>Paneer Tikka</span>
+                              <span>1</span>
+                              <span>280</span>
+                              <span>280.00</span>
+                            </div>
+                            <div className="pc-rcpt-row-4col">
+                              <span>Butter Naan</span>
+                              <span>2</span>
+                              <span>45</span>
+                              <span>90.00</span>
+                            </div>
+                            <div className="pc-rcpt-row-4col">
+                              <span>Fresh Lime</span>
+                              <span>2</span>
+                              <span>60</span>
+                              <span>120.00</span>
+                            </div>
+                          </div>
+                          <div className="pc-rcpt-dash">--------------------------------</div>
+                          <div className="pc-rcpt-subtotal-row">
+                            <span>Subtotal</span>
+                            <span>₹490.00</span>
+                          </div>
+                          <div className="pc-rcpt-subtotal-row">
+                            <span>GST (5%)</span>
+                            <span>₹24.50</span>
+                          </div>
+                          <div className="pc-rcpt-total-row">
+                            <span className="pc-rcpt-total-lbl">GRAND TOTAL</span>
+                            <span className="pc-rcpt-total-val">₹514.50</span>
+                          </div>
+                          <div className="pc-rcpt-cutter" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Feature Chips */}
+                    <div className="pc-size-features">
+                      <span className="pc-feat-chip">48 chars/line</span>
+                      <span className="pc-feat-chip">Itemized GST breakdown</span>
+                      <span className="pc-feat-chip">Full dine-in table</span>
+                    </div>
                   </label>
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={printerSettings.kotPrintEnabled}
-                    onChange={e => setPrinterSettings({ ...printerSettings, kotPrintEnabled: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>Enable KOT (Kitchen Order Ticket) Printing</span>
-                </label>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
-                  When enabled, KOT tickets will be printed automatically when orders are placed.
-                </p>
+              {/* Features */}
+              <div className="form-group" style={{ marginTop: '1.75rem', marginBottom: 0 }}>
+                <div className="pc-section-label">
+                  <Zap size={13} />
+                  Features
+                </div>
+                <div className="pc-toggle-list">
+                  <label className={`pc-toggle-row ${printerSettings.kotPrintEnabled ? 'enabled' : ''}`}>
+                    {/* 1. Icon at first */}
+                    <div className="pc-icon-tile">
+                      <ChefHat size={20} />
+                    </div>
+                    {/* 2. Labels/texts in right side of icon */}
+                    <div className="pc-toggle-content">
+                      <div className="pc-toggle-title">KOT Printing</div>
+                      <div className="pc-toggle-desc">
+                        Kitchen order tickets print automatically when orders are placed
+                      </div>
+                    </div>
+                    {/* 3. Toggle switch at far right end */}
+                    <div className="pc-toggle-action">
+                      <input
+                        type="checkbox"
+                        checked={printerSettings.kotPrintEnabled}
+                        onChange={e => setPrinterSettings({ ...printerSettings, kotPrintEnabled: e.target.checked })}
+                      />
+                    </div>
+                  </label>
+                  <label className={`pc-toggle-row ${printerSettings.remoteBillingEnabled ? 'enabled' : ''}`}>
+                    {/* 1. Icon at first */}
+                    <div className="pc-icon-tile">
+                      <Wifi size={20} />
+                    </div>
+                    {/* 2. Labels/texts in right side of icon */}
+                    <div className="pc-toggle-content">
+                      <div className="pc-toggle-title">Remote Billing</div>
+                      <div className="pc-toggle-desc">
+                        Queue-based bill generation and printing
+                      </div>
+                    </div>
+                    {/* 3. Toggle switch at far right end */}
+                    <div className="pc-toggle-action">
+                      <input
+                        type="checkbox"
+                        id="remote-billing-toggle"
+                        checked={printerSettings.remoteBillingEnabled}
+                        onChange={e => setPrinterSettings({ ...printerSettings, remoteBillingEnabled: e.target.checked })}
+                      />
+                    </div>
+                  </label>
+                </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    id="remote-billing-toggle"
-                    checked={printerSettings.remoteBillingEnabled}
-                    onChange={e => setPrinterSettings({ ...printerSettings, remoteBillingEnabled: e.target.checked })}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>Remote Billing</span>
-                </label>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', marginTop: '0.5rem', marginLeft: '26px' }}>
-                  When enabled, queue-based bill generation and printing will be active.
-                </p>
-              </div>
-
-              <div style={{ 
-                padding: '1rem', 
-                background: 'var(--gray-50)', 
-                borderRadius: 'var(--radius)',
-                marginTop: '1.5rem'
-              }}>
-                <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>Finding Printer IDs Manually</h4>
-                <p style={{ fontSize: '0.875rem', color: 'var(--gray-600)', marginBottom: '0.5rem' }}>
-                  If your printer is not detected automatically, find the IDs manually:
-                </p>
-                <ul style={{ fontSize: '0.875rem', color: 'var(--gray-600)', paddingLeft: '1.5rem' }}>
-                  <li><strong>macOS:</strong> Run <code>system_profiler SPUSBDataType</code></li>
-                  <li><strong>Linux:</strong> Run <code>lsusb</code></li>
-                  <li><strong>Windows:</strong> Check Device Manager → Properties → Details → Hardware IDs</li>
-                </ul>
-              </div>
             </div>
             <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
               <button type="submit" className="btn btn-primary" disabled={isSaving}>
@@ -964,6 +1114,8 @@ const BusinessSettings: React.FC = () => {
       )}
 
       {activeTab === 'software-updates' && <SoftwareUpdates />}
+
+      {activeTab === 'support' && <StoreSupport storeId={currentStore.id} />}
     </div>
   );
 };

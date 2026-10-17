@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, Monitor, AlertCircle, Check, X, RefreshCw, ToggleLeft, ToggleRight, Calendar, Clock } from 'lucide-react';
+import { Smartphone, Monitor, AlertCircle, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import notify from '../utils/toast';
 
 interface AppUpdate {
   id: string;
@@ -21,7 +22,6 @@ const UpdateManagement: React.FC = () => {
   const [appUpdates, setAppUpdates] = useState<Record<string, AppUpdate>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -53,13 +53,12 @@ const UpdateManagement: React.FC = () => {
 
   const handleToggleUpdate = async (platform: string, currentEnabled: boolean) => {
     setIsToggling(platform);
-    setMessage('');
     setError('');
-    
+
     try {
       const update = appUpdates[platform];
       if (!update) {
-        setError('No update configuration found for this platform');
+        notify.error('No update configuration found for this platform');
         return;
       }
 
@@ -71,10 +70,10 @@ const UpdateManagement: React.FC = () => {
         releaseNotes: update.releaseNotes || ''
       });
 
-      setMessage(response.message || `Update ${!currentEnabled ? 'enabled' : 'disabled'} successfully`);
+      notify.success(response.message || `Update ${!currentEnabled ? 'enabled' : 'disabled'} successfully`);
       await loadUpdates();
     } catch (err: any) {
-      setError(err.message || 'Failed to toggle update status');
+      notify.error(err.message || 'Failed to toggle update status');
     } finally {
       setIsToggling(null);
     }
@@ -105,20 +104,6 @@ const UpdateManagement: React.FC = () => {
       {error && (
         <div className="error-message" style={{ marginBottom: '1rem' }}>
           {error}
-        </div>
-      )}
-
-      {message && (
-        <div className="success-message" style={{ marginBottom: '1rem' }}>
-          <Check size={16} />
-          <span>{message}</span>
-          <button 
-            className="btn btn-icon" 
-            onClick={() => setMessage('')}
-            style={{ marginLeft: 'auto' }}
-          >
-            <X size={16} />
-          </button>
         </div>
       )}
 

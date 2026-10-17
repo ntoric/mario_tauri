@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency } from '../utils/currency';
+import notify from '../utils/toast';
 import type { ExpenseCategory, Expense } from '../types';
 
 const PAGE_SIZE = 10;
@@ -110,8 +111,10 @@ const Expenses: React.FC = () => {
     try {
       if (editingExpense) {
         await updateExpense(editingExpense.id, expenseData);
+        notify.success(`Expense "${expenseData.title}" updated`);
       } else {
         await createExpense(expenseData);
+        notify.success(`Expense "${expenseData.title}" added`);
       }
       closeExpenseModal();
       setExpenseForm({ 
@@ -124,6 +127,8 @@ const Expenses: React.FC = () => {
         receiptNumber: '',
         vendor: '',
       });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save expense');
     } finally {
       setIsExpenseSubmitting(false);
     }
@@ -153,11 +158,15 @@ const Expenses: React.FC = () => {
     try {
       if (editingCategory) {
         await updateExpenseCategory(editingCategory.id, categoryData);
+        notify.success(`Category "${categoryData.name}" updated`);
       } else {
         await createExpenseCategory(categoryData);
+        notify.success(`Category "${categoryData.name}" created`);
       }
       closeExpenseCategoryModal();
       setCategoryForm({ name: '', description: '' });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save category');
     } finally {
       setIsCategorySubmitting(false);
     }
@@ -172,6 +181,9 @@ const Expenses: React.FC = () => {
       setLoadingExpenseId(id);
       try {
         await deleteExpense(id);
+        notify.success('Expense deleted');
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete expense');
       } finally {
         setLoadingExpenseId(null);
       }
@@ -187,6 +199,9 @@ const Expenses: React.FC = () => {
       setLoadingCategoryId(id);
       try {
         await deleteExpenseCategory(id);
+        notify.success('Category deleted');
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete category');
       } finally {
         setLoadingCategoryId(null);
       }

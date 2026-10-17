@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Lock, Eye, EyeOff, Check } from 'lucide-react';
+import { X, Lock, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
+import notify from '../utils/toast';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -15,14 +16,12 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
 
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -48,14 +47,11 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     setIsLoading(true);
     try {
       await api.changePassword(currentPassword, newPassword);
-      setSuccess('Password changed successfully!');
+      notify.success('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setTimeout(() => {
-        onClose();
-        setSuccess('');
-      }, 2000);
+      onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to change password');
     } finally {
@@ -68,7 +64,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     setNewPassword('');
     setConfirmPassword('');
     setError('');
-    setSuccess('');
     onClose();
   };
 
@@ -94,23 +89,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
                 fontSize: '0.9rem'
               }}>
                 {error}
-              </div>
-            )}
-
-            {success && (
-              <div style={{
-                padding: '0.75rem',
-                background: 'rgba(43,165,74, 0.1)',
-                color: 'var(--success)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '1rem',
-                fontSize: '0.9rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                <Check size={16} />
-                {success}
               </div>
             )}
 

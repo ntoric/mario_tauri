@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, X, Building2, MapPin, Phone, Receipt, Loader2, Pow
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { Button } from '../components/ui/Button';
+import notify from '../utils/toast';
 
 const Stores: React.FC = () => {
   const { stores, createStore, updateStore, deleteStore, switchStore, fetchStores } = useDataStore();
@@ -54,6 +55,7 @@ const Stores: React.FC = () => {
     try {
       if (editingStore) {
         await updateStore(editingStore.id, form);
+        notify.success(`Store "${form.name}" updated`);
       } else {
         const newStore = await createStore(form);
         // Auto-switch to new store for superadmin/business owner
@@ -61,8 +63,11 @@ const Stores: React.FC = () => {
           await switchStore(newStore.id);
           setCurrentStore(newStore.id);
         }
+        notify.success(`Store "${form.name}" created`);
       }
       setShowModal(false);
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save store');
     } finally {
       setIsSubmitting(false);
     }
@@ -73,6 +78,9 @@ const Stores: React.FC = () => {
       setLoadingStoreId(id);
       try {
         await deleteStore(id);
+        notify.success('Store deleted');
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete store');
       } finally {
         setLoadingStoreId(null);
       }
@@ -86,6 +94,9 @@ const Stores: React.FC = () => {
     setLoadingStoreId(store.id);
     try {
       await updateStore(store.id, { isActive: !store.isActive });
+      notify.success(`Store "${store.name}" ${store.isActive ? 'disabled' : 'enabled'}`);
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to update store');
     } finally {
       setLoadingStoreId(null);
     }

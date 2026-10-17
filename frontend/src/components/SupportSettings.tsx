@@ -3,6 +3,7 @@ import { Save, Mail, Phone, MessageCircle, Loader2, AlertCircle } from 'lucide-r
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import notify from '../utils/toast';
 
 interface SupportConfig {
   email: string;
@@ -21,7 +22,6 @@ const SupportSettings: React.FC = () => {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -55,7 +55,6 @@ const SupportSettings: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setSaveMessage('');
     setError('');
 
     try {
@@ -69,14 +68,13 @@ const SupportSettings: React.FC = () => {
       });
 
       if (response.ok) {
-        setSaveMessage('Support configuration saved successfully!');
-        setTimeout(() => setSaveMessage(''), 3000);
+        notify.success('Support configuration saved');
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to save configuration');
+        notify.error(data.error || 'Failed to save configuration');
       }
     } catch (err) {
-      setError('Failed to save configuration. Please try again.');
+      notify.error('Failed to save configuration. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -109,22 +107,6 @@ const SupportSettings: React.FC = () => {
 
   return (
     <div>
-      {saveMessage && (
-        <div style={{ 
-          padding: '1rem', 
-          background: 'rgba(43,165,74, 0.1)',
-          color: 'var(--success)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}>
-          <AlertCircle size={18} />
-          {saveMessage}
-        </div>
-      )}
-
       {error && config.email && (
         <div style={{ 
           padding: '1rem', 

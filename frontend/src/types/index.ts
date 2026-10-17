@@ -220,6 +220,73 @@ export interface ExpenseSummary {
   expenseCount: number;
 }
 
+export interface ExpenseCategoryReportResult {
+  rows: ExpenseReport[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalAmount: number;
+  totalCount: number;
+  chartRows: ExpenseReport[];
+}
+
+export interface ExpenseDateReportResult {
+  rows: ExpenseSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalAmount: number;
+  totalCount: number;
+  chartRows: ExpenseSummary[];
+}
+
+export interface RevenueEntriesResult {
+  rows: Bill[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ExpenseEntriesResult {
+  rows: Expense[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type SupportTicketCategory = 'general' | 'bug' | 'billing' | 'feature' | 'account' | 'other';
+export type SupportTicketPriority = 'low' | 'medium' | 'high';
+
+export interface SupportTicket {
+  id: string;
+  storeId: string;
+  storeName?: string;
+  storeBranch?: string;
+  storePhone?: string;
+  storeLocation?: string;
+  createdBy: string;
+  createdByName?: string;
+  subject: string;
+  category: string;
+  priority: string;
+  status: SupportTicketStatus;
+  messageCount: number;
+  lastMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName?: string;
+  senderRole: string;
+  message: string;
+  createdAt: string;
+}
+
 export interface RevenueReport {
   periodStart: string;
   periodEnd: string;

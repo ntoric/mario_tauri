@@ -201,6 +201,14 @@ func main() {
 		// Support Config (POST requires superadmin)
 		r.Post("/api/support-config", h.UpdateSupportConfig)
 
+		// Support Tickets — store users raise/manage their own; superadmin sees all
+		r.Get("/api/support/tickets", h.GetSupportTickets)
+		r.Post("/api/support/tickets", h.CreateSupportTicket)
+		r.Get("/api/support/tickets/{id}", h.GetSupportTicket)
+		r.Post("/api/support/tickets/{id}/messages", h.CreateSupportMessage)
+		r.Patch("/api/support/tickets/{id}/status", h.UpdateSupportTicketStatus)
+		r.Get("/api/admin/support/tickets", h.GetAllSupportTickets)
+
 		// Update Repo Config (superadmin only)
 		r.Get("/api/system/update-config", h.GetUpdateRepoConfig)
 		r.Post("/api/system/update-config", h.UpdateUpdateRepoConfig)
@@ -232,6 +240,14 @@ func main() {
 		// Revenue Report
 		r.Get("/api/reports/revenue", h.GetRevenueReport)
 		r.Get("/api/reports/item-profit", h.GetItemProfitReport)
+		r.Get("/api/reports/top-selling-items", h.GetTopSellingItems)
+		r.Get("/api/reports/top-selling-categories", h.GetTopSellingCategories)
+		r.Get("/api/reports/sales-profit", h.GetSalesProfitReport)
+		r.Get("/api/reports/menu-profit", h.GetMenuProfitReport)
+		r.Get("/api/reports/expenses-by-category", h.GetExpenseCategoryReport)
+		r.Get("/api/reports/expenses-by-date", h.GetExpenseDateReport)
+		r.Get("/api/reports/revenue-entries", h.GetRevenueEntries)
+		r.Get("/api/reports/expense-entries", h.GetExpenseEntries)
 	})
 
 	// 6. Start HTTP Server with Graceful Shutdown

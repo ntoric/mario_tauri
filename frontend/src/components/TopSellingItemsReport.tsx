@@ -1,134 +1,117 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BarChart2, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
-import { useDataStore, useAuthStore } from '../stores';
+import { useAuthStore } from '../stores';
+import { api } from '../services/api';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
+import notify from '../utils/toast';
+import Pagination from './ui/Pagination';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type SortField = 'item' | 'date' | 'count' | 'revenue';
 type SortDir = 'asc' | 'desc';
 
-interface ItemDateRow {
+interface TopSellingItemRow {
   itemId: string;
   item: string;
   category: string;
   date: string;
-  dateObj: Date;
   count: number;
   revenue: number;
 }
 
+interface TopSellingItemsResponse {
+  rows: TopSellingItemRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  uniqueItems: number;
+  totalCount: number;
+  totalRevenue: number;
+}
+
+const formatLocalDate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const TopSellingItemsReport: React.FC = () => {
-  const { orders, bills, items, fetchOrders, fetchBills } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const [dateRange, setDateRange] = useState<DateRange>('month');
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('count');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-
-  useEffect(() => {
-    fetchOrders();
-    fetchBills(true);
-  }, [fetchOrders, fetchBills, currentStoreId]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [report, setReport] = useState<TopSellingItemsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const seq = useRef(0);
 
   useReportPageHeader({
     title: 'Top Selling Items',
     subtitle: 'Detailed item-wise sales report',
   });
 
-  const getRangeStart = (range: DateRange): Date => {
+  // Debounce the search box so each keystroke doesn't hit the server.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const getStartDate = (range: DateRange): string | undefined => {
     const d = new Date();
-    if (range === 'today') {
-      d.setHours(0, 0, 0, 0);
-    } else if (range === 'week') {
+    if (range === 'week') {
       d.setDate(d.getDate() - 6);
-      d.setHours(0, 0, 0, 0);
     } else if (range === 'month') {
       d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-    } else {
-      return new Date(0);
+    } else if (range === 'all') {
+      return undefined;
     }
-    return d;
+    return formatLocalDate(d);
   };
 
-  const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange]);
-
-  const filteredBills = useMemo(
-    () => bills.filter(b => new Date(b.generatedAt) >= rangeStart),
-    [bills, rangeStart]
-  );
-
-  const completedOrders = useMemo(
-    () => orders.filter(o => new Date(o.createdAt) >= rangeStart && o.status === 'completed'),
-    [orders, rangeStart]
-  );
-
-  const rows: ItemDateRow[] = useMemo(() => {
-    const map: Record<string, ItemDateRow> = {};
-    const formatDate = (d: Date) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const processOrderItems = (orderItems: typeof filteredBills[0]['items'], billDate: string) => {
-      const dateStr = formatDate(new Date(billDate));
-      const dateObj = new Date(dateStr);
-      orderItems?.forEach(oi => {
-        const id = oi.itemId;
-        const fullItem = items.find(it => it.id === id);
-        const name = oi.item?.name || fullItem?.name || id;
-        const category = fullItem?.categoryName || oi.item?.categoryName || 'Uncategorised';
-        const key = `${id}__${dateStr}`;
-        if (!map[key]) {
-          map[key] = { itemId: id, item: name, category, date: dateStr, dateObj, count: 0, revenue: 0 };
-        }
-        map[key].count += oi.quantity;
-        map[key].revenue += oi.quantity * (oi.item?.price || fullItem?.price || 0);
+  useEffect(() => {
+    if (!currentStoreId) return;
+    const id = ++seq.current;
+    setLoading(true);
+    api.getTopSellingItems(currentStoreId, {
+      startDate: getStartDate(dateRange),
+      search: searchQuery || undefined,
+      sort: sortField,
+      dir: sortDir,
+      page,
+      pageSize,
+    })
+      .then(res => {
+        if (id === seq.current) setReport(res);
+      })
+      .catch(err => {
+        if (id === seq.current) console.error('Failed to fetch top selling items:', err);
+      })
+      .finally(() => {
+        if (id === seq.current) setLoading(false);
       });
-    };
+  }, [currentStoreId, dateRange, searchQuery, sortField, sortDir, page, pageSize]);
 
-    filteredBills.forEach(bill => processOrderItems(bill.items, bill.generatedAt));
+  const rows = report?.rows ?? [];
+  const total = report?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-    if (Object.keys(map).length === 0) {
-      completedOrders.forEach(order => processOrderItems(order.items, order.createdAt));
-    }
-
-    return Object.values(map);
-  }, [filteredBills, completedOrders, items]);
-
-  const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return rows;
-    const q = searchQuery.toLowerCase();
-    return rows.filter(r => r.item.toLowerCase().includes(q) || r.category.toLowerCase().includes(q));
-  }, [rows, searchQuery]);
-
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case 'item': cmp = a.item.localeCompare(b.item); break;
-        case 'date': cmp = a.dateObj.getTime() - b.dateObj.getTime(); break;
-        case 'count': cmp = a.count - b.count; break;
-        case 'revenue': cmp = a.revenue - b.revenue; break;
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return arr;
-  }, [filtered, sortField, sortDir]);
-
-  const totals = useMemo(() => {
-    return filtered.reduce(
-      (acc, r) => ({ count: acc.count + r.count, revenue: acc.revenue + r.revenue }),
-      { count: 0, revenue: 0 }
-    );
-  }, [filtered]);
+  // Clamp the page if the filtered set shrank underneath us.
+  useEffect(() => {
+    if (total > 0 && page > totalPages) setPage(totalPages);
+  }, [total, page, totalPages]);
 
   const handleSort = (field: SortField) => {
+    setPage(1);
     if (sortField === field) {
       setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -143,101 +126,36 @@ const TopSellingItemsReport: React.FC = () => {
   };
 
   const handleExportCSV = async () => {
-    if (sorted.length === 0) {
-      alert('No data to export');
-      return;
-    }
-    
-    // Show loading state
-    const exportButton = document.querySelector('[title="Export CSV"]') as HTMLButtonElement;
-    const originalContent = exportButton?.innerHTML;
-    if (exportButton) {
-      exportButton.disabled = true;
-      exportButton.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Exporting...';
-    }
-    
+    if (!currentStoreId) return;
+    setExporting(true);
     try {
+      const res: TopSellingItemsResponse = await api.getTopSellingItems(currentStoreId, {
+        startDate: getStartDate(dateRange),
+        search: searchQuery || undefined,
+        sort: sortField,
+        dir: sortDir,
+        all: true,
+      });
+      const exportRows = res.rows ?? [];
+      if (exportRows.length === 0) {
+        notify.warning('No data to export');
+        return;
+      }
+
       const header = 'Item,Category,Date,Count,Revenue\n';
-      const csvRows = sorted.map(r =>
+      const csvRows = exportRows.map(r =>
         `"${r.item}","${r.category}","${r.date}",${r.count},${r.revenue.toFixed(2)}`
       );
       const csv = header + csvRows.join('\n');
-      
-      // Export the file
+
       const success = await saveCSVWithDialog(csv, `top-selling-items-${dateRange}.csv`);
-      
-      if (success) {
-        // Show success notification
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #2ba54a;
-          color: white;
-          padding: 1rem 1.5rem;
-          border-radius: 8px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-          z-index: 1000;
-          font-weight: 500;
-          animation: slideIn 0.3s ease-out;
-        `;
-        notification.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1.2rem;">✓</span>
-            <span>Export completed successfully!</span>
-          </div>
-        `;
-        document.body.appendChild(notification);
-        
-        // Remove notification after 3 seconds
-        setTimeout(() => {
-          notification.style.animation = 'slideOut 0.3s ease-in';
-          setTimeout(() => {
-            document.body.removeChild(notification);
-          }, 300);
-        }, 3000);
-      } else {
-        throw new Error('Export failed');
-      }
+      if (!success) throw new Error('Export failed');
+      notify.success('Export completed successfully');
     } catch (error) {
       console.error('Export failed:', error);
-      // Show error notification
-      const notification = document.createElement('div');
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #e53935;
-        color: white;
-        padding: 1rem 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        z-index: 1000;
-        font-weight: 500;
-        animation: slideIn 0.3s ease-out;
-      `;
-      notification.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="font-size: 1.2rem;">✗</span>
-          <span>Export failed. Please try again.</span>
-        </div>
-      `;
-      document.body.appendChild(notification);
-      
-      // Remove notification after 3 seconds
-      setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 300);
-      }, 3000);
+      notify.error('Export failed. Please try again.');
     } finally {
-      // Restore button state
-      if (exportButton && originalContent) {
-        exportButton.disabled = false;
-        exportButton.innerHTML = originalContent;
-      }
+      setExporting(false);
     }
   };
 
@@ -257,7 +175,7 @@ const TopSellingItemsReport: React.FC = () => {
             <button
               key={r}
               className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
-              onClick={() => setDateRange(r)}
+              onClick={() => { setDateRange(r); setPage(1); }}
             >
               {rangeLabel[r]}
             </button>
@@ -268,15 +186,26 @@ const TopSellingItemsReport: React.FC = () => {
           <input
             type="text"
             placeholder="Search item or category..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="form-input"
             style={{ paddingLeft: '2.25rem', width: '100%' }}
           />
         </div>
-        <button className="btn btn-outline btn-sm" onClick={handleExportCSV} title="Export CSV">
+        <select
+          className="form-input"
+          value={pageSize}
+          onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+          style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
+          title="Rows per page"
+        >
+          {[10, 25, 50, 100].map(n => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </select>
+        <button className="btn btn-outline btn-sm" onClick={handleExportCSV} disabled={exporting} title="Export CSV">
           <Download size={15} style={{ marginRight: '0.35rem' }} />
-          Export
+          {exporting ? 'Exporting...' : 'Export'}
         </button>
       </div>
 
@@ -285,21 +214,21 @@ const TopSellingItemsReport: React.FC = () => {
         <div className="stat-card">
           <div className="stat-icon primary"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{new Set(filtered.map(r => r.itemId)).size}</div>
+            <div className="stat-value">{report?.uniqueItems ?? 0}</div>
             <div className="stat-label">Unique Items Sold</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon success"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{totals.count}</div>
+            <div className="stat-value">{report?.totalCount ?? 0}</div>
             <div className="stat-label">Total Quantity Sold</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon warning"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(totals.revenue)}</div>
+            <div className="stat-value">{formatCurrency(report?.totalRevenue ?? 0)}</div>
             <div className="stat-label">Total Revenue</div>
           </div>
         </div>
@@ -312,61 +241,74 @@ const TopSellingItemsReport: React.FC = () => {
             Item Sales — {rangeLabel[dateRange]}
           </h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--gray-500)' }}>
-            {sorted.length} record{sorted.length !== 1 ? 's' : ''}
+            {total} record{total !== 1 ? 's' : ''}
           </span>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
-          {sorted.length === 0 ? (
+          {report === null && loading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
+              <p style={{ fontSize: '0.9rem' }}>Loading report…</p>
+            </div>
+          ) : !loading && total === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
               <BarChart2 size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
               <p style={{ fontSize: '0.9rem' }}>No item sales data for this period</p>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--gray-200)' }}>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('item')}>
-                      Item <SortIcon field="item" />
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      Category
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('date')}>
-                      Date <SortIcon field="date" />
-                    </th>
-                    <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('count')}>
-                      Count <SortIcon field="count" />
-                    </th>
-                    <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                        onClick={() => handleSort('revenue')}>
-                      Revenue <SortIcon field="revenue" />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((row, idx) => (
-                    <tr key={`${row.itemId}-${row.date}`} style={{ borderBottom: '1px solid var(--gray-200)', background: idx % 2 === 0 ? undefined : 'var(--gray-50, rgba(0,0,0,0.02))' }}>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-800)', fontWeight: 500 }}>{row.item}</td>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-600)' }}>{row.category}</td>
-                      <td style={{ padding: '0.75rem', color: 'var(--gray-700)' }}>{row.date}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--gray-700)', fontWeight: 500 }}>{row.count}</td>
-                      <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(row.revenue)}</td>
+            <>
+              <div style={{ overflowX: 'auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--gray-200)' }}>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                          onClick={() => handleSort('item')}>
+                        Item <SortIcon field="item" />
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        Category
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                          onClick={() => handleSort('date')}>
+                        Date <SortIcon field="date" />
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                          onClick={() => handleSort('count')}>
+                        Count <SortIcon field="count" />
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '0.75rem', color: 'var(--gray-600)', fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                          onClick={() => handleSort('revenue')}>
+                        Revenue <SortIcon field="revenue" />
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid var(--gray-300)', background: 'var(--gray-100, rgba(0,0,0,0.04))' }}>
-                    <td colSpan={3} style={{ padding: '0.75rem', fontWeight: 700, color: 'var(--gray-800)' }}>Total</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--gray-800)' }}>{totals.count}</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(totals.revenue)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, idx) => (
+                      <tr key={`${row.itemId}-${row.date}`} style={{ borderBottom: '1px solid var(--gray-200)', background: idx % 2 === 0 ? undefined : 'var(--gray-50, rgba(0,0,0,0.02))' }}>
+                        <td style={{ padding: '0.75rem', color: 'var(--gray-800)', fontWeight: 500 }}>{row.item}</td>
+                        <td style={{ padding: '0.75rem', color: 'var(--gray-600)' }}>{row.category}</td>
+                        <td style={{ padding: '0.75rem', color: 'var(--gray-700)' }}>{row.date}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--gray-700)', fontWeight: 500 }}>{row.count}</td>
+                        <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(row.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gray-300)', background: 'var(--gray-100, rgba(0,0,0,0.04))' }}>
+                      <td colSpan={3} style={{ padding: '0.75rem', fontWeight: 700, color: 'var(--gray-800)' }}>Total</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--gray-800)' }}>{report?.totalCount ?? 0}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(report?.totalRevenue ?? 0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useDataStore } from '../stores';
 import { useAuthStore } from '../stores';
+import { useUIStore, ColorMode } from '../stores';
 
 export interface ThemePreset {
   id: string;
@@ -27,6 +28,9 @@ const DEFAULT_THEME = THEME_PRESETS[0];
 
 interface ThemeContextType {
   currentThemeColor: string | undefined;
+  colorMode: ColorMode;
+  effectiveColorMode: 'light' | 'dark';
+  isDark: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -59,8 +63,13 @@ export function applyThemeColor(colorHex: string | undefined) {
     root.style.removeProperty('--primary');
     root.style.removeProperty('--primary-dark');
     root.style.removeProperty('--primary-light');
+    root.style.removeProperty('--primary-50');
+    root.style.removeProperty('--primary-100');
     root.style.removeProperty('--shadow-3d-primary');
     root.style.removeProperty('--shadow-3d-primary-lg');
+    root.style.removeProperty('--sidebar-bg-top');
+    root.style.removeProperty('--sidebar-bg-mid');
+    root.style.removeProperty('--sidebar-bg-bottom');
     return;
   }
 
@@ -74,10 +83,29 @@ export function applyThemeColor(colorHex: string | undefined) {
   root.style.setProperty('--primary', primary);
   root.style.setProperty('--primary-dark', primaryDark);
   root.style.setProperty('--primary-light', primaryLight);
+
+  // Tints: light pastels in light mode, translucent brand glows in dark mode
+  if (root.dataset.theme === 'dark') {
+    root.style.setProperty('--primary-50', `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`);
+    root.style.setProperty('--primary-100', `rgba(${rgb.r},${rgb.g},${rgb.b},0.24)`);
+  } else {
+    root.style.setProperty('--primary-50', shadeColor(colorHex, 92));
+    root.style.setProperty('--primary-100', shadeColor(colorHex, 82));
+  }
   root.style.setProperty('--shadow-3d-primary',
     `0 4px 12px rgba(${rgb.r},${rgb.g},${rgb.b},0.3), 0 2px 6px rgba(${rgb.r},${rgb.g},${rgb.b},0.2), 0 1px 3px rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`);
   root.style.setProperty('--shadow-3d-primary-lg',
     `0 8px 24px rgba(${rgb.r},${rgb.g},${rgb.b},0.35), 0 4px 12px rgba(${rgb.r},${rgb.g},${rgb.b},0.25), 0 2px 6px rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`);
+
+  const sidebarStops: Array<[string, number]> = [
+    ['--sidebar-bg-top', -55],
+    ['--sidebar-bg-mid', -70],
+    ['--sidebar-bg-bottom', -82],
+  ];
+  sidebarStops.forEach(([name, percent]) => {
+    const shaded = hexToRgb(shadeColor(colorHex, percent));
+    if (shaded) root.style.setProperty(name, `${shaded.r}, ${shaded.g}, ${shaded.b}`);
+  });
 }
 
 export function getThemePresetById(id: string): ThemePreset | undefined {
@@ -87,16 +115,39 @@ export function getThemePresetById(id: string): ThemePreset | undefined {
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const stores = useDataStore((state) => state.stores);
   const currentStoreId = useAuthStore((state) => state.currentStoreId);
+  const colorMode = useUIStore((state) => state.colorMode);
+  const [systemDark, setSystemDark] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
 
   const currentStore = stores.find(s => s.id === currentStoreId);
   const themeColor = currentStore?.themeColor;
 
+  // Track OS preference so 'system' mode reacts to changes
   useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const effectiveColorMode: 'light' | 'dark' =
+    colorMode === 'system' ? (systemDark ? 'dark' : 'light') : colorMode;
+
+  useEffect(() => {
+    // The DOM attribute is applied by uiStore (also on login/app boot);
+    // set it again here defensively, then re-apply theme-dependent vars.
+    document.documentElement.dataset.theme = effectiveColorMode;
     applyThemeColor(themeColor);
-  }, [themeColor]);
+  }, [themeColor, effectiveColorMode]);
 
   return (
-    <ThemeContext.Provider value={{ currentThemeColor: themeColor }}>
+    <ThemeContext.Provider value={{
+      currentThemeColor: themeColor,
+      colorMode,
+      effectiveColorMode,
+      isDark: effectiveColorMode === 'dark',
+    }}>
       {children}
     </ThemeContext.Provider>
   );

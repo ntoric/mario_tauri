@@ -98,7 +98,7 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 10000,
   },
   card: {
-    background: '#fff',
+    background: 'var(--surface)',
     borderRadius: '12px',
     padding: '32px',
     textAlign: 'center',
@@ -110,12 +110,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   text: {
     margin: '0 0 16px',
-    color: '#666',
+    color: 'var(--gray-600)',
   },
   spinner: {
     width: '32px',
     height: '32px',
-    border: '3px solid #e0e0e0',
+    border: '3px solid var(--gray-300)',
     borderTopColor: '#4f46e5',
     borderRadius: '50%',
     margin: '0 auto',
@@ -158,7 +158,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   btnPrimary: {
-    background: '#fff',
+    background: 'var(--light)',
     color: '#4f46e5',
     border: 'none',
     borderRadius: '6px',
@@ -206,7 +206,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   progressFill: {
     height: '100%',
-    background: '#fff',
+    background: 'var(--light)',
     borderRadius: '3px',
     transition: 'width 0.3s ease',
   },

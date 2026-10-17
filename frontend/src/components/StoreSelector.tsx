@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Building2, ChevronDown, Check, Store } from 'lucide-react';
+import { ChevronDown, Check } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 
 const StoreSelector: React.FC = () => {
@@ -36,16 +36,12 @@ const StoreSelector: React.FC = () => {
   if (!canSwitch || stores.length <= 1) {
     return (
       <div className="store-selector-readonly">
-        {currentStore?.logoUrl ? (
-          <img
-            src={currentStore.logoUrl}
-            alt={currentStore.name}
-            style={{ width: '20px', height: '20px', objectFit: 'contain', borderRadius: '4px' }}
-          />
-        ) : (
-          <Store size={18} />
-        )}
-                <span>{currentStore?.name || 'Select Store'}</span>
+        <img
+          src={currentStore?.logoUrl || '/logo.png'}
+          alt={currentStore?.name || 'Store logo'}
+          style={{ width: '20px', height: '20px', objectFit: 'contain', borderRadius: '4px' }}
+        />
+        <span>{currentStore?.name || 'Select Store'}</span>
       </div>
     );
   }
@@ -56,16 +52,12 @@ const StoreSelector: React.FC = () => {
         className="store-selector-trigger"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <div className="store-selector-icon">
-          {currentStore?.logoUrl ? (
-            <img
-              src={currentStore.logoUrl}
-              alt={currentStore.name}
-              style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '4px' }}
-            />
-          ) : (
-            <Building2 size={18} />
-          )}
+        <div className="store-selector-icon" style={{ background: 'white', padding: '3px' }}>
+          <img
+            src={currentStore?.logoUrl || '/logo.png'}
+            alt={currentStore?.name || 'Store logo'}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '4px' }}
+          />
         </div>
         <div className="store-selector-info">
           <span className="store-selector-label">Current Store</span>
@@ -89,16 +81,12 @@ const StoreSelector: React.FC = () => {
                 className={`store-option ${store.id === currentStoreId ? 'active' : ''}`}
                 onClick={() => handleSwitchStore(store.id)}
               >
-                <div className="store-option-icon">
-                  {store.logoUrl ? (
-                    <img
-                      src={store.logoUrl}
-                      alt={store.name}
-                      style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }}
-                    />
-                  ) : (
-                    <Store size={18} />
-                  )}
+                <div className="store-option-icon" style={{ background: 'white', padding: '4px' }}>
+                  <img
+                    src={store.logoUrl || '/logo.png'}
+                    alt={store.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '4px' }}
+                  />
                 </div>
                 <div className="store-option-info">
                   <div className="store-option-name">{store.name}</div>

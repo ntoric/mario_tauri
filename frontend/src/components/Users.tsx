@@ -6,6 +6,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import Pagination from '../components/ui/Pagination';
+import notify from '../utils/toast';
 
 const PAGE_SIZE = 10;
 
@@ -40,7 +41,7 @@ const Users: React.FC = () => {
   const [passwordUser, setPasswordUser] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
+
   
   // Loading states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -121,10 +122,10 @@ const Users: React.FC = () => {
         const updateData = { ...userData };
         delete (updateData as any).password;
         await updateUser(editingUser.id, updateData);
+        notify.success(`User "${form.name || form.username}" updated`);
       } else {
-        console.log('Creating user with data:', userData);
         await createUser(userData);
-        console.log('User created successfully');
+        notify.success(`User "${form.name || form.username}" created`);
       }
       setShowModal(false);
       setForm({ username: '', password: '', name: '', email: '', role: 'staff', storeId: '', storeIds: [] });
@@ -140,7 +141,6 @@ const Users: React.FC = () => {
     setPasswordUser(user);
     setPasswordForm({ password: '', confirmPassword: '' });
     setPasswordError('');
-    setPasswordSuccess('');
     setShowPassword(false);
     setShowPasswordModal(true);
   };
@@ -148,7 +148,6 @@ const Users: React.FC = () => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
-    setPasswordSuccess('');
 
     if (passwordForm.password.length < 6) {
       setPasswordError('Password must be at least 6 characters');
@@ -163,11 +162,9 @@ const Users: React.FC = () => {
     setIsPasswordSubmitting(true);
     try {
       await resetPassword(passwordUser.id, passwordForm.password);
-      setPasswordSuccess(`Password for ${passwordUser.name} has been reset successfully`);
+      notify.success(`Password reset for ${passwordUser.name}`);
       setPasswordForm({ password: '', confirmPassword: '' });
-      setTimeout(() => {
-        setShowPasswordModal(false);
-      }, 2000);
+      setShowPasswordModal(false);
     } catch (err: any) {
       setPasswordError(err.message || 'Failed to reset password');
     } finally {
@@ -194,6 +191,9 @@ const Users: React.FC = () => {
       setLoadingUserId(user.id);
       try {
         await deleteUser(user.id);
+        notify.success(`User "${user.name}" deleted`);
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete user');
       } finally {
         setLoadingUserId(null);
       }
@@ -213,6 +213,9 @@ const Users: React.FC = () => {
       setLoadingUserId(user.id);
       try {
         await updateUser(user.id, { isActive: !user.isActive });
+        notify.success(`User "${user.name}" ${user.isActive ? 'disabled' : 'enabled'}`);
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to update user');
       } finally {
         setLoadingUserId(null);
       }
@@ -442,7 +445,7 @@ const Users: React.FC = () => {
                     <label>Assigned Stores</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
                       {stores.map(store => (
-                        <label key={store.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.5rem', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius)', cursor: 'pointer' }}>
+                        <label key={store.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius)', cursor: 'pointer' }}>
                           <input
                             type="checkbox"
                             checked={form.storeIds.includes(store.id)}
@@ -545,19 +548,6 @@ const Users: React.FC = () => {
                     fontSize: '0.9rem'
                   }}>
                     {passwordError}
-                  </div>
-                )}
-
-                {passwordSuccess && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(43,165,74, 0.1)',
-                    color: 'var(--success)',
-                    borderRadius: 'var(--radius)',
-                    marginBottom: '1rem',
-                    fontSize: '0.9rem'
-                  }}>
-                    {passwordSuccess}
                   </div>
                 )}
 

@@ -449,6 +449,49 @@ class ApiService {
     return result.invoiceNo;
   }
 
+  // Support Tickets — store users raise tickets for their store
+  async getSupportTickets(storeId: string) {
+    return this.fetch(`/support/tickets?storeId=${storeId}`);
+  }
+
+  async createSupportTicket(data: {
+    storeId: string;
+    subject: string;
+    category: string;
+    priority: string;
+    message: string;
+  }) {
+    return this.fetch('/support/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSupportTicket(id: string) {
+    return this.fetch(`/support/tickets/${id}`);
+  }
+
+  async replySupportTicket(id: string, message: string) {
+    return this.fetch(`/support/tickets/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  // Support Tickets — superadmin inbox across all stores
+  async getAllSupportTickets(status?: string) {
+    let url = '/admin/support/tickets';
+    if (status && status !== 'all') url += `?status=${status}`;
+    return this.fetch(url);
+  }
+
+  async updateSupportTicketStatus(id: string, status: string) {
+    return this.fetch(`/support/tickets/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
   // System Reset (superadmin only)
   async getSystemStats() {
     return this.fetch('/system/stats');
@@ -634,12 +677,189 @@ class ApiService {
     return this.fetch(url);
   }
 
+  // Expense Reports (server-side paginated)
+  async getExpenseCategoryReport(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/expenses-by-category?${qs.toString()}`);
+  }
+
+  async getExpenseDateReport(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/expenses-by-date?${qs.toString()}`);
+  }
+
   // Revenue Report
-  async getRevenueReport(storeId: string, startDate?: string, endDate?: string) {
+  async getRevenueReport(storeId: string, startDate?: string, endDate?: string, summaryOnly?: boolean) {
     let url = `/reports/revenue?storeId=${storeId}`;
     if (startDate) url += `&startDate=${startDate}`;
     if (endDate) url += `&endDate=${endDate}`;
+    if (summaryOnly) url += `&summaryOnly=true`;
     return this.fetch(url);
+  }
+
+  // Profit Report entries (server-side paginated)
+  async getRevenueEntries(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/revenue-entries?${qs.toString()}`);
+  }
+
+  async getExpenseEntries(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/expense-entries?${qs.toString()}`);
+  }
+
+  // Top Selling Items Report (server-side paginated)
+  async getTopSellingItems(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/top-selling-items?${qs.toString()}`);
+  }
+
+  // Top Selling Categories Report (server-side paginated)
+  async getTopSellingCategories(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/top-selling-categories?${qs.toString()}`);
+  }
+
+  // Sales-Based Profit Report (server-side paginated)
+  async getSalesProfitReport(storeId: string, params: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/sales-profit?${qs.toString()}`);
+  }
+
+  // Menu Item Profit Breakdown (server-side paginated)
+  async getMenuProfitReport(storeId: string, params: {
+    search?: string;
+    sort?: string;
+    dir?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+    all?: boolean;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.search) qs.set('search', params.search);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.dir) qs.set('dir', params.dir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.all) qs.set('all', 'true');
+    return this.fetch(`/reports/menu-profit?${qs.toString()}`);
   }
 
 }

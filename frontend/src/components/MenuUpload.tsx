@@ -7,6 +7,7 @@ import { useAuthStore, useDataStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { cache, cacheKeys } from '../utils/cache';
+import notify from '../utils/toast';
 import type { Store, Category, Item } from '../types';
 
 // ---- Types matching the backend standardized menu format ----
@@ -164,11 +165,11 @@ const MenuUpload: React.FC = () => {
       const isImage = file.type.startsWith('image/');
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
       if (!isImage && !isPdf) {
-        setError('Please upload image (PNG/JPG) or PDF files only.');
+        notify.warning('Please upload image (PNG/JPG) or PDF files only.');
         continue;
       }
       if (file.size > 20 * 1024 * 1024) {
-        setError(`${file.name} is too large. Maximum size is 20MB per file.`);
+        notify.warning(`${file.name} is too large. Maximum size is 20MB per file.`);
         continue;
       }
       try {
@@ -192,7 +193,7 @@ const MenuUpload: React.FC = () => {
           reader.readAsDataURL(file);
         }
       } catch {
-        setError(`Failed to process ${file.name}.`);
+        notify.error(`Failed to process ${file.name}.`);
       }
     }
     // Reset the input so selecting the same file again still fires onChange.
@@ -205,11 +206,11 @@ const MenuUpload: React.FC = () => {
 
   const handleParse = async () => {
     if (!selectedStoreId) {
-      setError('Please select a target store first.');
+      notify.warning('Please select a target store first.');
       return;
     }
     if (files.length === 0) {
-      setError('Please upload at least one menu image or PDF first.');
+      notify.warning('Please upload at least one menu image or PDF first.');
       return;
     }
 
@@ -230,8 +231,10 @@ const MenuUpload: React.FC = () => {
       setParsedMenu(diffed);
       const totalItems = diffed.categories.reduce((n, c) => n + c.items.length, 0);
       setInfo(`Parsed ${diffed.categories.length} categories and ${totalItems} items from ${files.length} file${files.length > 1 ? 's' : ''} using ${data.model || 'Gemini'}.`);
+      notify.info(`Parsed ${diffed.categories.length} categories and ${totalItems} items`);
     } catch (err: any) {
       setError(err.message || 'Failed to parse menu with Gemini');
+      notify.error(err.message || 'Failed to parse menu with Gemini');
     } finally {
       setIsParsing(false);
     }
@@ -326,11 +329,11 @@ const MenuUpload: React.FC = () => {
 
   const handleImport = async () => {
     if (!selectedStoreId) {
-      setError('Please select a target store.');
+      notify.warning('Please select a target store.');
       return;
     }
     if (!parsedMenu || parsedMenu.categories.length === 0) {
-      setError('Nothing to import. Parse a menu first.');
+      notify.warning('Nothing to import. Parse a menu first.');
       return;
     }
 
@@ -365,6 +368,7 @@ const MenuUpload: React.FC = () => {
         ? `${res.message || 'Menu imported.'} (${res.categoriesAdded} new + ${res.categoriesReused} reused categories, ${res.itemsAdded} new + ${res.itemsUpdated} updated items)`
         : res.message || 'Menu imported successfully.';
       setSuccess(summary);
+      notify.success(res.message || 'Menu imported successfully');
       // Refresh the current menu view + bust the dataStore cache.
       cache.delete(cacheKeys.categories(selectedStoreId));
       cache.delete(cacheKeys.items(selectedStoreId));
@@ -373,6 +377,7 @@ const MenuUpload: React.FC = () => {
       await Promise.all([fetchCategories(), fetchItems()]);
     } catch (err: any) {
       setError(err.message || 'Failed to import menu');
+      notify.error(err.message || 'Failed to import menu');
     } finally {
       setIsImporting(false);
     }

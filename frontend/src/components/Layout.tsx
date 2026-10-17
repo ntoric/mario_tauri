@@ -1,19 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Store, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
 import UpdateBanner from './UpdateBanner';
 import { PageHeaderProvider, usePageHeader } from '../contexts/PageHeaderContext';
-import { ThemeProvider } from '../contexts/ThemeContext';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
   const { stores } = useDataStore();
   const oskEnabled = useUIStore((state) => state.onScreenKeyboardEnabled);
   const toggleOsk = useUIStore((state) => state.toggleOnScreenKeyboard);
+  const setColorMode = useUIStore((state) => state.setColorMode);
+  const { isDark } = useTheme();
   const { headerContent } = usePageHeader();
   const navigate = useNavigate();
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -79,19 +81,15 @@ const LayoutContent: React.FC = () => {
         <div className="sidebar-header">
           <div className="sidebar-brand" style={{ cursor: 'default' }}>
             <div className="sidebar-brand-icon" style={{
-              background: currentStore?.logoUrl ? 'white' : undefined,
+              background: 'white',
               overflow: 'hidden',
-              padding: currentStore?.logoUrl ? '4px' : undefined,
+              padding: '4px',
             }}>
-              {currentStore?.logoUrl ? (
-                <img
-                  src={currentStore.logoUrl}
-                  alt={currentStore.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
-              ) : (
-                <Store size={24} />
-              )}
+              <img
+                src={currentStore?.logoUrl || '/logo.png'}
+                alt={currentStore?.name || 'Store logo'}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
             </div>
             {sidebarExpanded && (
               <span className="sidebar-brand-text">
@@ -106,15 +104,15 @@ const LayoutContent: React.FC = () => {
             {sidebarExpanded && <div className="nav-section-title">Main Menu</div>}
             <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end title="Tables">
               <span className="nav-icon"><LayoutGrid size={18} /></span>
-              {sidebarExpanded && <span>Tables</span>}
+              {sidebarExpanded && <span className="nav-label">Tables</span>}
             </NavLink>
             <NavLink to="/items" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Items & Menu">
               <span className="nav-icon"><Coffee size={18} /></span>
-              {sidebarExpanded && <span>Items & Menu</span>}
+              {sidebarExpanded && <span className="nav-label">Items & Menu</span>}
             </NavLink>
             <NavLink to="/history" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Order History">
               <span className="nav-icon"><History size={18} /></span>
-              {sidebarExpanded && <span>Order History</span>}
+              {sidebarExpanded && <span className="nav-label">Order History</span>}
             </NavLink>
           </div>
 
@@ -122,15 +120,19 @@ const LayoutContent: React.FC = () => {
             {sidebarExpanded && <div className="nav-section-title">Settings</div>}
             <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
               <span className="nav-icon"><Users size={18} /></span>
-              {sidebarExpanded && <span>Users</span>}
+              {sidebarExpanded && <span className="nav-label">Users</span>}
             </NavLink>
             <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
               <span className="nav-icon"><BarChart2 size={18} /></span>
-              {sidebarExpanded && <span>Reports</span>}
+              {sidebarExpanded && <span className="nav-label">Reports</span>}
             </NavLink>
             <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
               <span className="nav-icon"><Settings size={18} /></span>
-              {sidebarExpanded && <span>Business Settings</span>}
+              {sidebarExpanded && <span className="nav-label">Business Settings</span>}
+            </NavLink>
+            <NavLink to="/business-settings?tab=support" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support">
+              <span className="nav-icon"><LifeBuoy size={18} /></span>
+              {sidebarExpanded && <span className="nav-label">Support</span>}
             </NavLink>
           </div>
 
@@ -138,7 +140,7 @@ const LayoutContent: React.FC = () => {
             {sidebarExpanded && <div className="nav-section-title">Expenses</div>}
             <NavLink to="/expenses" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Expenses">
               <span className="nav-icon"><DollarSign size={18} /></span>
-              {sidebarExpanded && <span>Expenses</span>}
+              {sidebarExpanded && <span className="nav-label">Expenses</span>}
             </NavLink>
           </div>
 
@@ -147,27 +149,31 @@ const LayoutContent: React.FC = () => {
               {sidebarExpanded && <div className="nav-section-title">Administration</div>}
               <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
                 <span className="nav-icon"><Building2 size={18} /></span>
-                {sidebarExpanded && <span>Manage Stores</span>}
+                {sidebarExpanded && <span className="nav-label">Manage Stores</span>}
               </NavLink>
               <NavLink to="/menu-upload" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="AI Menu Upload">
                 <span className="nav-icon"><Sparkles size={18} /></span>
-                {sidebarExpanded && <span>AI Menu Upload</span>}
+                {sidebarExpanded && <span className="nav-label">AI Menu Upload</span>}
               </NavLink>
               <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">
                 <span className="nav-icon"><Download size={18} /></span>
-                {sidebarExpanded && <span>Update Management</span>}
+                {sidebarExpanded && <span className="nav-label">Update Management</span>}
+              </NavLink>
+              <NavLink to="/support-tickets" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Tickets">
+                <span className="nav-icon"><Inbox size={18} /></span>
+                {sidebarExpanded && <span className="nav-label">Support Tickets</span>}
               </NavLink>
               <NavLink to="/support-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Settings">
                 <span className="nav-icon"><MessageCircle size={18} /></span>
-                {sidebarExpanded && <span>Support Settings</span>}
+                {sidebarExpanded && <span className="nav-label">Support Settings</span>}
               </NavLink>
               <NavLink to="/developer-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Developer Settings">
                 <span className="nav-icon"><Wrench size={18} /></span>
-                {sidebarExpanded && <span>Developer Settings</span>}
+                {sidebarExpanded && <span className="nav-label">Developer Settings</span>}
               </NavLink>
               <NavLink to="/system-reset" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="System Reset">
                 <span className="nav-icon"><AlertTriangle size={18} /></span>
-                {sidebarExpanded && <span>System Reset</span>}
+                {sidebarExpanded && <span className="nav-label">System Reset</span>}
               </NavLink>
             </div>
           )}
@@ -211,11 +217,13 @@ const LayoutContent: React.FC = () => {
                     left: 0,
                     right: 0,
                     marginBottom: '0.5rem',
-                    background: 'var(--darker)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 'var(--radius)',
+                    background: 'rgba(12, 16, 23, 0.88)',
+                    backdropFilter: 'blur(24px) saturate(160%)',
+                    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 'var(--radius-lg)',
                     overflow: 'hidden',
-                    boxShadow: '0 -4px 12px rgba(0,0,0,0.3)'
+                    boxShadow: '0 -12px 36px rgba(8,12,18,0.4), inset 0 1px 0 rgba(255,255,255,0.08)'
                   }}>
                     <button
                       onClick={() => {
@@ -272,7 +280,7 @@ const LayoutContent: React.FC = () => {
             ) : (
               <>
                 <button 
-                  className="btn btn-outline btn-icon"
+                  className="sidebar-user-btn"
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   title={user?.name}
                   style={{ 
@@ -290,11 +298,13 @@ const LayoutContent: React.FC = () => {
                     left: '100%',
                     marginBottom: '0.5rem',
                     marginLeft: '0.5rem',
-                    background: 'var(--darker)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 'var(--radius)',
+                    background: 'rgba(12, 16, 23, 0.88)',
+                    backdropFilter: 'blur(24px) saturate(160%)',
+                    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 'var(--radius-lg)',
                     overflow: 'hidden',
-                    boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                    boxShadow: '0 -12px 36px rgba(8,12,18,0.4), inset 0 1px 0 rgba(255,255,255,0.08)',
                     minWidth: '180px',
                     zIndex: 1000
                   }}>
@@ -393,6 +403,15 @@ const LayoutContent: React.FC = () => {
           </div>
           
           <div className="navbar-right">
+            <button
+              type="button"
+              className="btn btn-outline btn-icon"
+              onClick={() => setColorMode(isDark ? 'light' : 'dark')}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle dark mode"
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <button
               type="button"
               className={`btn btn-outline btn-icon navbar-osk-toggle ${oskEnabled ? 'active' : ''}`}

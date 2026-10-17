@@ -10,6 +10,7 @@ import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled, getDefaultTaxPercent } from '../utils/tax';
 import { sortCategories } from '../utils/category';
 import { api } from '../services/api';
+import notify from '../utils/toast';
 import type { Category, Item, ItemExpense } from '../types';
 
 type ItemModalTab = 'details' | 'expenses';
@@ -173,11 +174,13 @@ const Items: React.FC = () => {
       hsnCode: itemForm.hsnCode,
       taxPercent: taxEnabled ? (parseFloat(itemForm.taxPercent) || 0) : 0,
       isFavourite: itemForm.isFavourite,
+      enabled: editingItem ? editingItem.enabled !== false : true,
     };
 
     try {
       if (editingItem) {
         await updateItem(editingItem.id, itemData);
+        notify.success(`Item "${itemData.name}" updated`);
       } else {
         const hasDraftExpenses = draftExpenses.length > 0;
         const created = await createItem(itemData, { skipRefresh: hasDraftExpenses });
@@ -185,9 +188,12 @@ const Items: React.FC = () => {
         if (hasDraftExpenses) {
           await fetchItems({ includeProfit: true });
         }
+        notify.success(`Item "${itemData.name}" created`);
       }
       closeItemModal();
       resetItemModal();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save item');
     } finally {
       setIsItemSubmitting(false);
     }
@@ -246,7 +252,10 @@ const Items: React.FC = () => {
       }
       await loadItemExpenses(editingItem.id);
       await fetchItems({ includeProfit: true });
+      notify.success(`Expense "${name}" saved`);
       resetExpenseForm();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save expense');
     } finally {
       setIsExpenseSubmitting(false);
     }
@@ -283,7 +292,10 @@ const Items: React.FC = () => {
       await api.deleteItemExpense(expense.id, currentStoreId);
       await loadItemExpenses(editingItem.id);
       await fetchItems({ includeProfit: true });
+      notify.success(`Expense "${expense.name}" deleted`);
       if (editingExpenseId === expense.id) resetExpenseForm();
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to delete expense');
     } finally {
       setDeletingExpenseId(null);
     }
@@ -309,15 +321,20 @@ const Items: React.FC = () => {
       name: categoryForm.name,
       description: categoryForm.description,
       isFavourite: categoryForm.isFavourite,
+      enabled: editingCategory ? editingCategory.enabled !== false : true,
     };
     try {
       if (editingCategory) {
         await updateCategory(editingCategory.id, categoryData);
+        notify.success(`Category "${categoryData.name}" updated`);
       } else {
         await createCategory(categoryData);
+        notify.success(`Category "${categoryData.name}" created`);
       }
       closeCategoryModal();
       setCategoryForm({ name: '', description: '', isFavourite: false });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save category');
     } finally {
       setIsCategorySubmitting(false);
     }
@@ -394,6 +411,9 @@ const Items: React.FC = () => {
       setLoadingItemId(item.id);
       try {
         await deleteItem(item.id);
+        notify.success(`Item "${item.name}" deleted`);
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete item');
       } finally {
         setLoadingItemId(null);
       }
@@ -415,6 +435,9 @@ const Items: React.FC = () => {
       setLoadingCategoryId(category.id);
       try {
         await deleteCategory(category.id);
+        notify.success(`Category "${category.name}" deleted`);
+      } catch (err: any) {
+        notify.error(err.message || 'Failed to delete category');
       } finally {
         setLoadingCategoryId(null);
       }
@@ -425,6 +448,9 @@ const Items: React.FC = () => {
     setLoadingItemId(item.id);
     try {
       await updateItem(item.id, { ...item, enabled: !(item.enabled !== false) });
+      notify.success(`"${item.name}" ${item.enabled !== false ? 'disabled' : 'enabled'}`, { duration: 2000 });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to update item');
     } finally {
       setLoadingItemId(null);
     }
@@ -434,6 +460,8 @@ const Items: React.FC = () => {
     setLoadingItemId(item.id);
     try {
       await updateItem(item.id, { ...item, isFavourite: !item.isFavourite });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to update item');
     } finally {
       setLoadingItemId(null);
     }
@@ -443,6 +471,9 @@ const Items: React.FC = () => {
     setLoadingCategoryId(category.id);
     try {
       await updateCategory(category.id, { ...category, enabled: !(category.enabled !== false) });
+      notify.success(`"${category.name}" ${category.enabled !== false ? 'disabled' : 'enabled'}`, { duration: 2000 });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to update category');
     } finally {
       setLoadingCategoryId(null);
     }
@@ -452,6 +483,8 @@ const Items: React.FC = () => {
     setLoadingCategoryId(category.id);
     try {
       await updateCategory(category.id, { ...category, isFavourite: !category.isFavourite });
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to update category');
     } finally {
       setLoadingCategoryId(null);
     }
@@ -479,7 +512,10 @@ const Items: React.FC = () => {
     setIsReordering(true);
     try {
       await reorderCategories(sortList.map(c => c.id));
+      notify.success('Category order saved');
       setSortModalOpen(false);
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to save category order');
     } finally {
       setIsReordering(false);
     }
@@ -719,7 +755,6 @@ const Items: React.FC = () => {
               type="checkbox"
               checked={itemForm.isFavourite}
               onChange={e => setItemForm({ ...itemForm, isFavourite: e.target.checked })}
-              style={{ width: 'auto', margin: 0 }}
             />
             <Star size={14} fill={itemForm.isFavourite ? 'currentColor' : 'none'} style={{ color: itemForm.isFavourite ? '#f5a623' : 'var(--gray-400)' }} />
             Mark as favourite <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(shows at the top on the order page)</span>
@@ -1106,7 +1141,6 @@ const Items: React.FC = () => {
                       type="checkbox"
                       checked={categoryForm.isFavourite}
                       onChange={e => setCategoryForm({ ...categoryForm, isFavourite: e.target.checked })}
-                      style={{ width: 'auto', margin: 0 }}
                     />
                     <Star size={14} fill={categoryForm.isFavourite ? 'currentColor' : 'none'} style={{ color: categoryForm.isFavourite ? '#f5a623' : 'var(--gray-400)' }} />
                     Mark as favourite <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(shows at the top on the order page)</span>

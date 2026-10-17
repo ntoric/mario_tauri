@@ -8,7 +8,9 @@ import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
 import { isTaxEnabled } from '../utils/tax';
+import { orderItemUnitPrice } from '../utils/order';
 import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
+import notify from '../utils/toast';
 import type { OrderItem, Item } from '../types';
 
 const ParcelOrderPage: React.FC = () => {
@@ -131,14 +133,14 @@ const ParcelOrderPage: React.FC = () => {
   };
 
   const calculateTotal = () => {
-    return orderItems.reduce((sum, oi) => sum + (oi.item.price * oi.quantity), 0);
+    return orderItems.reduce((sum, oi) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
   };
 
   const calculateTax = () => {
     if (!taxEnabled) return 0;
     return orderItems.reduce((sum, oi) => {
       const taxPercent = oi.item.taxPercent || 0;
-      return sum + (oi.item.price * oi.quantity * taxPercent / 100);
+      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
     }, 0);
   };
 
@@ -152,7 +154,7 @@ const ParcelOrderPage: React.FC = () => {
       items: orderItems.map(oi => ({
         itemId: oi.itemId,
         quantity: oi.quantity,
-        unitPrice: oi.item.price,
+        unitPrice: orderItemUnitPrice(oi),
         taxPercent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
         notes: oi.notes || '',
         item: {
@@ -180,6 +182,7 @@ const ParcelOrderPage: React.FC = () => {
 
     try {
       await api.createParcelOrder(buildPayload());
+      notify.success('Parcel order placed');
       await fetchOrders();
       navigate('/');
       setOrderItems([]);
@@ -246,9 +249,9 @@ const ParcelOrderPage: React.FC = () => {
                 name: oi.item.name,
                 qty: oi.quantity,
                 unit: 'PCS',
-                rate: oi.item.price,
+                rate: orderItemUnitPrice(oi),
                 tax_percent: taxEnabled ? (oi.item.taxPercent || 0) : 0,
-                amount: oi.item.price * oi.quantity,
+                amount: orderItemUnitPrice(oi) * oi.quantity,
               })),
               notes: '',
               order_type: 'TAKE_AWAY',
@@ -258,20 +261,21 @@ const ParcelOrderPage: React.FC = () => {
           });
         } catch (error) {
           console.error('Failed to print KOT:', error);
+          notify.warning('KOT printing failed');
         }
       }
 
       // Print invoice
       try {
         const printItems = orderItems.map(oi => {
-          const itemTotal = oi.item.price * oi.quantity;
+          const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
           const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
           return {
             name: oi.item.name,
             hsn: oi.item.description || '',
             qty: oi.quantity,
             unit: 'PCS',
-            rate: oi.item.price,
+            rate: orderItemUnitPrice(oi),
             tax_percent: taxPercent,
             amount: itemTotal,
           };
@@ -329,8 +333,10 @@ const ParcelOrderPage: React.FC = () => {
         });
       } catch (error) {
         console.error('Failed to print invoice:', error);
+        notify.warning('Invoice printing failed');
       }
 
+      notify.success('Parcel order billed');
       await fetchOrders();
       navigate('/');
       setOrderItems([]);
@@ -455,7 +461,7 @@ const ParcelOrderPage: React.FC = () => {
                   <div className="order-item-info">
                     <div className="order-item-name">{oi.item.name}</div>
                     <div className="order-item-category">{categories.find(c => c.id === oi.item.categoryId)?.name || ''}</div>
-                    <div className="order-item-price">{formatCurrency(oi.item.price)} x {oi.quantity}</div>
+                    <div className="order-item-price">{formatCurrency(orderItemUnitPrice(oi))} x {oi.quantity}</div>
                   </div>
                   <div className="order-item-actions">
                     <button

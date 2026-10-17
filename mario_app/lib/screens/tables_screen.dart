@@ -339,7 +339,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
-  // ignore: unused_element — kept for re-enabling Combine Bill
   void _showCombineTableDialog(
       Order order, List<TableModel> tables, DataProvider data) {
     final parentContext = context;
@@ -351,7 +350,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     if (occupiedTables.isEmpty) {
       ScaffoldMessenger.of(parentContext).showSnackBar(
         const SnackBar(
-          content: Text('No other occupied tables to combine with'),
+          content: Text('No other occupied tables to merge with'),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -382,7 +381,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Combine Bill',
+                  'Merge Bill',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -449,7 +448,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    data.error ?? 'Failed to combine orders.'),
+                                    data.error ?? 'Failed to merge orders.'),
                                 backgroundColor: AppColors.danger,
                                 behavior: SnackBarBehavior.floating,
                                 shape: RoundedRectangleBorder(
@@ -861,8 +860,8 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _quickAction(
-                        icon: Icons.more_horiz,
-                        label: 'More Options',
+                        icon: Icons.merge_type,
+                        label: 'Merge Bill',
                         onTap: () {
                           Navigator.pop(sheetContext);
                           _showCombineTableDialog(

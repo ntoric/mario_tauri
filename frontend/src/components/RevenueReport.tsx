@@ -1,14 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Receipt, Download, Loader2, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Receipt, Download, Loader2, ArrowUp, ArrowDown, X, Search } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
+import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
-import type { RevenueReport, Bill, Expense } from '../types';
+import type { RevenueReport, Bill, Expense, RevenueEntriesResult, ExpenseEntriesResult } from '../types';
 import { Button } from './ui/Button';
+import { DonutChart, ChartLegend } from './ui/Charts';
+import Pagination from './ui/Pagination';
 
-const RevenueReport: React.FC = () => {
+type SortDir = 'asc' | 'desc';
+type RevenueSort = 'invoice' | 'date' | 'customer' | 'total';
+type ExpenseSort = 'date' | 'title' | 'category' | 'amount';
+
+const toISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const RevenueReportPage: React.FC = () => {
   const { currentStoreId } = useAuthStore();
   const { stores } = useDataStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -16,30 +30,20 @@ const RevenueReport: React.FC = () => {
   const [periodFilter, setPeriodFilter] = useState<string>('today');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
-  const [report, setReport] = useState<RevenueReport | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   const getDateRange = (period: string): { startDate: string; endDate: string } => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const toISO = (d: Date) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
     switch (period) {
       case 'today': {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        return { startDate: toISO(today), endDate: toISO(tomorrow) };
+        return { startDate: toISODate(today), endDate: toISODate(tomorrow) };
       }
       case 'yesterday': {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        return { startDate: toISO(yesterday), endDate: toISO(today) };
+        return { startDate: toISODate(yesterday), endDate: toISODate(today) };
       }
       case 'week': {
         const weekStart = new Date(today);
@@ -47,17 +51,17 @@ const RevenueReport: React.FC = () => {
         weekStart.setDate(weekStart.getDate() - day);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 7);
-        return { startDate: toISO(weekStart), endDate: toISO(weekEnd) };
+        return { startDate: toISODate(weekStart), endDate: toISODate(weekEnd) };
       }
       case 'month': {
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-        return { startDate: toISO(monthStart), endDate: toISO(monthEnd) };
+        return { startDate: toISODate(monthStart), endDate: toISODate(monthEnd) };
       }
       case 'year': {
         const yearStart = new Date(today.getFullYear(), 0, 1);
         const yearEnd = new Date(today.getFullYear() + 1, 0, 1);
-        return { startDate: toISO(yearStart), endDate: toISO(yearEnd) };
+        return { startDate: toISODate(yearStart), endDate: toISODate(yearEnd) };
       }
       case 'custom': {
         return { startDate: customDateFrom, endDate: customDateTo };
@@ -67,29 +71,144 @@ const RevenueReport: React.FC = () => {
     }
   };
 
+  const [appliedRange, setAppliedRange] = useState<{ startDate: string; endDate: string }>(() => getDateRange('today'));
+  const [report, setReport] = useState<RevenueReport | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+
+  const [revSearchInput, setRevSearchInput] = useState('');
+  const [revSearch, setRevSearch] = useState('');
+  const [revSort, setRevSort] = useState<RevenueSort>('date');
+  const [revDir, setRevDir] = useState<SortDir>('desc');
+  const [revPage, setRevPage] = useState(1);
+  const [revPageSize, setRevPageSize] = useState(10);
+  const [revEntries, setRevEntries] = useState<RevenueEntriesResult | null>(null);
+  const [revLoading, setRevLoading] = useState(false);
+
+  const [expSearchInput, setExpSearchInput] = useState('');
+  const [expSearch, setExpSearch] = useState('');
+  const [expSort, setExpSort] = useState<ExpenseSort>('date');
+  const [expDir, setExpDir] = useState<SortDir>('desc');
+  const [expPage, setExpPage] = useState(1);
+  const [expPageSize, setExpPageSize] = useState(10);
+  const [expEntries, setExpEntries] = useState<ExpenseEntriesResult | null>(null);
+  const [expLoading, setExpLoading] = useState(false);
+
+  const summarySeq = useRef(0);
+  const revSeq = useRef(0);
+  const expSeq = useRef(0);
+
   useReportPageHeader({
     title: 'Profit Report',
     subtitle: 'Combined sales, revenue, and expense analysis',
   });
 
-  const fetchReport = async () => {
-    if (!currentStoreId) return;
-    
-    const { startDate, endDate } = getDateRange(periodFilter);
-    setIsLoading(true);
-    try {
-      const data = await api.getRevenueReport(currentStoreId, startDate, endDate);
-      setReport(data);
-    } catch (error) {
-      console.error('Failed to fetch profit report:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  // Debounce the two entry-table search boxes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setRevSearch(revSearchInput.trim());
+      setRevPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [revSearchInput]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setExpSearch(expSearchInput.trim());
+      setExpPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [expSearchInput]);
+
+  // Apply the selected period (or custom dates) — resets both tables.
+  const applyPeriod = () => {
+    setAppliedRange(getDateRange(periodFilter));
+    setRevPage(1);
+    setExpPage(1);
   };
 
   useEffect(() => {
-    fetchReport();
-  }, [currentStoreId, periodFilter, customDateFrom, customDateTo]);
+    if (periodFilter !== 'custom') {
+      const r = getDateRange(periodFilter);
+      setAppliedRange(prev =>
+        prev.startDate === r.startDate && prev.endDate === r.endDate ? prev : r
+      );
+      setRevPage(1);
+      setExpPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodFilter]);
+
+  // Summary metrics — fetched once per period change, without entry lists.
+  useEffect(() => {
+    if (!currentStoreId) return;
+    if (periodFilter === 'custom' && (!appliedRange.startDate || !appliedRange.endDate)) return;
+    const id = ++summarySeq.current;
+    setIsLoading(true);
+    api.getRevenueReport(currentStoreId, appliedRange.startDate || undefined, appliedRange.endDate || undefined, true)
+      .then(data => {
+        if (id === summarySeq.current) setReport(data);
+      })
+      .catch(error => {
+        if (id === summarySeq.current) console.error('Failed to fetch profit report:', error);
+      })
+      .finally(() => {
+        if (id === summarySeq.current) setIsLoading(false);
+      });
+  }, [currentStoreId, appliedRange, periodFilter]);
+
+  // Revenue entries page
+  useEffect(() => {
+    if (!currentStoreId) return;
+    if (periodFilter === 'custom' && (!appliedRange.startDate || !appliedRange.endDate)) return;
+    const id = ++revSeq.current;
+    setRevLoading(true);
+    api.getRevenueEntries(currentStoreId, {
+      startDate: appliedRange.startDate || undefined,
+      endDate: appliedRange.endDate || undefined,
+      search: revSearch || undefined,
+      sort: revSort,
+      dir: revDir,
+      page: revPage,
+      pageSize: revPageSize,
+    })
+      .then(res => {
+        if (id === revSeq.current) setRevEntries(res);
+      })
+      .catch(error => {
+        if (id === revSeq.current) console.error('Failed to fetch revenue entries:', error);
+      })
+      .finally(() => {
+        if (id === revSeq.current) setRevLoading(false);
+      });
+  }, [currentStoreId, appliedRange, periodFilter, revSearch, revSort, revDir, revPage, revPageSize]);
+
+  // Expense entries page
+  useEffect(() => {
+    if (!currentStoreId) return;
+    if (periodFilter === 'custom' && (!appliedRange.startDate || !appliedRange.endDate)) return;
+    const id = ++expSeq.current;
+    setExpLoading(true);
+    api.getExpenseEntries(currentStoreId, {
+      startDate: appliedRange.startDate || undefined,
+      endDate: appliedRange.endDate || undefined,
+      search: expSearch || undefined,
+      sort: expSort,
+      dir: expDir,
+      page: expPage,
+      pageSize: expPageSize,
+    })
+      .then(res => {
+        if (id === expSeq.current) setExpEntries(res);
+      })
+      .catch(error => {
+        if (id === expSeq.current) console.error('Failed to fetch expense entries:', error);
+      })
+      .finally(() => {
+        if (id === expSeq.current) setExpLoading(false);
+      });
+  }, [currentStoreId, appliedRange, periodFilter, expSearch, expSort, expDir, expPage, expPageSize]);
 
   const exportReport = () => {
     if (!report) return;
@@ -121,6 +240,47 @@ const RevenueReport: React.FC = () => {
   const getProfitColor = (value: number) => {
     return value >= 0 ? 'var(--success)' : 'var(--danger)';
   };
+
+  const handleRevSort = (field: RevenueSort) => {
+    setRevPage(1);
+    if (revSort === field) {
+      setRevDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setRevSort(field);
+      setRevDir(field === 'date' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleExpSort = (field: ExpenseSort) => {
+    setExpPage(1);
+    if (expSort === field) {
+      setExpDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setExpSort(field);
+      setExpDir(field === 'date' ? 'desc' : 'asc');
+    }
+  };
+
+  const RevSortIcon: React.FC<{ field: RevenueSort }> = ({ field }) =>
+    revSort === field ? (revDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null;
+  const ExpSortIcon: React.FC<{ field: ExpenseSort }> = ({ field }) =>
+    expSort === field ? (expDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null;
+
+  const revTotal = revEntries?.total ?? 0;
+  const expTotal = expEntries?.total ?? 0;
+  const revTotalPages = Math.max(1, Math.ceil(revTotal / revPageSize));
+  const expTotalPages = Math.max(1, Math.ceil(expTotal / expPageSize));
+
+  // Clamp pages if the filtered sets shrank underneath us.
+  useEffect(() => {
+    if (revTotal > 0 && revPage > revTotalPages) setRevPage(revTotalPages);
+  }, [revTotal, revPage, revTotalPages]);
+
+  useEffect(() => {
+    if (expTotal > 0 && expPage > expTotalPages) setExpPage(expTotalPages);
+  }, [expTotal, expPage, expTotalPages]);
+
+  const sortableTh: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' };
 
   return (
     <div className="revenue-report-page">
@@ -163,7 +323,7 @@ const RevenueReport: React.FC = () => {
                   placeholder="End date"
                 />
               </div>
-              <Button onClick={fetchReport} variant="secondary" size="sm" disabled={isLoading || !customDateFrom || !customDateTo}>
+              <Button onClick={applyPeriod} variant="secondary" size="sm" disabled={isLoading || !customDateFrom || !customDateTo}>
                 {isLoading ? <Loader2 className="animate-spin" size={16} /> : null}
                 Apply
               </Button>
@@ -178,7 +338,7 @@ const RevenueReport: React.FC = () => {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading && !report ? (
         <div className="loading-state">
           <Loader2 className="animate-spin" size={32} />
           <p>Loading profit report...</p>
@@ -258,34 +418,112 @@ const RevenueReport: React.FC = () => {
             </div>
           </div>
 
+          {/* Revenue vs Expenses Split */}
+          <div className="report-widget-grid">
+            <div className="card">
+              <div className="card-header">
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>Profit Split</h3>
+              </div>
+              <div className="card-body">
+                {(() => {
+                  const margin = report.totalRevenue > 0 ? (report.netProfit / report.totalRevenue) * 100 : 0;
+                  const splitData = [
+                    { label: 'Net Profit', value: Math.max(report.netProfit, 0), color: 'var(--success)' },
+                    { label: 'Expenses', value: report.totalExpenses, color: 'var(--danger)' },
+                    ...(report.netProfit < 0 ? [{ label: 'Loss', value: Math.abs(report.netProfit), color: '#fc8181' }] : []),
+                  ].filter(d => d.value > 0);
+                  return (
+                    <div className="chart-split">
+                      <DonutChart
+                        data={splitData}
+                        size={150}
+                        thickness={20}
+                        centerValue={`${margin.toFixed(0)}%`}
+                        centerLabel={margin >= 0 ? 'margin' : 'loss'}
+                      />
+                      <ChartLegend data={splitData} formatValue={formatCurrency} />
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
           {/* Revenue and Expenses - Two Columns */}
-          <div className="reports-two-column" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div className="reports-two-column" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             {/* Revenue (Bills) Column */}
             <div className="reports-table-container">
-              <h3 style={{ padding: '1rem 1.5rem', margin: 0, borderBottom: '1px solid var(--gray-200)' }}>
-                Revenue Entries ({report.bills?.length || 0})
-              </h3>
-              {report.bills && report.bills.length > 0 ? (
-                <table className="reports-table">
-                  <thead>
-                    <tr>
-                      <th>Invoice No</th>
-                      <th>Date</th>
-                      <th>Customer</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.bills.map((bill) => (
-                      <tr key={bill.id} onClick={() => setSelectedBill(bill)} style={{ cursor: 'pointer' }}>
-                        <td>{bill.invoiceNo || '-'}</td>
-                        <td>{bill.generatedAt ? new Date(bill.generatedAt).toLocaleDateString() : '-'}</td>
-                        <td>{bill.customerName || '-'}</td>
-                        <td className="amount">{formatCurrency(bill.total)}</td>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '1rem 1.5rem', borderBottom: '1px solid var(--gray-200)' }}>
+                <h3 style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                  Revenue Entries ({revTotal})
+                </h3>
+                <div style={{ position: 'relative', flex: 1, maxWidth: '220px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: '2rem', width: '100%', fontSize: '0.82rem', padding: '0.35rem 0.5rem 0.35rem 2rem' }}
+                    placeholder="Invoice or customer..."
+                    value={revSearchInput}
+                    onChange={(e) => setRevSearchInput(e.target.value)}
+                  />
+                </div>
+              </div>
+              {revEntries === null && revLoading ? (
+                <div className="loading-state" style={{ padding: '2rem' }}>
+                  <Loader2 className="animate-spin" size={24} />
+                </div>
+              ) : (revEntries?.rows ?? []).length > 0 ? (
+                <div style={{ opacity: revLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+                  <table className="reports-table">
+                    <thead>
+                      <tr>
+                        <th style={sortableTh} onClick={() => handleRevSort('invoice')}>
+                          Invoice No <RevSortIcon field="invoice" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleRevSort('date')}>
+                          Date <RevSortIcon field="date" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleRevSort('customer')}>
+                          Customer <RevSortIcon field="customer" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleRevSort('total')}>
+                          Total <RevSortIcon field="total" />
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {(revEntries?.rows ?? []).map((bill) => (
+                        <tr key={bill.id} onClick={() => setSelectedBill(bill)} style={{ cursor: 'pointer' }}>
+                          <td>{bill.invoiceNo || '-'}</td>
+                          <td>{bill.generatedAt ? new Date(bill.generatedAt).toLocaleDateString() : '-'}</td>
+                          <td>{bill.customerName || '-'}</td>
+                          <td className="amount">{formatCurrency(bill.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <select
+                      className="form-input"
+                      value={revPageSize}
+                      onChange={(e) => { setRevPageSize(Number(e.target.value)); setRevPage(1); }}
+                      style={{ width: 'auto', padding: '0.3rem 0.45rem', fontSize: '0.8rem', margin: '0 0 0 0.75rem' }}
+                      title="Rows per page"
+                    >
+                      {[10, 25, 50].map(n => (
+                        <option key={n} value={n}>{n} / page</option>
+                      ))}
+                    </select>
+                    <Pagination
+                      currentPage={revPage}
+                      totalPages={revTotalPages}
+                      totalItems={revTotal}
+                      pageSize={revPageSize}
+                      onPageChange={setRevPage}
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="empty-state" style={{ padding: '2rem' }}>
                   <p>No revenue entries for the selected period</p>
@@ -295,30 +533,77 @@ const RevenueReport: React.FC = () => {
 
             {/* Expenses Column */}
             <div className="reports-table-container">
-              <h3 style={{ padding: '1rem 1.5rem', margin: 0, borderBottom: '1px solid var(--gray-200)' }}>
-                Expense Entries ({report.expenses?.length || 0})
-              </h3>
-              {report.expenses && report.expenses.length > 0 ? (
-                <table className="reports-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Title</th>
-                      <th>Category</th>
-                      <th>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.expenses.map((expense) => (
-                      <tr key={expense.id} onClick={() => setSelectedExpense(expense)} style={{ cursor: 'pointer' }}>
-                        <td>{expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '-'}</td>
-                        <td>{expense.title}</td>
-                        <td>{expense.categoryName || '-'}</td>
-                        <td className="amount" style={{ color: 'var(--danger)' }}>-{formatCurrency(expense.amount)}</td>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '1rem 1.5rem', borderBottom: '1px solid var(--gray-200)' }}>
+                <h3 style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                  Expense Entries ({expTotal})
+                </h3>
+                <div style={{ position: 'relative', flex: 1, maxWidth: '220px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: '2rem', width: '100%', fontSize: '0.82rem', padding: '0.35rem 0.5rem 0.35rem 2rem' }}
+                    placeholder="Title or category..."
+                    value={expSearchInput}
+                    onChange={(e) => setExpSearchInput(e.target.value)}
+                  />
+                </div>
+              </div>
+              {expEntries === null && expLoading ? (
+                <div className="loading-state" style={{ padding: '2rem' }}>
+                  <Loader2 className="animate-spin" size={24} />
+                </div>
+              ) : (expEntries?.rows ?? []).length > 0 ? (
+                <div style={{ opacity: expLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+                  <table className="reports-table">
+                    <thead>
+                      <tr>
+                        <th style={sortableTh} onClick={() => handleExpSort('date')}>
+                          Date <ExpSortIcon field="date" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleExpSort('title')}>
+                          Title <ExpSortIcon field="title" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleExpSort('category')}>
+                          Category <ExpSortIcon field="category" />
+                        </th>
+                        <th style={sortableTh} onClick={() => handleExpSort('amount')}>
+                          Amount <ExpSortIcon field="amount" />
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {(expEntries?.rows ?? []).map((expense) => (
+                        <tr key={expense.id} onClick={() => setSelectedExpense(expense)} style={{ cursor: 'pointer' }}>
+                          <td>{expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '-'}</td>
+                          <td>{expense.title}</td>
+                          <td>{expense.categoryName || '-'}</td>
+                          <td className="amount" style={{ color: 'var(--danger)' }}>-{formatCurrency(expense.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <select
+                      className="form-input"
+                      value={expPageSize}
+                      onChange={(e) => { setExpPageSize(Number(e.target.value)); setExpPage(1); }}
+                      style={{ width: 'auto', padding: '0.3rem 0.45rem', fontSize: '0.8rem', margin: '0 0 0 0.75rem' }}
+                      title="Rows per page"
+                    >
+                      {[10, 25, 50].map(n => (
+                        <option key={n} value={n}>{n} / page</option>
+                      ))}
+                    </select>
+                    <Pagination
+                      currentPage={expPage}
+                      totalPages={expTotalPages}
+                      totalItems={expTotal}
+                      pageSize={expPageSize}
+                      onPageChange={setExpPage}
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="empty-state" style={{ padding: '2rem' }}>
                   <p>No expense entries for the selected period</p>
@@ -380,9 +665,9 @@ const RevenueReport: React.FC = () => {
                       <tr key={idx}>
                         <td>{oi.item.name}</td>
                         <td>{oi.quantity}</td>
-                        <td>{formatCurrency(oi.item.price)}</td>
+                        <td>{formatCurrency(orderItemUnitPrice(oi))}</td>
                         {taxEnabled && <td>{oi.item.taxPercent || 0}%</td>}
-                        <td className="amount">{formatCurrency(oi.item.price * oi.quantity)}</td>
+                        <td className="amount">{formatCurrency(orderItemUnitPrice(oi) * oi.quantity)}</td>
                       </tr>
                     ))
                   ) : (
@@ -487,4 +772,4 @@ const RevenueReport: React.FC = () => {
   );
 };
 
-export default RevenueReport;
+export default RevenueReportPage;

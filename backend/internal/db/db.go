@@ -148,7 +148,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			table_id VARCHAR(255) REFERENCES tables(id),
 			table_number INTEGER NOT NULL,
 			table_name VARCHAR(255),
-			status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled')),
+			status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled', 'merged')),
 			total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
 			tax_amount DECIMAL(10, 2) DEFAULT 0,
 			discount_amount DECIMAL(10, 2) DEFAULT 0,
@@ -281,6 +281,29 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(store_id, name)
 		)`,
+
+		// Support tickets — store-raised support requests visible to superadmin
+		`CREATE TABLE IF NOT EXISTS support_tickets (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			created_by VARCHAR(255) REFERENCES users(id),
+			subject VARCHAR(255) NOT NULL,
+			category VARCHAR(50) DEFAULT 'general',
+			priority VARCHAR(20) DEFAULT 'medium',
+			status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Support messages — conversation thread per ticket
+		`CREATE TABLE IF NOT EXISTS support_messages (
+			id VARCHAR(255) PRIMARY KEY,
+			ticket_id VARCHAR(255) REFERENCES support_tickets(id) ON DELETE CASCADE,
+			sender_id VARCHAR(255) REFERENCES users(id),
+			sender_role VARCHAR(50),
+			message TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, q := range queries {
@@ -342,6 +365,16 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// superadmins can see which release each store is running.
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version VARCHAR(64)`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version_seen_at TIMESTAMP`,
+		// Order combine — the original orders_status_check only allowed
+		// active/completed/cancelled, so the merge endpoint failed on databases
+		// created before the 'merged' status existed. Re-create the constraint
+		// with 'merged' included.
+		`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check`,
+		`ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (status IN ('active', 'completed', 'cancelled', 'merged'))`,
+		// Support tickets — lookup indexes
+		`CREATE INDEX IF NOT EXISTS idx_support_tickets_store ON support_tickets (store_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets (status)`,
+		`CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_messages (ticket_id)`,
 	}
 
 	for _, q := range alterQueries {
@@ -361,7 +394,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		"stores", "users", "user_stores", "categories", "items", "tables",
 		"orders", "order_items", "bills", "bill_queue", "settings",
 		"global_settings", "app_updates", "expense_categories", "expenses",
-		"item_expenses", "table_sections",
+		"item_expenses", "table_sections", "support_tickets", "support_messages",
 	}
 	for _, t := range auditTables {
 		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", t)); err != nil {

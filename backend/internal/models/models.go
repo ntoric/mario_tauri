@@ -501,6 +501,150 @@ type ExpenseSummary struct {
 	ExpenseCount int     `json:"expenseCount"`
 }
 
+// TopSellingItemRow is one aggregated item-by-date group in the top
+// selling items report.
+type TopSellingItemRow struct {
+	ItemID   string  `json:"itemId"`
+	Item     string  `json:"item"`
+	Category string  `json:"category"`
+	Date     string  `json:"date"`
+	Count    int     `json:"count"`
+	Revenue  float64 `json:"revenue"`
+}
+
+// TopSellingItemsReport is a paginated slice of item-by-date sales rows
+// plus summary aggregates computed across all matching rows.
+type TopSellingItemsReport struct {
+	Rows         []TopSellingItemRow `json:"rows"`
+	Total        int                 `json:"total"`
+	Page         int                 `json:"page"`
+	PageSize     int                 `json:"pageSize"`
+	UniqueItems  int                 `json:"uniqueItems"`
+	TotalCount   int                 `json:"totalCount"`
+	TotalRevenue float64             `json:"totalRevenue"`
+}
+
+// TopSellingCategoryRow is one aggregated category-by-date group in the
+// category sales report.
+type TopSellingCategoryRow struct {
+	CategoryID string  `json:"categoryId"`
+	Category   string  `json:"category"`
+	Date       string  `json:"date"`
+	Count      int     `json:"count"`
+	Revenue    float64 `json:"revenue"`
+}
+
+// CategorySaleTotal is a per-category aggregate across the whole filtered
+// report range, used for the revenue split chart.
+type CategorySaleTotal struct {
+	CategoryID string  `json:"categoryId"`
+	Category   string  `json:"category"`
+	Count      int     `json:"count"`
+	Revenue    float64 `json:"revenue"`
+}
+
+// TopSellingCategoriesReport is a paginated slice of category-by-date sales
+// rows plus summary aggregates computed across all matching rows.
+type TopSellingCategoriesReport struct {
+	Rows             []TopSellingCategoryRow `json:"rows"`
+	Total            int                     `json:"total"`
+	Page             int                     `json:"page"`
+	PageSize         int                     `json:"pageSize"`
+	UniqueCategories int                     `json:"uniqueCategories"`
+	TotalCount       int                     `json:"totalCount"`
+	TotalRevenue     float64                 `json:"totalRevenue"`
+	CategoryTotals   []CategorySaleTotal     `json:"categoryTotals"`
+}
+
+// SalesProfitRow is one aggregated item in the sales-based profit report.
+type SalesProfitRow struct {
+	ItemID        string  `json:"itemId"`
+	Name          string  `json:"name"`
+	Category      string  `json:"category"`
+	QtySold       int     `json:"qtySold"`
+	Revenue       float64 `json:"revenue"`
+	PrepCost      float64 `json:"prepCost"`
+	Profit        float64 `json:"profit"`
+	ProfitPercent float64 `json:"profitPercent"`
+	HasCostData   bool    `json:"hasCostData"`
+}
+
+// SalesProfitReport is a paginated slice of per-item sales profit rows plus
+// summary aggregates computed across all rows in the period (search only
+// narrows the table rows, matching the storefront behaviour).
+type SalesProfitReport struct {
+	Rows              []SalesProfitRow `json:"rows"`
+	Total             int              `json:"total"`
+	Page              int              `json:"page"`
+	PageSize          int              `json:"pageSize"`
+	UnitsSold         int              `json:"unitsSold"`
+	Revenue           float64          `json:"revenue"`
+	PrepCost          float64          `json:"prepCost"`
+	Profit            float64          `json:"profit"`
+	TrackedRevenue    float64          `json:"trackedRevenue"`
+	UntrackedRevenue  float64          `json:"untrackedRevenue"`
+	ItemsSold         int              `json:"itemsSold"`
+	ItemsWithCostSold int              `json:"itemsWithCostSold"`
+}
+
+// MenuProfitReport is a paginated slice of menu item profit entries plus
+// store-wide menu economics (search only narrows the table rows).
+type MenuProfitReport struct {
+	Rows                 []ItemProfitEntry `json:"rows"`
+	Total                int               `json:"total"`
+	Page                 int               `json:"page"`
+	PageSize             int               `json:"pageSize"`
+	TotalItems           int               `json:"totalItems"`
+	ItemsWithCostCount   int               `json:"itemsWithCostCount"`
+	TotalSellingValue    float64           `json:"totalSellingValue"`
+	TotalCost            float64           `json:"totalCost"`
+	TotalProfit          float64           `json:"totalProfit"`
+	AverageProfitPercent float64           `json:"averageProfitPercent"`
+}
+
+// ExpenseCategoryReport is a paginated slice of expense-by-category rows
+// plus report-wide totals. ChartRows carries the whole filtered set so the
+// split chart is not limited to the current page.
+type ExpenseCategoryReport struct {
+	Rows        []ExpenseReport `json:"rows"`
+	Total       int             `json:"total"`
+	Page        int             `json:"page"`
+	PageSize    int             `json:"pageSize"`
+	TotalAmount float64         `json:"totalAmount"`
+	TotalCount  int             `json:"totalCount"`
+	ChartRows   []ExpenseReport `json:"chartRows"`
+}
+
+// ExpenseDateReport is a paginated slice of expense-by-date rows plus
+// report-wide totals and the complete date set for the split chart.
+type ExpenseDateReport struct {
+	Rows        []ExpenseSummary `json:"rows"`
+	Total       int              `json:"total"`
+	Page        int              `json:"page"`
+	PageSize    int              `json:"pageSize"`
+	TotalAmount float64          `json:"totalAmount"`
+	TotalCount  int              `json:"totalCount"`
+	ChartRows   []ExpenseSummary `json:"chartRows"`
+}
+
+// RevenueEntriesReport is a paginated slice of bill revenue entries for
+// the profit report.
+type RevenueEntriesReport struct {
+	Rows     []Bill `json:"rows"`
+	Total    int    `json:"total"`
+	Page     int    `json:"page"`
+	PageSize int    `json:"pageSize"`
+}
+
+// ExpenseEntriesReport is a paginated slice of expense entries for the
+// profit report.
+type ExpenseEntriesReport struct {
+	Rows     []Expense `json:"rows"`
+	Total    int       `json:"total"`
+	Page     int       `json:"page"`
+	PageSize int       `json:"pageSize"`
+}
+
 // RevenueReport represents combined revenue, sales, and expense data
 type RevenueReport struct {
 	PeriodStart       string    `json:"periodStart"`
@@ -514,4 +658,60 @@ type RevenueReport struct {
 	AverageOrderValue float64   `json:"averageOrderValue"`
 	Bills             []Bill    `json:"bills"`
 	Expenses          []Expense `json:"expenses"`
+}
+
+// SupportTicket represents a support request raised by a store user.
+type SupportTicket struct {
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	StoreName     string    `json:"storeName,omitempty"`
+	StoreBranch   string    `json:"storeBranch,omitempty"`
+	StorePhone    string    `json:"storePhone,omitempty"`
+	StoreLocation string    `json:"storeLocation,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedByName string    `json:"createdByName,omitempty"`
+	Subject       string    `json:"subject"`
+	Category      string    `json:"category"`
+	Priority      string    `json:"priority"`
+	Status        string    `json:"status"`
+	MessageCount  int       `json:"messageCount"`
+	LastMessage   string    `json:"lastMessage,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+// SupportMessage is a single reply in a support ticket thread.
+type SupportMessage struct {
+	ID         string    `json:"id"`
+	TicketID   string    `json:"ticketId"`
+	SenderID   string    `json:"senderId"`
+	SenderName string    `json:"senderName,omitempty"`
+	SenderRole string    `json:"senderRole"`
+	Message    string    `json:"message"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// SupportTicketDetail bundles a ticket with its full message thread.
+type SupportTicketDetail struct {
+	Ticket   *SupportTicket   `json:"ticket"`
+	Messages []SupportMessage `json:"messages"`
+}
+
+// CreateSupportTicketRequest is the payload for POST /api/support/tickets.
+type CreateSupportTicketRequest struct {
+	StoreID  string `json:"storeId"`
+	Subject  string `json:"subject"`
+	Category string `json:"category"`
+	Priority string `json:"priority"`
+	Message  string `json:"message"`
+}
+
+// CreateSupportMessageRequest is the payload for POST /api/support/tickets/{id}/messages.
+type CreateSupportMessageRequest struct {
+	Message string `json:"message"`
+}
+
+// UpdateSupportTicketStatusRequest is the payload for PATCH /api/support/tickets/{id}/status.
+type UpdateSupportTicketStatusRequest struct {
+	Status string `json:"status"`
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye, MoreVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
+import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
 import { isQuietHours } from '../utils/quietHours';
 import { api } from '../services/api';
@@ -15,6 +16,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
 import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
 import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
+import notify from '../utils/toast';
 import type { Table } from '../types';
 
 const Tables: React.FC = () => {
@@ -125,14 +127,14 @@ const Tables: React.FC = () => {
             if (!order) continue;
 
             const printItems = order.items.map((oi: any) => {
-              const itemTotal = oi.item.price * oi.quantity;
+              const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
               const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
               return {
                 name: oi.item.name,
                 hsn: oi.item.description || '',
                 qty: oi.quantity,
                 unit: 'PCS',
-                rate: oi.item.price,
+                rate: orderItemUnitPrice(oi),
                 tax_percent: taxPercent,
                 amount: itemTotal,
               };
@@ -216,6 +218,7 @@ const Tables: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'vacant' | 'occupied'>('all');
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showTableMenu, setShowTableMenu] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editingSectionValue, setEditingSectionValue] = useState('');
@@ -273,6 +276,10 @@ const Tables: React.FC = () => {
       subtitle: 'Manage tables and orders',
       actions: (
         <>
+          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
+            <Package size={18} />
+            Parcel Order
+          </button>
           <div className="view-toggle">
             <button
               className={`view-btn ${viewMode === 'layout' ? 'active' : ''}`}
@@ -289,26 +296,40 @@ const Tables: React.FC = () => {
               <List size={18} />
             </button>
           </div>
-          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
-            <Package size={18} />
-            Parcel Order
-          </button>
-            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-              <Plus size={18} />
-              Add Table
-            </button>
-          {isAdmin && (
+          <div className="header-dropdown">
             <button
-              className={`btn ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
-              onClick={() => setDeleteMode(!deleteMode)}
-              title="Toggle delete mode"
+              className={`btn btn-icon ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
+              onClick={() => setShowTableMenu(s => !s)}
+              title="Table actions"
             >
-              <Trash2 size={18} />
-              {deleteMode ? 'Done' : 'Delete Tables'}
+              <MoreVertical size={18} />
             </button>
-          )}
+            {showTableMenu && (
+              <>
+                <div className="header-dropdown-overlay" onClick={() => setShowTableMenu(false)} />
+                <div className="header-dropdown-menu">
+                  <button
+                    className="header-dropdown-option"
+                    onClick={() => { setShowTableMenu(false); setShowAddModal(true); }}
+                  >
+                    <Plus size={14} />
+                    Add Table
+                  </button>
+                  {isAdmin && (
+                    <button
+                      className={`header-dropdown-option ${deleteMode ? 'danger' : ''}`}
+                      onClick={() => { setShowTableMenu(false); setDeleteMode(m => !m); }}
+                    >
+                      <Trash2 size={14} />
+                      {deleteMode ? 'Done' : 'Delete Tables'}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-icon"
             onClick={() => setShowShortcutsHelp(true)}
             title="Keyboard shortcuts (?)"
           >
@@ -317,7 +338,7 @@ const Tables: React.FC = () => {
         </>
       ),
     });
-  }, [viewMode, isAdmin, setHeaderContent, navigate, user, deleteMode]);
+  }, [viewMode, isAdmin, setHeaderContent, navigate, user, deleteMode, showTableMenu]);
 
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
@@ -425,10 +446,10 @@ const Tables: React.FC = () => {
     const activeOrder = getActiveOrderByTable(targetTable.id);
     if (!activeOrder) return;
 
-    const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
+    const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
     const tax = taxEnabled ? activeOrder.items.reduce((sum: number, oi: any) => {
       const taxPercent = oi.item.taxPercent || 0;
-      return sum + (oi.item.price * oi.quantity * taxPercent / 100);
+      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
     }, 0) : 0;
     const total = subtotal + tax;
     const invoiceNo = `INV-${Date.now()}`;
@@ -451,14 +472,14 @@ const Tables: React.FC = () => {
     try {
       // Print invoice via printer service
       const printItems = activeOrder.items.map((oi: any) => {
-        const itemTotal = oi.item.price * oi.quantity;
+        const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
         const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
           qty: oi.quantity,
           unit: 'PCS',
-          rate: oi.item.price,
+          rate: orderItemUnitPrice(oi),
           tax_percent: taxPercent,
           amount: itemTotal,
         };
@@ -569,6 +590,7 @@ const Tables: React.FC = () => {
         position: { x: 0, y: 0 },
         ...(newTable.section ? { section: newTable.section } : {}),
       });
+      notify.success(`Table ${trimmedName || newTable.number} added`);
       setShowAddModal(false);
       setNewTable({ number: '', name: '', seats: 4, section: '' });
     } catch (error) {
@@ -590,6 +612,9 @@ const Tables: React.FC = () => {
     setLoadingTableId(id);
     try {
       await deleteTable(id);
+      notify.success('Table deleted');
+    } catch (error) {
+      notify.error((error as Error).message || 'Failed to delete table');
     } finally {
       setLoadingTableId(null);
     }
@@ -602,6 +627,7 @@ const Tables: React.FC = () => {
     setSectionLoading(true);
     try {
       await createTableSection(name);
+      notify.success(`Section "${name}" added`);
       setNewSectionName('');
     } catch (error) {
       console.error('Failed to add section:', error);
@@ -623,10 +649,13 @@ const Tables: React.FC = () => {
       // The backend treats "" as NULL. We need to send the actual stored value.
       const actualOldName = oldName === 'Ground Floor' ? '' : oldName;
       await renameTableSection(actualOldName, newName);
+      notify.success(`Section renamed to "${newName}"`);
       setEditingSection(null);
       setEditingSectionValue('');
       // If the active section was the renamed one, switch to the new name
       if (activeSection === oldName) setActiveSection(newName);
+    } catch (error) {
+      notify.error((error as Error).message || 'Failed to rename section');
     } finally {
       setSectionLoading(false);
     }
@@ -640,7 +669,10 @@ const Tables: React.FC = () => {
     try {
       const actualName = name === 'Ground Floor' ? '' : name;
       await deleteTableSection(actualName);
+      notify.success(`Section "${name}" deleted`);
       if (activeSection === name) setActiveSection('all');
+    } catch (error) {
+      notify.error((error as Error).message || 'Failed to delete section');
     } finally {
       setSectionLoading(false);
     }
@@ -648,15 +680,15 @@ const Tables: React.FC = () => {
 
   const billDialogOrder = billDialogTable ? getActiveOrderByTable(billDialogTable.id) : null;
   const billDialogTotal = billDialogOrder ?
-    billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) +
-    (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
+    billDialogOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0) +
+    (taxEnabled ? billDialogOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0)
     : 0;
 
   const previewOrder = previewTable ? getActiveOrderByTable(previewTable.id) : null;
   const previewSubtotal = previewOrder ?
-    previewOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0) : 0;
+    previewOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0) : 0;
   const previewTax = previewOrder && taxEnabled ?
-    previewOrder.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0;
+    previewOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity * (oi.item.taxPercent || 0) / 100), 0) : 0;
 
   // Sections come from the table_sections catalog (independent of tables).
   // We merge in any sections still referenced by tables so nothing is hidden
@@ -698,8 +730,8 @@ const Tables: React.FC = () => {
   const anyModalOpen = !!(
     billDialogTable || confirmTableChange || changeTableDialog || combineDialog ||
     confirmCombineTable || deleteConfirmTable || previewTable || cancelOrderConfirm ||
-    showAddModal || showSectionsModal || showStatusDropdown || showShortcutsHelp ||
-    printerConfirm.show || errorDialog.show || sectionToDelete
+    showAddModal || showSectionsModal || showStatusDropdown || showTableMenu ||
+    showShortcutsHelp || printerConfirm.show || errorDialog.show || sectionToDelete
   );
 
   // Close the top-most open modal/dialog (used by Esc).
@@ -716,10 +748,11 @@ const Tables: React.FC = () => {
     if (combineDialog) { setCombineDialog(null); return; }
     if (cancelOrderConfirm) { if (!isCancellingOrder) setCancelOrderConfirm(null); return; }
     if (previewTable) { setPreviewTable(null); return; }
+    if (showTableMenu) { setShowTableMenu(false); return; }
     if (showStatusDropdown) { setShowStatusDropdown(false); return; }
     if (showSectionsModal) { setShowSectionsModal(false); return; }
     if (showAddModal) { setShowAddModal(false); return; }
-  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showSectionsModal, showAddModal]);
+  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showTableMenu, showSectionsModal, showAddModal]);
 
   const openFocusedTable = useCallback((table: Table) => {
     if (checkingTableId) return;
@@ -843,12 +876,14 @@ const Tables: React.FC = () => {
 
   return (
     <>
-      <div>
+      <div className="tables-page">
         {viewMode === 'layout' ? (
           <div className="tables-layout-container">
             {tables.length === 0 ? (
               <div className="empty-state">
-                <Grid3X3 size={64} style={{ opacity: 0.5 }} />
+                <div className="tables-empty-icon">
+                  <Grid3X3 size={30} />
+                </div>
                 <p>No tables configured</p>
                 {isAdmin && (
                   <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '1rem' }}>
@@ -900,32 +935,32 @@ const Tables: React.FC = () => {
                       </>
                     )}
                   </div>
+
+                  <div className="tables-occupancy" title="Floor occupancy">
+                    <span className="tables-occupancy-label">
+                      {occupiedCount}/{tables.length} in use
+                    </span>
+                    <div className="tables-occupancy-bar">
+                      <div
+                        className="tables-occupancy-fill"
+                        style={{ width: `${tables.length ? (occupiedCount / tables.length) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="tables-layout-grid compact">
+                <div className="tables-layout-grid">
                 {filteredTables.map((table, idx) => {
                   const activeOrder = getActiveOrderByTable(table.id);
                   return (
                     <div
                       key={table.id}
-                      className={`table-layout-card compact ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
+                      className={`table-layout-card ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
                       onClick={() => handleTableClick(table)}
-                      style={{ position: 'relative' }}
+                      style={{ animationDelay: `${Math.min(idx, 15) * 25}ms` }}
                     >
                       {checkingTableId === table.id && (
-                        <div className="table-checking-overlay" style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          background: 'rgba(255, 255, 255, 0.7)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 'inherit',
-                          zIndex: 10
-                        }}>
+                        <div className="table-checking-overlay">
                           <Loader2 className="animate-spin" style={{ color: 'var(--primary)' }} size={24} />
                         </div>
                       )}
@@ -945,45 +980,53 @@ const Tables: React.FC = () => {
                           )}
                         </button>
                       )}
+                      <div className="table-card-head">
+                        {activeOrder ? (
+                          <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
+                        ) : (
+                          <span className="table-status-chip available">Available</span>
+                        )}
+                      </div>
+                      <div className="table-card-body">
+                        <div className="table-layout-number">{tableLabel(table)}</div>
+                        <div className={`table-card-sub ${activeOrder ? 'amount' : ''}`}>
+                          {activeOrder
+                            ? `${formatCurrencyInt(activeOrder.totalAmount)} · ${activeOrder.items.length} item${activeOrder.items.length === 1 ? '' : 's'}`
+                            : `${table.seats} seats`}
+                        </div>
+                      </div>
                       {activeOrder && (
                         <div className="table-card-actions">
                           <button
                             className="table-bill-btn new-design"
                             onClick={(e) => handleBillClick(e, table)}
-                            title="Print Bill"
+                            data-tooltip="Print Bill"
                           >
-                            <Printer size={16} />
+                            <Printer size={15} />
                           </button>
                           <button
                             className="table-change-btn"
                             onClick={(e) => handleChangeTableClick(e, table)}
-                            title="Change Table"
+                            data-tooltip="Change Table"
                           >
                             <ArrowRightLeft size={14} />
                           </button>
                           <button
                             className="table-combine-btn"
                             onClick={(e) => handleCombineClick(e, table)}
-                            title="Combine Bill"
+                            data-tooltip="Merge Bill"
                           >
                             <Combine size={14} />
                           </button>
                           <button
                             className="table-preview-btn"
                             onClick={(e) => handlePreviewClick(e, table)}
-                            title="Preview Order"
+                            data-tooltip="Preview Order"
                           >
                             <Eye size={14} />
                           </button>
                         </div>
                       )}
-                      {activeOrder && (
-                        <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
-                      )}
-                      <div className="table-layout-number">{tableLabel(table)}</div>
-                      <div className={`table-layout-status ${activeOrder ? 'occupied' : 'available'}`}>
-                        {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : 'Free'}
-                      </div>
                     </div>
                   );
                 })}
@@ -1066,7 +1109,7 @@ const Tables: React.FC = () => {
                                   className="action-btn"
                                   style={{ background: 'rgba(245,166,35, 0.1)', color: 'var(--warning)' }}
                                   onClick={(e) => handleCombineClick(e as any, table)}
-                                  title="Combine Bill"
+                                  title="Merge Bill"
                                 >
                                   <Combine size={14} />
                                 </button>
@@ -1337,12 +1380,12 @@ const Tables: React.FC = () => {
         </div>
       )}
 
-      {/* Combine Bill Dialog */}
+      {/* Merge Bill Dialog */}
       {combineDialog && !confirmCombineTable && (
         <div className="modal-overlay" onClick={() => setCombineDialog(null)}>
           <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Combine Bill</h2>
+              <h2>Merge Bill</h2>
               <button className="close-btn" onClick={() => setCombineDialog(null)}>
                 <X size={24} />
               </button>
@@ -1372,7 +1415,7 @@ const Tables: React.FC = () => {
                   })}
                 {tables.filter(t => t.id !== combineDialog.intoTable.id && getActiveOrderByTable(t.id)).length === 0 && (
                   <p style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>
-                    No other occupied tables to combine with
+                    No other occupied tables to merge with
                   </p>
                 )}
               </div>
@@ -1391,7 +1434,7 @@ const Tables: React.FC = () => {
         <div className="modal-overlay" onClick={() => !isCombining && setConfirmCombineTable(null)}>
           <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Confirm Combine</h2>
+              <h2>Confirm Merge</h2>
               <button className="close-btn" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
                 <X size={24} />
               </button>
@@ -1421,7 +1464,7 @@ const Tables: React.FC = () => {
                 Cancel
               </button>
               <button className="btn btn-primary" onClick={handleCombine} disabled={isCombining}>
-                {isCombining ? 'Combining...' : 'Confirm Combine'}
+                {isCombining ? 'Merging...' : 'Confirm Merge'}
               </button>
             </div>
           </div>
@@ -1445,11 +1488,11 @@ const Tables: React.FC = () => {
                     <div className="bill-item-details">
                       <div className="bill-item-name">{oi.item.name}</div>
                       <div className="bill-item-qty">
-                        {oi.quantity} × {formatCurrency(oi.item.price)}
+                        {oi.quantity} × {formatCurrency(orderItemUnitPrice(oi))}
                         {oi.notes ? ` — ${oi.notes}` : ''}
                       </div>
                     </div>
-                    <div className="bill-item-price">{formatCurrency(oi.item.price * oi.quantity)}</div>
+                    <div className="bill-item-price">{formatCurrency(orderItemUnitPrice(oi) * oi.quantity)}</div>
                   </div>
                 ))}
               </div>

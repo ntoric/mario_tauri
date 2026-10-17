@@ -89,6 +89,8 @@ type Repository struct {
 	Expense         *ExpenseRepository
 	ItemExpense     *ItemExpenseRepository
 	RevenueReport   *RevenueReportRepository
+	Report          *ReportRepository
+	SupportTicket   *SupportTicketRepository
 	Cache           *MemoryCache
 	db              *sql.DB
 }
@@ -114,6 +116,8 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
 		ItemExpense:     &ItemExpenseRepository{db: db, redis: redisCache},
 		RevenueReport:   &RevenueReportRepository{db: db},
+		Report:          &ReportRepository{db: db},
+		SupportTicket:   &SupportTicketRepository{db: db},
 		Cache:           cache,
 	}
 }
@@ -131,6 +135,7 @@ var storeScopedTables = map[string]bool{
 	"expenses":           true,
 	"expense_categories": true,
 	"item_expenses":      true,
+	"support_tickets":    true,
 }
 
 // GetRecordStoreID returns the store_id of a record in a store-scoped table.
@@ -2906,7 +2911,9 @@ type RevenueReportRepository struct {
 	db *sql.DB
 }
 
-func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID, startDate, endDate string) (*models.RevenueReport, error) {
+// GetRevenueReport aggregates the profit report metrics. With summaryOnly
+// the entry lists are skipped — the paginated pages fetch them separately.
+func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID, startDate, endDate string, summaryOnly bool) (*models.RevenueReport, error) {
 	// Build date filter conditions
 	var dateFilter string
 	var args []interface{}
@@ -3001,6 +3008,23 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 	avgOrderValue := 0.0
 	if totalOrders > 0 {
 		avgOrderValue = totalRevenue / float64(totalOrders)
+	}
+
+	report := &models.RevenueReport{
+		PeriodStart:       startDate,
+		PeriodEnd:         endDate,
+		TotalRevenue:      totalRevenue,
+		TotalExpenses:     totalExpenses,
+		NetProfit:         netProfit,
+		TotalOrders:       totalOrders,
+		TotalBills:        totalBills,
+		TotalExpenseCount: totalExpenseCount,
+		AverageOrderValue: avgOrderValue,
+		Bills:             []models.Bill{},
+		Expenses:          []models.Expense{},
+	}
+	if summaryOnly {
+		return report, nil
 	}
 
 	// Fetch individual bills (revenue entries) with items
@@ -3151,19 +3175,1229 @@ func (r *RevenueReportRepository) GetRevenueReport(ctx context.Context, storeID,
 		expenses = append(expenses, e)
 	}
 
-	report := &models.RevenueReport{
-		PeriodStart:       startDate,
-		PeriodEnd:         endDate,
-		TotalRevenue:      totalRevenue,
-		TotalExpenses:     totalExpenses,
-		NetProfit:         netProfit,
-		TotalOrders:       totalOrders,
-		TotalBills:        totalBills,
-		TotalExpenseCount: totalExpenseCount,
-		AverageOrderValue: avgOrderValue,
-		Bills:             bills,
-		Expenses:          expenses,
+	report.Bills = bills
+	report.Expenses = expenses
+	return report, nil
+}
+
+// ==========================================
+// TOP SELLING ITEMS REPORT REPOSITORY
+// ==========================================
+
+type ReportRepository struct {
+	db *sql.DB
+}
+
+// ReportFilter bounds the paginated sales reports. Rows are aggregated
+// groups; pagination applies after filtering and sorting.
+type ReportFilter struct {
+	From     *time.Time
+	To       *time.Time
+	Search   string
+	Sort     string // item | category | date | count | revenue
+	Dir      string // asc | desc
+	Page     int    // 1-based
+	PageSize int
+	All      bool // bypass pagination (CSV export)
+}
+
+// topSellingGroupedSQL builds the per-date aggregation subquery for the
+// given source, grouped by "item" or "category". The "bills" source mirrors
+// the storefront report (bill generated_at); "orders" is the fallback for
+// stores that only complete orders without generating bills.
+func topSellingGroupedSQL(source, group, storeID string, f ReportFilter) (string, []interface{}) {
+	var from, tsCol, where string
+	if source == "orders" {
+		from = "orders o JOIN order_items oi ON o.id = oi.order_id"
+		tsCol = "o.created_at"
+		where = "o.store_id = $1 AND o.status = 'completed'"
+	} else {
+		from = "bills b JOIN order_items oi ON b.order_id = oi.order_id"
+		tsCol = "b.generated_at"
+		where = "b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')"
 	}
 
+	var selectCols, groupBy string
+	if group == "category" {
+		selectCols = `COALESCE(i.category_id, 'unknown') AS category_id,
+			COALESCE(c.name, 'Uncategorised') AS category`
+		groupBy = "category_id, category"
+	} else {
+		selectCols = `oi.item_id AS item_id,
+			COALESCE(i.name, oi.item_id) AS item,
+			COALESCE(c.name, 'Uncategorised') AS category`
+		groupBy = "item_id, item, category"
+	}
+
+	args := []interface{}{storeID}
+	idx := 2
+	sqlStr := fmt.Sprintf(`
+		SELECT
+			%s,
+			TO_CHAR(%s::date, 'YYYY-MM-DD') AS date,
+			SUM(oi.quantity)::int AS count,
+			COALESCE(SUM(oi.quantity * COALESCE(i.price, 0)), 0)::float8 AS revenue
+		FROM %s
+		LEFT JOIN items i ON oi.item_id = i.id
+		LEFT JOIN categories c ON i.category_id = c.id
+		WHERE %s
+	`, selectCols, tsCol, from, where)
+
+	if f.From != nil {
+		sqlStr += fmt.Sprintf(" AND %s::date >= $%d::date", tsCol, idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		sqlStr += fmt.Sprintf(" AND %s::date <= $%d::date", tsCol, idx)
+		args = append(args, *f.To)
+		idx++
+	}
+
+	sqlStr += fmt.Sprintf(" GROUP BY %s, %s::date", groupBy, tsCol)
+	return sqlStr, args
+}
+
+func (r *ReportRepository) GetTopSellingItems(ctx context.Context, storeID string, f ReportFilter) (*models.TopSellingItemsReport, error) {
+	grouped, args := topSellingGroupedSQL("bills", "item", storeID, f)
+
+	// The report falls back to completed orders only when no bills produced
+	// any rows in range — same condition the storefront applied client-side.
+	var groupCount int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+grouped+") g", args...).Scan(&groupCount); err != nil {
+		return nil, err
+	}
+	if groupCount == 0 {
+		grouped, args = topSellingGroupedSQL("orders", "item", storeID, f)
+	}
+
+	// Search applies to the grouped display values (item / category names).
+	idx := len(args) + 1
+	filtered := grouped
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		filtered = fmt.Sprintf(
+			"SELECT * FROM (%s) g WHERE (g.item ILIKE $%d ESCAPE '\\' OR g.category ILIKE $%d ESCAPE '\\')",
+			grouped, idx, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	report := &models.TopSellingItemsReport{
+		Rows:     []models.TopSellingItemRow{},
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}
+
+	summarySQL := fmt.Sprintf(`
+		SELECT COUNT(*), COUNT(DISTINCT item_id),
+		       COALESCE(SUM(count), 0), COALESCE(SUM(revenue), 0)
+		FROM (%s) t
+	`, filtered)
+	if err := r.db.QueryRowContext(ctx, summarySQL, args...).Scan(
+		&report.Total, &report.UniqueItems, &report.TotalCount, &report.TotalRevenue,
+	); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	sortExpr := map[string]string{
+		"item":     "LOWER(item), item",
+		"category": "LOWER(category), category",
+		"date":     "date",
+		"count":    "count",
+		"revenue":  "revenue",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "count"
+	}
+	dir := "DESC"
+	if f.Dir == "asc" {
+		dir = "ASC"
+	}
+
+	rowsSQL := fmt.Sprintf(
+		"SELECT item_id, item, category, date, count, revenue FROM (%s) t ORDER BY %s %s, item_id, date",
+		filtered, sortExpr, dir,
+	)
+	if !f.All {
+		rowsSQL += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, rowsSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row models.TopSellingItemRow
+		var itemID, item, category, date sql.NullString
+		if err := rows.Scan(&itemID, &item, &category, &date, &row.Count, &row.Revenue); err != nil {
+			return nil, err
+		}
+		row.ItemID = itemID.String
+		row.Item = item.String
+		row.Category = category.String
+		row.Date = date.String
+		report.Rows = append(report.Rows, row)
+	}
+	return report, rows.Err()
+}
+
+func (r *ReportRepository) GetTopSellingCategories(ctx context.Context, storeID string, f ReportFilter) (*models.TopSellingCategoriesReport, error) {
+	grouped, args := topSellingGroupedSQL("bills", "category", storeID, f)
+
+	// Same client-side fallback rule as the items report: completed orders
+	// are only used when no bills produced rows in range.
+	var groupCount int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+grouped+") g", args...).Scan(&groupCount); err != nil {
+		return nil, err
+	}
+	if groupCount == 0 {
+		grouped, args = topSellingGroupedSQL("orders", "category", storeID, f)
+	}
+
+	idx := len(args) + 1
+	filtered := grouped
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		filtered = fmt.Sprintf(
+			"SELECT * FROM (%s) g WHERE g.category ILIKE $%d ESCAPE '\\'",
+			grouped, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	report := &models.TopSellingCategoriesReport{
+		Rows:           []models.TopSellingCategoryRow{},
+		CategoryTotals: []models.CategorySaleTotal{},
+		Page:           f.Page,
+		PageSize:       f.PageSize,
+	}
+
+	summarySQL := fmt.Sprintf(`
+		SELECT COUNT(*), COUNT(DISTINCT category_id),
+		       COALESCE(SUM(count), 0), COALESCE(SUM(revenue), 0)
+		FROM (%s) t
+	`, filtered)
+	if err := r.db.QueryRowContext(ctx, summarySQL, args...).Scan(
+		&report.Total, &report.UniqueCategories, &report.TotalCount, &report.TotalRevenue,
+	); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	// Per-category totals across the whole filtered range drive the revenue
+	// split chart — they must not be truncated to the current page.
+	catRows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT category_id, category, SUM(count)::int, SUM(revenue)
+		FROM (%s) t
+		GROUP BY category_id, category
+		ORDER BY SUM(revenue) DESC
+	`, filtered), args...)
+	if err != nil {
+		return nil, err
+	}
+	for catRows.Next() {
+		var ct models.CategorySaleTotal
+		var catID, cat sql.NullString
+		if err := catRows.Scan(&catID, &cat, &ct.Count, &ct.Revenue); err != nil {
+			catRows.Close()
+			return nil, err
+		}
+		ct.CategoryID = catID.String
+		ct.Category = cat.String
+		report.CategoryTotals = append(report.CategoryTotals, ct)
+	}
+	catRows.Close()
+
+	sortExpr := map[string]string{
+		"category": "LOWER(category), category",
+		"date":     "date",
+		"count":    "count",
+		"revenue":  "revenue",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "count"
+	}
+	dir := "DESC"
+	if f.Dir == "asc" {
+		dir = "ASC"
+	}
+
+	rowsSQL := fmt.Sprintf(
+		"SELECT category_id, category, date, count, revenue FROM (%s) t ORDER BY %s %s, category_id, date",
+		filtered, sortExpr, dir,
+	)
+	if !f.All {
+		rowsSQL += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, rowsSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row models.TopSellingCategoryRow
+		var catID, cat, date sql.NullString
+		if err := rows.Scan(&catID, &cat, &date, &row.Count, &row.Revenue); err != nil {
+			return nil, err
+		}
+		row.CategoryID = catID.String
+		row.Category = cat.String
+		row.Date = date.String
+		report.Rows = append(report.Rows, row)
+	}
+	return report, rows.Err()
+}
+
+// salesProfitGroupedSQL builds the per-item sales aggregation subquery used
+// by the sales-based profit report. Cost data only counts for currently
+// active items, matching the storefront which looked costs up in the
+// (active-only) menu profit report. unit_price falls back to the current
+// item price, then 0.
+func salesProfitGroupedSQL(source, storeID string, f ReportFilter, hasCosts bool) (string, []interface{}) {
+	var from, tsCol, where string
+	if source == "orders" {
+		from = "orders o JOIN order_items oi ON o.id = oi.order_id"
+		tsCol = "o.created_at"
+		where = "o.store_id = $1 AND o.status = 'completed'"
+	} else {
+		from = "bills b JOIN order_items oi ON b.order_id = oi.order_id"
+		tsCol = "b.generated_at"
+		where = "b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')"
+	}
+
+	costJoin := ""
+	groupBy := "oi.item_id, i.id, i.name, c.name"
+	unitCost := "0::float8"
+	if hasCosts {
+		costJoin = `LEFT JOIN (
+			SELECT item_id, SUM(amount) AS total_cost
+			FROM item_expenses WHERE is_active = true
+			GROUP BY item_id
+		) ic ON ic.item_id = i.id AND i.is_active = true`
+		groupBy += ", ic.total_cost"
+		unitCost = "COALESCE(ic.total_cost, 0)"
+	}
+
+	args := []interface{}{storeID}
+	idx := 2
+	sqlStr := fmt.Sprintf(`
+		SELECT
+			oi.item_id AS item_id,
+			COALESCE(i.name, oi.item_id) AS name,
+			CASE WHEN i.id IS NULL THEN '—' ELSE COALESCE(c.name, 'Uncategorised') END AS category,
+			SUM(oi.quantity)::int AS qty_sold,
+			COALESCE(SUM(oi.quantity * COALESCE(oi.unit_price, i.price, 0)), 0)::float8 AS revenue,
+			COALESCE(SUM(oi.quantity * %s), 0)::float8 AS prep_cost,
+			COALESCE(SUM(oi.quantity * (COALESCE(oi.unit_price, i.price, 0) - %s))
+				FILTER (WHERE %s > 0), 0)::float8 AS profit,
+			%s AS unit_cost
+		FROM %s
+		LEFT JOIN items i ON oi.item_id = i.id
+		LEFT JOIN categories c ON i.category_id = c.id
+		%s
+		WHERE %s
+	`, unitCost, unitCost, unitCost, unitCost, from, costJoin, where)
+
+	if f.From != nil {
+		sqlStr += fmt.Sprintf(" AND %s::date >= $%d::date", tsCol, idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		sqlStr += fmt.Sprintf(" AND %s::date <= $%d::date", tsCol, idx)
+		args = append(args, *f.To)
+		idx++
+	}
+
+	sqlStr += fmt.Sprintf(" GROUP BY %s", groupBy)
+	return sqlStr, args
+}
+
+func (r *ReportRepository) GetSalesProfit(ctx context.Context, storeID string, f ReportFilter) (*models.SalesProfitReport, error) {
+	hasCosts := itemExpensesTableExists(ctx, r.db)
+	grouped, args := salesProfitGroupedSQL("bills", storeID, f, hasCosts)
+
+	// Same fallback rule as the other sales reports: completed orders are
+	// used only when no bills produced rows in range.
+	var groupCount int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+grouped+") g", args...).Scan(&groupCount); err != nil {
+		return nil, err
+	}
+	if groupCount == 0 {
+		grouped, args = salesProfitGroupedSQL("orders", storeID, f, hasCosts)
+	}
+
+	computed := fmt.Sprintf(`SELECT g.*,
+			(g.unit_cost > 0) AS has_cost_data,
+			CASE WHEN g.revenue > 0 AND g.unit_cost > 0 THEN g.profit / g.revenue * 100 ELSE 0 END AS profit_percent
+		FROM (%s) g`, grouped)
+
+	report := &models.SalesProfitReport{
+		Rows:     []models.SalesProfitRow{},
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}
+
+	// Summary covers the whole period regardless of the table search —
+	// matches how the storefront computed the KPIs before pagination.
+	summarySQL := fmt.Sprintf(`
+		SELECT COALESCE(SUM(qty_sold),0)::int, COALESCE(SUM(revenue),0), COALESCE(SUM(prep_cost),0),
+		       COALESCE(SUM(profit),0),
+		       COALESCE(SUM(revenue) FILTER (WHERE unit_cost > 0),0),
+		       COALESCE(SUM(revenue) FILTER (WHERE unit_cost <= 0),0),
+		       COUNT(*)::int, COUNT(*) FILTER (WHERE unit_cost > 0)::int
+		FROM (%s) t
+	`, computed)
+	if err := r.db.QueryRowContext(ctx, summarySQL, args...).Scan(
+		&report.UnitsSold, &report.Revenue, &report.PrepCost, &report.Profit,
+		&report.TrackedRevenue, &report.UntrackedRevenue,
+		&report.ItemsSold, &report.ItemsWithCostSold,
+	); err != nil {
+		return nil, err
+	}
+
+	idx := len(args) + 1
+	filtered := computed
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		filtered = fmt.Sprintf(
+			"SELECT * FROM (%s) g WHERE (g.name ILIKE $%d ESCAPE '\\' OR g.category ILIKE $%d ESCAPE '\\')",
+			computed, idx, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+filtered+") t", args...).Scan(&report.Total); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	sortExpr := map[string]string{
+		"name":          "LOWER(name), name",
+		"category":      "LOWER(category), category",
+		"qtySold":       "qty_sold",
+		"revenue":       "revenue",
+		"prepCost":      "prep_cost",
+		"profit":        "profit",
+		"profitPercent": "profit_percent",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "profit"
+	}
+	dir := "DESC"
+	if f.Dir == "asc" {
+		dir = "ASC"
+	}
+
+	rowsSQL := fmt.Sprintf(
+		`SELECT item_id, name, category, qty_sold, revenue, prep_cost, profit, profit_percent, has_cost_data
+		 FROM (%s) t ORDER BY %s %s, item_id`,
+		filtered, sortExpr, dir,
+	)
+	if !f.All {
+		rowsSQL += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, rowsSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row models.SalesProfitRow
+		var itemID, name, category sql.NullString
+		if err := rows.Scan(&itemID, &name, &category, &row.QtySold, &row.Revenue, &row.PrepCost, &row.Profit, &row.ProfitPercent, &row.HasCostData); err != nil {
+			return nil, err
+		}
+		row.ItemID = itemID.String
+		row.Name = name.String
+		row.Category = category.String
+		report.Rows = append(report.Rows, row)
+	}
+	return report, rows.Err()
+}
+
+func (r *ReportRepository) GetMenuProfit(ctx context.Context, storeID string, f ReportFilter) (*models.MenuProfitReport, error) {
+	hasCosts := itemExpensesTableExists(ctx, r.db)
+
+	costExpr := "0::float8"
+	costJoin := ""
+	// Resolved per row against t.item_id in the paged query below.
+	expensesExpr := "'[]'::json"
+	if hasCosts {
+		costExpr = "COALESCE(ic.total_cost, 0)"
+		costJoin = `LEFT JOIN (
+			SELECT item_id, SUM(amount) AS total_cost
+			FROM item_expenses WHERE is_active = true
+			GROUP BY item_id
+		) ic ON ic.item_id = i.id`
+		expensesExpr = `COALESCE((
+			SELECT json_agg(json_build_object(
+				'id', e.id, 'itemId', e.item_id, 'name', e.name,
+				'description', COALESCE(e.description, ''), 'amount', e.amount
+			) ORDER BY e.name)
+			FROM item_expenses e
+			WHERE e.item_id = t.item_id AND e.is_active = true
+		), '[]'::json)`
+	}
+
+	// Profit fields mirror applyItemProfitFields: no cost data → zeroes.
+	base := fmt.Sprintf(`
+		SELECT i.id AS item_id, i.name, COALESCE(c.name, '') AS category_name, i.price,
+		       %s AS total_cost,
+		       CASE WHEN %s > 0 THEN i.price - %s ELSE 0 END AS profit,
+		       CASE WHEN %s > 0 AND i.price > 0 THEN (i.price - %s) / i.price * 100 ELSE 0 END AS profit_percent
+		FROM items i
+		LEFT JOIN categories c ON i.category_id = c.id
+		%s
+		WHERE i.store_id = $1 AND i.is_active = true
+	`, costExpr, costExpr, costExpr, costExpr, costExpr, costJoin)
+
+	args := []interface{}{storeID}
+	idx := 2
+
+	report := &models.MenuProfitReport{
+		Rows:     []models.ItemProfitEntry{},
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}
+
+	// Menu KPIs cover the whole menu regardless of the table search.
+	summarySQL := fmt.Sprintf(`
+		SELECT COUNT(*)::int, COUNT(*) FILTER (WHERE total_cost > 0)::int,
+		       COALESCE(SUM(price),0), COALESCE(SUM(total_cost),0), COALESCE(SUM(profit),0),
+		       COALESCE(AVG(profit_percent) FILTER (WHERE total_cost > 0),0)
+		FROM (%s) t
+	`, base)
+	if err := r.db.QueryRowContext(ctx, summarySQL, args...).Scan(
+		&report.TotalItems, &report.ItemsWithCostCount,
+		&report.TotalSellingValue, &report.TotalCost, &report.TotalProfit,
+		&report.AverageProfitPercent,
+	); err != nil {
+		return nil, err
+	}
+
+	filtered := base
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		filtered = fmt.Sprintf(
+			"SELECT * FROM (%s) g WHERE (g.name ILIKE $%d ESCAPE '\\' OR g.category_name ILIKE $%d ESCAPE '\\')",
+			base, idx, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+filtered+") t", args...).Scan(&report.Total); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	sortExpr := map[string]string{
+		"name":          "LOWER(name), name",
+		"category":      "LOWER(category_name), category_name",
+		"price":         "price",
+		"cost":          "total_cost",
+		"profit":        "profit",
+		"profitPercent": "profit_percent",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "profit_percent"
+	}
+	dir := "DESC"
+	if f.Dir == "asc" {
+		dir = "ASC"
+	}
+
+	rowsSQL := fmt.Sprintf(
+		`SELECT t.item_id, t.name, t.category_name, t.price, t.total_cost, t.profit, t.profit_percent, %s AS expenses
+		 FROM (%s) t ORDER BY %s %s, item_id`,
+		expensesExpr, filtered, sortExpr, dir,
+	)
+	if !f.All {
+		rowsSQL += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, rowsSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var entry models.ItemProfitEntry
+		var catName sql.NullString
+		var expensesBytes []byte
+		if err := rows.Scan(&entry.Item.ID, &entry.Item.Name, &catName, &entry.Item.Price,
+			&entry.TotalCost, &entry.Profit, &entry.ProfitPercent, &expensesBytes); err != nil {
+			return nil, err
+		}
+		entry.Item.CategoryName = catName.String
+		entry.Item.TotalCost = entry.TotalCost
+		entry.Item.Profit = entry.Profit
+		entry.Item.ProfitPercent = entry.ProfitPercent
+		entry.Expenses = []models.ItemExpense{}
+		if len(expensesBytes) > 0 {
+			_ = json.Unmarshal(expensesBytes, &entry.Expenses)
+		}
+		report.Rows = append(report.Rows, entry)
+	}
+	return report, rows.Err()
+}
+
+// reportSortDir whitelists the direction param.
+func reportSortDir(dir string) string {
+	if dir == "asc" {
+		return "ASC"
+	}
+	return "DESC"
+}
+
+// GetExpensesByCategory returns the expenses report grouped by expense
+// category. Categories whose expenses fall outside the date range still
+// appear with zero totals, matching the unpaginated report. ChartRows
+// carries the whole filtered set so the split chart is not limited to the
+// current page.
+func (r *ReportRepository) GetExpensesByCategory(ctx context.Context, storeID string, f ReportFilter) (*models.ExpenseCategoryReport, error) {
+	args := []interface{}{storeID}
+	idx := 2
+
+	// Date predicates stay in the JOIN condition so categories with no
+	// expenses in range keep their zero-total rows.
+	joinConds := ""
+	if f.From != nil {
+		joinConds += fmt.Sprintf(" AND (e.expense_date IS NULL OR e.expense_date >= $%d::date)", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		joinConds += fmt.Sprintf(" AND (e.expense_date IS NULL OR e.expense_date <= $%d::date)", idx)
+		args = append(args, *f.To)
+		idx++
+	}
+
+	sqlStr := fmt.Sprintf(`
+		SELECT ec.id AS category_id, ec.name AS category_name,
+		       COALESCE(SUM(e.amount), 0) AS total_amount,
+		       COUNT(e.id)::int AS expense_count
+		FROM expense_categories ec
+		LEFT JOIN expenses e ON ec.id = e.category_id
+			AND e.store_id = $1
+			AND e.is_active = true
+			%s
+		WHERE ec.store_id = $1 AND ec.is_active = true
+	`, joinConds)
+
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		sqlStr += fmt.Sprintf(" AND ec.name ILIKE $%d ESCAPE '\\'", idx)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	sqlStr += " GROUP BY ec.id, ec.name"
+
+	sortExpr := map[string]string{
+		"category": "LOWER(ec.name), ec.name",
+		"amount":   "total_amount",
+		"count":    "expense_count",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "total_amount"
+	}
+	sqlStr += fmt.Sprintf(" ORDER BY %s %s, ec.id", sortExpr, reportSortDir(f.Dir))
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var all []models.ExpenseReport
+	for rows.Next() {
+		var row models.ExpenseReport
+		if err := rows.Scan(&row.CategoryID, &row.CategoryName, &row.TotalAmount, &row.ExpenseCount); err != nil {
+			return nil, err
+		}
+		all = append(all, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	report := &models.ExpenseCategoryReport{
+		Rows:      []models.ExpenseReport{},
+		Total:     len(all),
+		Page:      f.Page,
+		PageSize:  f.PageSize,
+		ChartRows: all,
+	}
+	if report.ChartRows == nil {
+		report.ChartRows = []models.ExpenseReport{}
+	}
+	for _, row := range all {
+		report.TotalAmount += row.TotalAmount
+		report.TotalCount += row.ExpenseCount
+	}
+	if f.All {
+		report.Rows = all
+		return report, nil
+	}
+	start := (f.Page - 1) * f.PageSize
+	if start < len(all) {
+		end := start + f.PageSize
+		if end > len(all) {
+			end = len(all)
+		}
+		report.Rows = all[start:end]
+	}
 	return report, nil
+}
+
+// GetExpensesByDate returns the expenses report grouped by expense date,
+// paginated the same way as the category grouping.
+func (r *ReportRepository) GetExpensesByDate(ctx context.Context, storeID string, f ReportFilter) (*models.ExpenseDateReport, error) {
+	args := []interface{}{storeID}
+	idx := 2
+
+	sqlStr := `
+		SELECT TO_CHAR(e.expense_date::date, 'YYYY-MM-DD') AS date,
+		       COALESCE(SUM(e.amount), 0) AS total_amount,
+		       COUNT(e.id)::int AS expense_count
+		FROM expenses e
+		WHERE e.store_id = $1 AND e.is_active = true
+	`
+	if f.From != nil {
+		sqlStr += fmt.Sprintf(" AND e.expense_date >= $%d::date", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		sqlStr += fmt.Sprintf(" AND e.expense_date <= $%d::date", idx)
+		args = append(args, *f.To)
+		idx++
+	}
+	sqlStr += " GROUP BY e.expense_date::date"
+
+	sortExpr := map[string]string{
+		"date":   "date",
+		"amount": "total_amount",
+		"count":  "expense_count",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "date"
+	}
+	sqlStr += fmt.Sprintf(" ORDER BY %s %s", sortExpr, reportSortDir(f.Dir))
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var all []models.ExpenseSummary
+	for rows.Next() {
+		var row models.ExpenseSummary
+		if err := rows.Scan(&row.Date, &row.TotalAmount, &row.ExpenseCount); err != nil {
+			return nil, err
+		}
+		all = append(all, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	report := &models.ExpenseDateReport{
+		Rows:      []models.ExpenseSummary{},
+		Total:     len(all),
+		Page:      f.Page,
+		PageSize:  f.PageSize,
+		ChartRows: all,
+	}
+	if report.ChartRows == nil {
+		report.ChartRows = []models.ExpenseSummary{}
+	}
+	for _, row := range all {
+		report.TotalAmount += row.TotalAmount
+		report.TotalCount += row.ExpenseCount
+	}
+	if f.All {
+		report.Rows = all
+		return report, nil
+	}
+	start := (f.Page - 1) * f.PageSize
+	if start < len(all) {
+		end := start + f.PageSize
+		if end > len(all) {
+			end = len(all)
+		}
+		report.Rows = all[start:end]
+	}
+	return report, nil
+}
+
+// GetRevenueEntries returns a paginated slice of bill revenue entries for
+// the profit report, each with its order items embedded (the detail modal
+// needs them). Sorting/searching/pagination happen server-side.
+func (r *ReportRepository) GetRevenueEntries(ctx context.Context, storeID string, f ReportFilter) (*models.RevenueEntriesReport, error) {
+	args := []interface{}{storeID}
+	idx := 2
+
+	where := "b.store_id = $1 AND (b.status IS NULL OR b.status = 'active')"
+	if f.From != nil {
+		where += fmt.Sprintf(" AND DATE(b.generated_at) >= $%d::date", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		where += fmt.Sprintf(" AND DATE(b.generated_at) <= $%d::date", idx)
+		args = append(args, *f.To)
+		idx++
+	}
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		where += fmt.Sprintf(
+			" AND (b.invoice_no ILIKE $%d ESCAPE '\\' OR b.customer_name ILIKE $%d ESCAPE '\\')",
+			idx, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	report := &models.RevenueEntriesReport{
+		Rows:     []models.Bill{},
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM bills b WHERE "+where, args...).Scan(&report.Total); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	sortExpr := map[string]string{
+		"invoice":  "b.invoice_no",
+		"date":     "b.generated_at",
+		"customer": "LOWER(b.customer_name), b.customer_name",
+		"total":    "b.total",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "b.generated_at"
+	}
+
+	sqlStr := fmt.Sprintf(`
+		SELECT b.id, b.store_id, b.order_id, b.table_number, b.table_name, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
+		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.generated_at, b.generated_by,
+		       COALESCE(
+		         json_agg(
+		           json_build_object(
+		             'itemId', oi.item_id,
+		             'quantity', oi.quantity,
+		             'unitPrice', oi.unit_price,
+		             'item', json_build_object(
+		               'id', i.id,
+		               'name', i.name,
+		               'price', i.price,
+		               'categoryId', i.category_id,
+		               'categoryName', COALESCE(c.name, 'Uncategorised')
+		             )
+		           )
+		         ) FILTER (WHERE oi.id IS NOT NULL),
+		         '[]'
+		       ) as items
+		FROM bills b
+		LEFT JOIN order_items oi ON b.order_id = oi.order_id
+		LEFT JOIN items i ON oi.item_id = i.id
+		LEFT JOIN categories c ON i.category_id = c.id
+		WHERE %s
+		GROUP BY b.id
+		ORDER BY %s %s, b.id
+	`, where, sortExpr, reportSortDir(f.Dir))
+
+	if !f.All {
+		sqlStr += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var b models.Bill
+		var tableName, method, customer, customerMobile, generatedBy sql.NullString
+		var itemsBytes []byte
+		if err := rows.Scan(
+			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &tableName, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
+			&method, &customer, &customerMobile, &b.IsPrinted, &b.GeneratedAt, &generatedBy,
+			&itemsBytes,
+		); err != nil {
+			return nil, err
+		}
+		b.TableName = tableName.String
+		b.PaymentMethod = method.String
+		b.CustomerName = customer.String
+		b.CustomerMobile = customerMobile.String
+		b.GeneratedBy = generatedBy.String
+
+		b.Items = []models.OrderItem{}
+		if len(itemsBytes) > 0 {
+			_ = json.Unmarshal(itemsBytes, &b.Items)
+		}
+		report.Rows = append(report.Rows, b)
+	}
+	return report, rows.Err()
+}
+
+// GetExpenseEntries returns a paginated slice of expense entries for the
+// profit report.
+func (r *ReportRepository) GetExpenseEntries(ctx context.Context, storeID string, f ReportFilter) (*models.ExpenseEntriesReport, error) {
+	args := []interface{}{storeID}
+	idx := 2
+
+	where := "e.store_id = $1 AND e.is_active = true"
+	if f.From != nil {
+		where += fmt.Sprintf(" AND DATE(e.expense_date) >= $%d::date", idx)
+		args = append(args, *f.From)
+		idx++
+	}
+	if f.To != nil {
+		where += fmt.Sprintf(" AND DATE(e.expense_date) <= $%d::date", idx)
+		args = append(args, *f.To)
+		idx++
+	}
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		where += fmt.Sprintf(
+			" AND (e.title ILIKE $%d ESCAPE '\\' OR ec.name ILIKE $%d ESCAPE '\\')",
+			idx, idx,
+		)
+		args = append(args, "%"+escaped+"%")
+		idx++
+	}
+
+	report := &models.ExpenseEntriesReport{
+		Rows:     []models.Expense{},
+		Page:     f.Page,
+		PageSize: f.PageSize,
+	}
+	if err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM expenses e LEFT JOIN expense_categories ec ON e.category_id = ec.id WHERE "+where,
+		args...).Scan(&report.Total); err != nil {
+		return nil, err
+	}
+	if report.Total == 0 {
+		return report, nil
+	}
+
+	sortExpr := map[string]string{
+		"date":     "e.expense_date",
+		"title":    "LOWER(e.title), e.title",
+		"category": "LOWER(ec.name), ec.name",
+		"amount":   "e.amount",
+	}[f.Sort]
+	if sortExpr == "" {
+		sortExpr = "e.expense_date"
+	}
+
+	sqlStr := fmt.Sprintf(`
+		SELECT e.id, e.store_id, e.category_id, ec.name as category_name, e.title, e.description,
+		       e.amount, e.expense_date, e.payment_method, e.receipt_number, e.vendor,
+		       e.attachments, e.is_active, e.created_at, e.updated_at, e.created_by
+		FROM expenses e
+		LEFT JOIN expense_categories ec ON e.category_id = ec.id
+		WHERE %s
+		ORDER BY %s %s, e.id
+	`, where, sortExpr, reportSortDir(f.Dir))
+
+	if !f.All {
+		sqlStr += fmt.Sprintf(" LIMIT $%d OFFSET $%d", idx, idx+1)
+		args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
+	}
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var e models.Expense
+		var categoryName, description, paymentMethod, receiptNumber, vendor, createdBy sql.NullString
+		var attachmentsBytes []byte
+		if err := rows.Scan(
+			&e.ID, &e.StoreID, &e.CategoryID, &categoryName, &e.Title, &description,
+			&e.Amount, &e.ExpenseDate, &paymentMethod, &receiptNumber, &vendor,
+			&attachmentsBytes, &e.IsActive, &e.CreatedAt, &e.UpdatedAt, &createdBy,
+		); err != nil {
+			return nil, err
+		}
+		e.CategoryName = categoryName.String
+		e.Description = description.String
+		e.PaymentMethod = paymentMethod.String
+		e.ReceiptNumber = receiptNumber.String
+		e.Vendor = vendor.String
+		e.CreatedBy = createdBy.String
+
+		e.Attachments = []string{}
+		if len(attachmentsBytes) > 0 {
+			_ = json.Unmarshal(attachmentsBytes, &e.Attachments)
+		}
+		report.Rows = append(report.Rows, e)
+	}
+	return report, rows.Err()
+}
+
+// ==========================================
+// SUPPORT TICKET REPOSITORY
+// ==========================================
+
+type SupportTicketRepository struct {
+	db *sql.DB
+}
+
+// ticketSelect is the shared SELECT for ticket list/detail queries. It joins
+// store and creator for display details and derives message stats in one pass.
+const ticketSelect = `
+	SELECT t.id, t.store_id, COALESCE(t.created_by, ''), t.subject, t.category,
+		t.priority, t.status, t.created_at, t.updated_at,
+		COALESCE(u.name, '') AS created_by_name,
+		COALESCE(s.name, '') AS store_name,
+		COALESCE(s.branch, '') AS store_branch,
+		COALESCE(s.phone, '') AS store_phone,
+		COALESCE(s.location, '') AS store_location,
+		(SELECT COUNT(*) FROM support_messages m WHERE m.ticket_id = t.id) AS message_count,
+		COALESCE((SELECT m.message FROM support_messages m WHERE m.ticket_id = t.id ORDER BY m.created_at DESC LIMIT 1), '') AS last_message
+	FROM support_tickets t
+	LEFT JOIN users u ON u.id = t.created_by
+	LEFT JOIN stores s ON s.id = t.store_id
+`
+
+// ticketOrder sorts actionable tickets first (open, then in progress), newest activity first.
+const ticketOrder = `
+	ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'resolved' THEN 2 ELSE 3 END,
+		t.updated_at DESC
+`
+
+func scanTicket(row interface{ Scan(...interface{}) error }) (*models.SupportTicket, error) {
+	t := &models.SupportTicket{}
+	err := row.Scan(
+		&t.ID, &t.StoreID, &t.CreatedBy, &t.Subject, &t.Category,
+		&t.Priority, &t.Status, &t.CreatedAt, &t.UpdatedAt,
+		&t.CreatedByName, &t.StoreName, &t.StoreBranch, &t.StorePhone, &t.StoreLocation,
+		&t.MessageCount, &t.LastMessage,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// Create inserts a ticket and its first message atomically.
+func (r *SupportTicketRepository) Create(ctx context.Context, storeID, userID string, req models.CreateSupportTicketRequest) (*models.SupportTicket, error) {
+	ticketID := uuid.New().String()
+	messageID := uuid.New().String()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO support_tickets (id, store_id, created_by, subject, category, priority, status, modified_by)
+		VALUES ($1, $2, $3, $4, $5, $6, 'open', $3)
+	`, ticketID, storeID, userID, req.Subject, req.Category, req.Priority)
+	if err != nil {
+		return nil, err
+	}
+
+	var senderRole string
+	if err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = $1`, userID).Scan(&senderRole); err != nil {
+		return nil, err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO support_messages (id, ticket_id, sender_id, sender_role, message)
+		VALUES ($1, $2, $3, $4, $5)
+	`, messageID, ticketID, userID, senderRole, req.Message)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return r.GetByID(ctx, ticketID)
+}
+
+// ListByStore returns all tickets for one store, actionable first.
+func (r *SupportTicketRepository) ListByStore(ctx context.Context, storeID string) ([]models.SupportTicket, error) {
+	rows, err := r.db.QueryContext(ctx, ticketSelect+`WHERE t.store_id = $1`+ticketOrder, storeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tickets := []models.SupportTicket{}
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, *t)
+	}
+	return tickets, rows.Err()
+}
+
+// ListAll returns every ticket (superadmin inbox), optionally filtered by status.
+func (r *SupportTicketRepository) ListAll(ctx context.Context, status string) ([]models.SupportTicket, error) {
+	query := ticketSelect
+	var args []interface{}
+	if status != "" && status != "all" {
+		query += `WHERE t.status = $1`
+		args = append(args, status)
+	}
+	rows, err := r.db.QueryContext(ctx, query+ticketOrder, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tickets := []models.SupportTicket{}
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, *t)
+	}
+	return tickets, rows.Err()
+}
+
+// GetByID returns one ticket with store/creator details.
+func (r *SupportTicketRepository) GetByID(ctx context.Context, id string) (*models.SupportTicket, error) {
+	return scanTicket(r.db.QueryRowContext(ctx, ticketSelect+`WHERE t.id = $1`, id))
+}
+
+// ListMessages returns a ticket's thread in chronological order.
+func (r *SupportTicketRepository) ListMessages(ctx context.Context, ticketID string) ([]models.SupportMessage, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT m.id, m.ticket_id, COALESCE(m.sender_id, ''), COALESCE(u.name, ''),
+			COALESCE(m.sender_role, ''), m.message, m.created_at
+		FROM support_messages m
+		LEFT JOIN users u ON u.id = m.sender_id
+		WHERE m.ticket_id = $1
+		ORDER BY m.created_at ASC
+	`, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	messages := []models.SupportMessage{}
+	for rows.Next() {
+		var m models.SupportMessage
+		if err := rows.Scan(&m.ID, &m.TicketID, &m.SenderID, &m.SenderName, &m.SenderRole, &m.Message, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		messages = append(messages, m)
+	}
+	return messages, rows.Err()
+}
+
+// AddMessage appends a reply and applies the workflow side-effects in one
+// transaction: a superadmin reply moves open -> in_progress, and a store
+// reply reopens resolved/closed tickets.
+func (r *SupportTicketRepository) AddMessage(ctx context.Context, ticketID, senderID, senderRole, message string) (*models.SupportMessage, error) {
+	msgID := uuid.New().String()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO support_messages (id, ticket_id, sender_id, sender_role, message)
+		VALUES ($1, $2, $3, $4, $5)
+	`, msgID, ticketID, senderID, senderRole, message)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE support_tickets SET
+			updated_at = CURRENT_TIMESTAMP,
+			status = CASE
+				WHEN $2 <> 'superadmin' AND status IN ('resolved', 'closed') THEN 'open'
+				WHEN $2 = 'superadmin' AND status = 'open' THEN 'in_progress'
+				ELSE status
+			END
+		WHERE id = $1
+	`, ticketID, senderRole)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	var m models.SupportMessage
+	err = r.db.QueryRowContext(ctx, `
+		SELECT m.id, m.ticket_id, COALESCE(m.sender_id, ''), COALESCE(u.name, ''),
+			COALESCE(m.sender_role, ''), m.message, m.created_at
+		FROM support_messages m
+		LEFT JOIN users u ON u.id = m.sender_id
+		WHERE m.id = $1
+	`, msgID).Scan(&m.ID, &m.TicketID, &m.SenderID, &m.SenderName, &m.SenderRole, &m.Message, &m.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// UpdateStatus moves a ticket through the support workflow (superadmin).
+func (r *SupportTicketRepository) UpdateStatus(ctx context.Context, id, status string) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE support_tickets SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+	`, status, id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

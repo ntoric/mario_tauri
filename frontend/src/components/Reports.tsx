@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart2, TrendingUp, ShoppingBag, CreditCard, Package, Users, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
+import { BarChart2, TrendingUp, ShoppingBag, Package, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
+import { AreaChart, DonutChart, ChartLegend, CHART_COLORS } from './ui/Charts';
 
 type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
@@ -170,8 +171,6 @@ const Reports: React.FC = () => {
     return days;
   }, [bills]);
 
-  const maxDailyRevenue = Math.max(...dailyRevenue.map(d => d.revenue), 1);
-
   // Comparison: previous period
   const prevRangeStart = useMemo(() => {
     const diff = rangeEnd.getTime() - rangeStart.getTime();
@@ -285,26 +284,14 @@ const Reports: React.FC = () => {
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Revenue Trend (Last 7 Days)</h3>
           </div>
           <div className="card-body" style={{ paddingTop: '0.75rem' }}>
-            {dailyRevenue.map((day, i) => (
-              <div key={i} style={{ marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.3rem', color: 'var(--gray-600)' }}>
-                  <span style={{ fontWeight: 500, color: 'var(--gray-800)' }}>{day.label}</span>
-                  <span>{formatCurrency(day.revenue)}</span>
-                </div>
-                <div style={{ background: 'var(--gray-200)', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${(day.revenue / maxDailyRevenue) * 100}%`,
-                    background: day.label === 'Today' ? 'var(--primary)' : 'rgba(99,179,237,0.5)',
-                    borderRadius: '4px',
-                    transition: 'width 0.4s ease',
-                    minWidth: day.revenue > 0 ? '4px' : '0',
-                  }} />
-                </div>
-              </div>
-            ))}
-            {dailyRevenue.every(d => d.revenue === 0) && (
-              <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.875rem' }}>No revenue data available</p>
+            {dailyRevenue.every(d => d.revenue === 0) ? (
+              <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.875rem' }}>No revenue data available</p>
+            ) : (
+              <AreaChart
+                data={dailyRevenue.map(d => ({ label: d.label, value: d.revenue }))}
+                formatValue={formatCurrency}
+                height={170}
+              />
             )}
           </div>
         </div>
@@ -318,43 +305,44 @@ const Reports: React.FC = () => {
             {Object.keys(paymentBreakdown).length === 0 ? (
               <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.875rem' }}>No payment data</p>
             ) : (
-              Object.entries(paymentBreakdown)
-                .sort((a, b) => b[1] - a[1])
-                .map(([method, amount]) => {
-                  const pct = totalPayment > 0 ? (amount / totalPayment) * 100 : 0;
-                  const colorMap: Record<string, string> = {
-                    cash: 'var(--success)',
-                    card: '#63b3ed',
-                    upi: '#b794f4',
-                  };
-                  const color = colorMap[method] || 'var(--primary)';
-                  return (
-                    <div key={method} style={{ marginBottom: '0.9rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.3rem' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textTransform: 'capitalize', color: 'var(--gray-800)', fontWeight: 500 }}>
-                          <CreditCard size={13} />
-                          {method}
-                        </span>
-                        <span style={{ color: 'var(--gray-600)' }}>{formatCurrency(amount)} <span style={{ color: 'var(--gray-500)' }}>({pct.toFixed(1)}%)</span></span>
-                      </div>
-                      <div style={{ background: 'var(--gray-200)', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s ease', minWidth: '4px' }} />
-                      </div>
-                    </div>
-                  );
-                })
+              (() => {
+                const colorMap: Record<string, string> = {
+                  cash: 'var(--success)',
+                  card: '#63b3ed',
+                  upi: '#b794f4',
+                };
+                const donutData = Object.entries(paymentBreakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([method, amount], i) => ({
+                    label: method.charAt(0).toUpperCase() + method.slice(1),
+                    value: amount,
+                    color: colorMap[method] || CHART_COLORS[i % CHART_COLORS.length],
+                  }));
+                return (
+                  <div className="chart-split">
+                    <DonutChart
+                      data={donutData}
+                      size={150}
+                      thickness={20}
+                      centerValue={formatCurrency(totalPayment)}
+                      centerLabel="collected"
+                    />
+                    <ChartLegend data={donutData} formatValue={formatCurrency} />
+                  </div>
+                );
+              })()
             )}
 
             {/* Order type */}
             <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--gray-200)' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--gray-700)', marginBottom: '0.75rem' }}>Order Type</div>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <div style={{ flex: 1, background: 'var(--gray-100)', borderRadius: '8px', padding: '0.75rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)' }}>{dineInOrders}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', marginTop: '0.2rem' }}>Dine-in</div>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Order Type</div>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.5)', border: '1px solid rgba(var(--surface-rgb),0.65)', borderRadius: '12px', padding: '0.75rem', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(var(--sheen-rgb),0.8), 0 1px 4px rgba(18,24,34,0.05)' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--primary)', fontVariantNumeric: 'tabular-nums' }}>{dineInOrders}</div>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--gray-500)', marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dine-in</div>
                 </div>
-                <div style={{ flex: 1, background: 'var(--gray-100)', borderRadius: '8px', padding: '0.75rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#b794f4' }}>{parcelOrders}</div>
+                <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.5)', border: '1px solid rgba(var(--surface-rgb),0.65)', borderRadius: '12px', padding: '0.75rem', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(var(--sheen-rgb),0.8), 0 1px 4px rgba(18,24,34,0.05)' }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#b794f4', fontVariantNumeric: 'tabular-nums' }}>{parcelOrders}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', marginTop: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
                     <Package size={11} /> Parcel
                   </div>
@@ -399,8 +387,8 @@ const Reports: React.FC = () => {
                           <span style={{ color: 'var(--gray-500)', marginLeft: '0.35rem' }}>({pct.toFixed(1)}%)</span>
                         </span>
                       </div>
-                      <div style={{ background: 'var(--gray-200)', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: '4px', transition: 'width 0.4s ease', minWidth: cat.revenue > 0 ? '4px' : '0' }} />
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${barPct}%`, background: color, minWidth: cat.revenue > 0 ? '6px' : '0' }} />
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.2rem' }}>{cat.qty} items sold</div>
                     </div>

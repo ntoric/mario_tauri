@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Printer, Check } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
+import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -32,10 +33,10 @@ const BillModal: React.FC = () => {
   if (!isOpen || !order || !table) return null;
 
   const calculateTotals = () => {
-    const subtotal = order.items.reduce((sum: number, oi: any) => sum + (oi.item.price * oi.quantity), 0);
+    const subtotal = order.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
     const tax = taxEnabled ? order.items.reduce((sum: number, oi: any) => {
       const taxPercent = oi.item.taxPercent || 0;
-      return sum + (oi.item.price * oi.quantity * taxPercent / 100);
+      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
     }, 0) : 0;
     const total = subtotal + tax;
     return { subtotal, tax, total };
@@ -102,14 +103,14 @@ const BillModal: React.FC = () => {
 
       // Print invoice via printer service
       const printItems = order.items.map((oi: any) => {
-        const itemTotal = oi.item.price * oi.quantity;
+        const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
         const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
           qty: oi.quantity,
           unit: 'PCS',
-          rate: oi.item.price,
+          rate: orderItemUnitPrice(oi),
           tax_percent: taxPercent,
           amount: itemTotal,
         };
@@ -240,9 +241,9 @@ const BillModal: React.FC = () => {
                 <div key={index} className="bill-item">
                   <div className="bill-item-details">
                     <div className="bill-item-name">{oi.item.name}</div>
-                    <div className="bill-item-qty">{oi.quantity} x {formatCurrency(oi.item.price)}</div>
+                    <div className="bill-item-qty">{oi.quantity} x {formatCurrency(orderItemUnitPrice(oi))}</div>
                   </div>
-                  <div className="bill-item-price">{formatCurrency(oi.quantity * oi.item.price)}</div>
+                  <div className="bill-item-price">{formatCurrency(oi.quantity * orderItemUnitPrice(oi))}</div>
                 </div>
               ))}
             </div>

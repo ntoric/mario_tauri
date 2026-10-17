@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Github, Loader2, AlertCircle, Check, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Save, Github, Loader2, AlertCircle, ExternalLink, Sparkles, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
+import notify from '../utils/toast';
 
 interface GeminiModel {
   name: string;
@@ -18,7 +19,6 @@ const DeveloperSettings: React.FC = () => {
   const [githubRepo, setGithubRepo] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [saveMessage, setSaveMessage] = useState('');
   const [error, setError] = useState('');
 
   // Gemini config
@@ -28,7 +28,6 @@ const DeveloperSettings: React.FC = () => {
   const [models, setModels] = useState<GeminiModel[]>([]);
   const [isSavingGemini, setIsSavingGemini] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [geminiMessage, setGeminiMessage] = useState('');
   const [geminiError, setGeminiError] = useState('');
 
   useEffect(() => {
@@ -79,25 +78,23 @@ const DeveloperSettings: React.FC = () => {
     e.preventDefault();
     const repo = githubRepo.trim();
     if (!repo) {
-      setError('GitHub repository is required');
+      notify.warning('GitHub repository is required');
       return;
     }
     if (repo.split('/').length !== 2 || repo.startsWith('/') || repo.endsWith('/')) {
-      setError("Repository must be in 'owner/repo' format (e.g. ntoric/mario_tauri)");
+      notify.warning("Repository must be in 'owner/repo' format (e.g. ntoric/mario_tauri)");
       return;
     }
 
     setIsSaving(true);
-    setSaveMessage('');
     setError('');
 
     try {
       const res = await api.updateUpdateRepoConfig(repo);
       setGithubRepo(res.config?.githubRepo || repo);
-      setSaveMessage(res.message || 'Configuration saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
+      notify.success(res.message || 'Configuration saved');
     } catch (err: any) {
-      setError(err.message || 'Failed to save configuration');
+      notify.error(err.message || 'Failed to save configuration');
     } finally {
       setIsSaving(false);
     }
@@ -105,11 +102,10 @@ const DeveloperSettings: React.FC = () => {
 
   const handleRefreshModels = async () => {
     setGeminiError('');
-    setGeminiMessage('');
     // Persist the current API key first so the backend can use it to list models.
     const key = geminiApiKey.trim();
     if (!key) {
-      setGeminiError('Enter and save a Gemini API key before refreshing models.');
+      notify.warning('Enter and save a Gemini API key before refreshing models.');
       return;
     }
     setIsLoadingModels(true);
@@ -120,16 +116,17 @@ const DeveloperSettings: React.FC = () => {
       const list: GeminiModel[] = data.models || [];
       setModels(list);
       if (list.length === 0) {
-        setGeminiError('No models supporting generateContent were returned for this API key.');
-      } else if (!geminiModel || !list.find(m => m.name === geminiModel || m.name === `models/${geminiModel}`)) {
-        // Default to the first returned model if the current one isn't available.
-        const first = list[0];
-        setGeminiModel(first.name);
+        notify.warning('No models supporting generateContent were returned for this API key.');
+      } else {
+        if (!geminiModel || !list.find(m => m.name === geminiModel || m.name === `models/${geminiModel}`)) {
+          // Default to the first returned model if the current one isn't available.
+          const first = list[0];
+          setGeminiModel(first.name);
+        }
+        notify.success(`Loaded ${list.length} available model(s)`);
       }
-      setGeminiMessage(`Loaded ${list.length} available model(s).`);
-      setTimeout(() => setGeminiMessage(''), 3000);
     } catch (err: any) {
-      setGeminiError(err.message || 'Failed to load Gemini models');
+      notify.error(err.message || 'Failed to load Gemini models');
     } finally {
       setIsLoadingModels(false);
     }
@@ -138,25 +135,23 @@ const DeveloperSettings: React.FC = () => {
   const handleSaveGemini = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeminiError('');
-    setGeminiMessage('');
     const key = geminiApiKey.trim();
     if (!key) {
-      setGeminiError('Gemini API key is required');
+      notify.warning('Gemini API key is required');
       return;
     }
     const model = geminiModel.trim();
     if (!model) {
-      setGeminiError('Please select a model');
+      notify.warning('Please select a model');
       return;
     }
     setIsSavingGemini(true);
     try {
       const res = await api.updateGeminiConfig({ apiKey: key, model });
       setGeminiModel(res.config?.model || model);
-      setGeminiMessage(res.message || 'Gemini configuration saved successfully!');
-      setTimeout(() => setGeminiMessage(''), 3000);
+      notify.success(res.message || 'Gemini configuration saved');
     } catch (err: any) {
-      setGeminiError(err.message || 'Failed to save Gemini configuration');
+      notify.error(err.message || 'Failed to save Gemini configuration');
     } finally {
       setIsSavingGemini(false);
     }
@@ -180,23 +175,8 @@ const DeveloperSettings: React.FC = () => {
     );
   }
 
-  const renderBanner = (msg: string, err: string) => (
+  const renderErrorBanner = (err: string) => (
     <>
-      {msg && (
-        <div style={{
-          padding: '1rem',
-          background: 'rgba(43,165,74, 0.1)',
-          color: 'var(--success)',
-          borderRadius: 'var(--radius)',
-          marginBottom: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}>
-          <Check size={18} />
-          {msg}
-        </div>
-      )}
       {err && (
         <div style={{
           padding: '1rem',
@@ -217,7 +197,7 @@ const DeveloperSettings: React.FC = () => {
 
   return (
     <div>
-      {renderBanner(saveMessage, error)}
+      {renderErrorBanner(error)}
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
@@ -290,7 +270,7 @@ const DeveloperSettings: React.FC = () => {
         </form>
       </div>
 
-      {renderBanner(geminiMessage, geminiError)}
+      {renderErrorBanner(geminiError)}
 
       <div className="card">
         <div className="card-header">

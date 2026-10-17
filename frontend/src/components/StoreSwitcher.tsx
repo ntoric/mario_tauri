@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Building2, Check } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
+import notify from '../utils/toast';
 
 const StoreSwitcher: React.FC = () => {
   const { user, currentStoreId, setCurrentStore, canSwitchStores } = useAuthStore();
@@ -10,9 +11,15 @@ const StoreSwitcher: React.FC = () => {
   if (!storeSwitcherModal || !canSwitchStores()) return null;
 
   const handleSwitchStore = async (storeId: string) => {
-    await switchStore(storeId);
-    setCurrentStore(storeId);
-    closeStoreSwitcher();
+    try {
+      await switchStore(storeId);
+      setCurrentStore(storeId);
+      closeStoreSwitcher();
+      const store = stores.find(s => s.id === storeId);
+      notify.success(`Switched to ${store?.name || 'store'}`);
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to switch store');
+    }
   };
 
   return (
@@ -37,7 +44,7 @@ const StoreSwitcher: React.FC = () => {
                   padding: '1rem',
                   border: '1px solid var(--gray-200)',
                   borderRadius: 'var(--radius)',
-                  background: store.id === currentStoreId ? 'rgba(245,130,32, 0.1)' : 'white',
+                  background: store.id === currentStoreId ? 'rgba(245,130,32, 0.1)' : 'var(--surface)',
                   borderColor: store.id === currentStoreId ? 'var(--primary)' : undefined,
                   cursor: 'pointer',
                   textAlign: 'left',
@@ -47,23 +54,18 @@ const StoreSwitcher: React.FC = () => {
                   width: '48px',
                   height: '48px',
                   borderRadius: 'var(--radius)',
-                  background: store.logoUrl ? 'white' : (store.id === currentStoreId ? 'var(--primary)' : 'var(--gray-100)'),
+                  background: 'white',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: store.id === currentStoreId ? 'white' : 'var(--gray-500)',
                   overflow: 'hidden',
-                  padding: store.logoUrl ? '4px' : 0,
+                  padding: '4px',
                 }}>
-                  {store.logoUrl ? (
-                    <img
-                      src={store.logoUrl}
-                      alt={store.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <Building2 size={24} />
-                  )}
+                  <img
+                    src={store.logoUrl || '/logo.png'}
+                    alt={store.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, color: 'var(--dark)' }}>{store.name}</div>

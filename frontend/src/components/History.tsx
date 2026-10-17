@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban } from 'lucide-react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
+import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
+import notify from '../utils/toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import Pagination from './ui/Pagination';
 import type { Order } from '../types';
@@ -32,7 +34,7 @@ const History: React.FC = () => {
 
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
-      alert('No printer is configured in settings. Please configure a printer first.');
+      notify.warning('No printer configured. Set one up in Settings.');
       return;
     }
 
@@ -42,14 +44,14 @@ const History: React.FC = () => {
       const invoiceNo = associatedBill?.invoiceNo || `INV-${Date.now()}`;
       
       const printItems = order.items.map(oi => {
-        const itemTotal = oi.item.price * oi.quantity;
+        const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
         const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
         return {
           name: oi.item.name,
           hsn: oi.item.description || '',
           qty: oi.quantity,
           unit: 'PCS',
-          rate: oi.item.price,
+          rate: orderItemUnitPrice(oi),
           tax_percent: taxPercent,
           amount: itemTotal,
         };
@@ -111,7 +113,7 @@ const History: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to print bill:', error);
-      alert('Failed to print bill. Please check your connection and printer settings.');
+      notify.error('Failed to print bill. Check your connection and printer settings.');
     } finally {
       setIsPrinting(null);
     }
@@ -206,10 +208,11 @@ const History: React.FC = () => {
     try {
       await cancelOrder(cancelTarget.id);
       await fetchBills();
+      notify.success('Order cancelled');
       setCancelTarget(null);
     } catch (error) {
       console.error('Failed to cancel order:', error);
-      alert('Failed to cancel order. Please try again.');
+      notify.error('Failed to cancel order. Please try again.');
     } finally {
       setIsCancelling(false);
     }
@@ -231,8 +234,21 @@ const History: React.FC = () => {
       case 'completed': return 'status-badge completed';
       case 'active': return 'status-badge active';
       case 'cancelled': return 'status-badge cancelled';
+      case 'merged': return 'status-badge merged';
       default: return 'status-badge';
     }
+  };
+
+  // A merged order keeps its own table label; the surviving order's
+  // tableName is a "+ "-joined list of every table folded into it
+  // (e.g. "5 + 3"), so we can recover which bill absorbed this order.
+  const getMergedIntoOrder = (order: Order): Order | undefined => {
+    if (order.status !== 'merged') return undefined;
+    const label = order.tableName || String(order.tableNumber);
+    return orders
+      .filter(o => o.id !== order.id && o.status !== 'merged')
+      .filter(o => (o.tableName || '').split('+').map(s => s.trim()).includes(label))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
   };
 
   return (
@@ -309,6 +325,7 @@ const History: React.FC = () => {
           <option value="completed">Completed</option>
           <option value="active">Active</option>
           <option value="cancelled">Cancelled</option>
+          <option value="merged">Merged</option>
         </select>
       </div>
 
@@ -351,8 +368,16 @@ const History: React.FC = () => {
                       {isParcel(order)
                         ? (order.customerName || 'Walk-in')
                         : `Table ${order.tableName || order.tableNumber}`}
+                      {order.status === 'merged' && (() => {
+                        const mergedInto = getMergedIntoOrder(order);
+                        return (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--gray-500)', marginTop: '0.15rem' }}>
+                            → merged into {mergedInto ? `Table ${mergedInto.tableName || mergedInto.tableNumber}` : 'another bill'}
+                          </div>
+                        );
+                      })()}
                     </td>
-                    <td>{order.items.length}</td>
+                    <td>{order.status === 'merged' ? '—' : order.items.length}</td>
                     <td>{formatCurrency((order.totalAmount || 0) + (order.taxAmount || 0))}</td>
                     <td>
                       <span className={getStatusBadgeClass(order.status)}>
@@ -368,21 +393,25 @@ const History: React.FC = () => {
                       >
                         <Eye size={14} />
                       </button>
-                      <button
-                        className="action-btn"
-                        onClick={() => setViewingBill(order)}
-                        title="View Bill"
-                      >
-                        <Receipt size={14} />
-                      </button>
-                      <button
-                        className="action-btn"
-                        onClick={() => handlePrintBill(order)}
-                        disabled={isPrinting === order.id}
-                        title="Print Bill"
-                      >
-                        <Printer size={14} />
-                      </button>
+                      {order.status !== 'merged' && (
+                        <>
+                          <button
+                            className="action-btn"
+                            onClick={() => setViewingBill(order)}
+                            title="View Bill"
+                          >
+                            <Receipt size={14} />
+                          </button>
+                          <button
+                            className="action-btn"
+                            onClick={() => handlePrintBill(order)}
+                            disabled={isPrinting === order.id}
+                            title="Print Bill"
+                          >
+                            <Printer size={14} />
+                          </button>
+                        </>
+                      )}
                       {order.status === 'completed' && (
                         <button
                           className="action-btn delete"
@@ -430,11 +459,27 @@ const History: React.FC = () => {
             </div>
             <div className="modal-body">
               <div className="order-sidebar">
+                {viewingOrder.status === 'merged' && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    padding: '0.6rem 0.75rem', marginBottom: '0.75rem',
+                    background: 'rgba(33,150,243,0.08)', border: '1px solid rgba(33,150,243,0.2)',
+                    borderRadius: '8px', color: 'var(--info)', fontSize: '0.82rem', fontWeight: 600,
+                  }}>
+                    <Combine size={15} />
+                    {(() => {
+                      const mergedInto = getMergedIntoOrder(viewingOrder);
+                      return mergedInto
+                        ? `Merged into Table ${mergedInto.tableName || mergedInto.tableNumber} — items are included in that bill`
+                        : 'This order was merged into another bill';
+                    })()}
+                  </div>
+                )}
                 {viewingOrder.items.map((oi, idx) => (
                   <div key={idx} className="order-item">
                     <div className="order-item-info">
                       <div className="order-item-name">{oi.item.name}</div>
-                      <div className="order-item-price">{formatCurrency(oi.item.price)} each</div>
+                      <div className="order-item-price">{formatCurrency(orderItemUnitPrice(oi))} each</div>
                     </div>
                     <span className="order-item-quantity">x{oi.quantity}</span>
                   </div>
@@ -459,21 +504,25 @@ const History: React.FC = () => {
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => { setViewingOrder(null); setViewingBill(viewingOrder); }}
-                >
-                  <Receipt size={16} />
-                  View Bill
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => handlePrintBill(viewingOrder)}
-                  disabled={isPrinting === viewingOrder.id}
-                >
-                  <Printer size={16} />
-                  {isPrinting === viewingOrder.id ? 'Printing...' : 'Print Bill'}
-                </button>
+                {viewingOrder.status !== 'merged' && (
+                  <>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setViewingOrder(null); setViewingBill(viewingOrder); }}
+                    >
+                      <Receipt size={16} />
+                      View Bill
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handlePrintBill(viewingOrder)}
+                      disabled={isPrinting === viewingOrder.id}
+                    >
+                      <Printer size={16} />
+                      {isPrinting === viewingOrder.id ? 'Printing...' : 'Print Bill'}
+                    </button>
+                  </>
+                )}
               </div>
               <button className="btn btn-secondary" onClick={() => setViewingOrder(null)}>Close</button>
             </div>
@@ -525,9 +574,9 @@ const History: React.FC = () => {
                     <div key={idx} className="bill-item">
                       <div className="bill-item-details">
                         <div className="bill-item-name">{oi.item.name}</div>
-                        <div className="bill-item-qty">{oi.quantity} x {formatCurrency(oi.item.price)}</div>
+                        <div className="bill-item-qty">{oi.quantity} x {formatCurrency(orderItemUnitPrice(oi))}</div>
                       </div>
-                      <div className="bill-item-price">{formatCurrency(oi.quantity * oi.item.price)}</div>
+                      <div className="bill-item-price">{formatCurrency(oi.quantity * orderItemUnitPrice(oi))}</div>
                     </div>
                   ))}
                 </div>
