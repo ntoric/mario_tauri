@@ -344,6 +344,13 @@ class ApiService {
     });
   }
 
+  async setDefaultTableSection(storeId: string, name: string) {
+    return this.fetch('/tables/sections/default', {
+      method: 'PUT',
+      body: JSON.stringify({ storeId, name }),
+    });
+  }
+
   async deleteTableSection(storeId: string, name: string) {
     return this.fetch(`/tables/sections/${encodeURIComponent(name)}?storeId=${storeId}`, {
       method: 'DELETE',

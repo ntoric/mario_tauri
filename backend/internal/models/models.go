@@ -136,6 +136,7 @@ type TableSection struct {
 	ID        string    `json:"id"`
 	StoreID   string    `json:"storeId"`
 	Name      string    `json:"name"`
+	IsDefault bool      `json:"isDefault"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

@@ -31,6 +31,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   bool _isSocketActive = false;
 
   _TableStatusFilter _statusFilter = _TableStatusFilter.all;
+  String? _sectionFilter;
 
   @override
   void initState() {
@@ -155,6 +156,9 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     final auth = context.read<AuthProvider>();
     if (auth.currentStore != null) {
       await context.read<DataProvider>().loadTables(auth.currentStore!.id);
+      await context
+          .read<DataProvider>()
+          .loadTableSections(auth.currentStore!.id);
       await context.read<DataProvider>().loadOrders(auth.currentStore!.id);
     }
   }
@@ -987,7 +991,38 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         .where((t) => _statusFor(t, data) == _TableStatusFilter.reserved)
         .length;
     final availableCount = tables.length - occupiedCount - reservedCount;
-    final filteredTables = _filteredTables(tables, data);
+
+    // Section grouping — mirrors the desktop app: the flagged default section
+    // (or the "Section 1" fallback) buckets tables with no explicit section.
+    final sectionCounts = <String, int>{};
+    for (final t in tables) {
+      final name = data.sectionNameOf(t);
+      sectionCounts[name] = (sectionCounts[name] ?? 0) + 1;
+    }
+    final pillSections = data.sectionNames
+        .where((name) => (sectionCounts[name] ?? 0) > 0)
+        .toList();
+    // A stale selection (e.g. its last table moved) falls back to "all".
+    final activeSection = _sectionFilter != null &&
+            (sectionCounts[_sectionFilter] ?? 0) > 0
+        ? _sectionFilter
+        : null;
+
+    final filteredTables = _filteredTables(tables, data)
+        .where((t) =>
+            activeSection == null || data.sectionNameOf(t) == activeSection)
+        .toList()
+      ..sort((a, b) => a.number.compareTo(b.number));
+    final groupedTables = [
+      for (final name in data.sectionNames)
+        if (activeSection == null || name == activeSection)
+          (
+            name: name,
+            tables: filteredTables
+                .where((t) => data.sectionNameOf(t) == name)
+                .toList()
+          ),
+    ]..removeWhere((g) => g.tables.isEmpty);
     final crossAxisCount = ResponsiveHelper.getGridCrossAxisCount(context);
 
     return Scaffold(
@@ -999,11 +1034,24 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: _buildFilterPills(
-              total: tables.length,
-              occupied: occupiedCount,
-              available: availableCount,
-              reserved: reservedCount,
+            child: Column(
+              children: [
+                if (pillSections.length > 1) ...[
+                  _buildSectionPills(
+                    total: tables.length,
+                    sections: pillSections,
+                    counts: sectionCounts,
+                    active: activeSection,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                _buildFilterPills(
+                  total: tables.length,
+                  occupied: occupiedCount,
+                  available: availableCount,
+                  reserved: reservedCount,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
@@ -1024,24 +1072,123 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                               final cardWidth = (constraints.maxWidth -
                                       spacing * (crossAxisCount - 1)) /
                                   crossAxisCount;
-                              return Wrap(
-                                spacing: spacing,
-                                runSpacing: spacing,
+                              var cardIndex = 0;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  for (var i = 0;
-                                      i < filteredTables.length;
-                                      i++)
-                                    SizedBox(
-                                      width: cardWidth,
-                                      height: 182,
-                                      child: _buildTableCard(
-                                          filteredTables[i], data, i),
+                                  for (var g = 0;
+                                      g < groupedTables.length;
+                                      g++) ...[
+                                    if (g > 0) const SizedBox(height: 18),
+                                    if (activeSection == null)
+                                      _buildSectionHeader(
+                                        groupedTables[g].name,
+                                        groupedTables[g].tables.length,
+                                      ),
+                                    Wrap(
+                                      spacing: spacing,
+                                      runSpacing: spacing,
+                                      children: [
+                                        for (final table
+                                            in groupedTables[g].tables)
+                                          SizedBox(
+                                            width: cardWidth,
+                                            height: 182,
+                                            child: _buildTableCard(
+                                                table, data, cardIndex++),
+                                          ),
+                                      ],
                                     ),
+                                  ],
                                 ],
                               );
                             },
                           ),
                         ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionPills({
+    required int total,
+    required List<String> sections,
+    required Map<String, int> counts,
+    required String? active,
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _filterPill(
+            icon: Icons.grid_view_rounded,
+            label: 'All',
+            count: total,
+            selected: active == null,
+            accent: AppColors.primary,
+            onTap: () => setState(() => _sectionFilter = null),
+          ),
+          for (final name in sections) ...[
+            const SizedBox(width: 8),
+            _filterPill(
+              icon: Icons.layers_outlined,
+              label: name,
+              count: counts[name] ?? 0,
+              selected: active == name,
+              accent: AppColors.primary,
+              onTap: () => setState(
+                  () => _sectionFilter = active == name ? null : name),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String name, int count) {
+    final isDark = AppColors.isDark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(
+            Icons.layers_outlined,
+            size: 15,
+            color: AppColors.gray500,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+              color: AppColors.dark,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(isDark ? 0.18 : 0.10),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: AppColors.gray300.withOpacity(0.7),
             ),
           ),
         ],
@@ -1110,11 +1257,27 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     required int count,
     required _TableStatusFilter value,
   }) {
-    final selected = _statusFilter == value;
-    final accent = _accentForFilter(value);
+    return _filterPill(
+      icon: icon,
+      label: label,
+      count: count,
+      selected: _statusFilter == value,
+      accent: _accentForFilter(value),
+      onTap: () => setState(() => _statusFilter = value),
+    );
+  }
+
+  Widget _filterPill({
+    required IconData icon,
+    required String label,
+    required int count,
+    required bool selected,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
     final isDark = AppColors.isDark;
     return GestureDetector(
-      onTap: () => setState(() => _statusFilter = value),
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,

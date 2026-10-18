@@ -13,6 +13,7 @@ class DataProvider extends ChangeNotifier {
   final BackendService _backend = BackendService();
 
   List<TableModel> _tables = [];
+  List<TableSection> _tableSections = [];
   List<Category> _categories = [];
   List<Item> _items = [];
 
@@ -32,6 +33,7 @@ class DataProvider extends ChangeNotifier {
   String? _error;
 
   List<TableModel> get tables => _tables;
+  List<TableSection> get tableSections => _tableSections;
   List<Category> get categories => _categories;
   List<Item> get items => _items;
   List<Order> get orders => _orders;
@@ -47,6 +49,7 @@ class DataProvider extends ChangeNotifier {
   // the previous store's records are never shown under the new selection.
   void clearData() {
     _tables = [];
+    _tableSections = [];
     _categories = [];
     _items = [];
     _orders = [];
@@ -66,6 +69,7 @@ class DataProvider extends ChangeNotifier {
 
     await Future.wait([
       loadTables(storeId),
+      loadTableSections(storeId),
       loadCategories(storeId),
       loadItems(storeId),
       loadOrders(storeId),
@@ -80,6 +84,69 @@ class DataProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
     }
+  }
+
+  Future<void> loadTableSections(String storeId) async {
+    try {
+      final data = await _backend.api.getTableSections(storeId);
+      _tableSections = data;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+    }
+  }
+
+  /// Tables without an explicit section (NULL in the DB) belong to the
+  /// store's default section. Falls back to this label when no catalog row
+  /// is flagged as default — matches the desktop app.
+  static const String fallbackDefaultSection = 'Section 1';
+
+  String get defaultSectionName {
+    for (final s in _tableSections) {
+      if (s.isDefault) return s.name;
+    }
+    return fallbackDefaultSection;
+  }
+
+  /// Display-section for a table — its own section, or the store default.
+  String sectionNameOf(TableModel table) => table.section ?? defaultSectionName;
+
+  /// All section names: the catalog merged with any names still referenced by
+  /// tables (so nothing hides if the two drift apart). The default section
+  /// always sorts first; the rest use natural ordering.
+  List<String> get sectionNames {
+    final set = <String>{};
+    for (final s in _tableSections) {
+      set.add(s.name);
+    }
+    for (final t in _tables) {
+      if (t.section != null) set.add(t.section!);
+    }
+    final defaultName = defaultSectionName;
+    set.remove(defaultName);
+    final rest = set.toList()..sort(_naturalCompare);
+    return [defaultName, ...rest];
+  }
+
+  /// Natural (numeric-aware) string ordering so "Section 2" precedes
+  /// "Section 10", mirroring localeCompare({numeric: true}) on desktop.
+  static int _naturalCompare(String a, String b) {
+    final chunks = RegExp(r'\d+|\D+');
+    final aParts = chunks.allMatches(a).map((m) => m.group(0)!).toList();
+    final bParts = chunks.allMatches(b).map((m) => m.group(0)!).toList();
+    final len = aParts.length < bParts.length ? aParts.length : bParts.length;
+    for (var i = 0; i < len; i++) {
+      final aNum = int.tryParse(aParts[i]);
+      final bNum = int.tryParse(bParts[i]);
+      int cmp;
+      if (aNum != null && bNum != null) {
+        cmp = aNum.compareTo(bNum);
+      } else {
+        cmp = aParts[i].compareTo(bParts[i]);
+      }
+      if (cmp != 0) return cmp;
+    }
+    return aParts.length.compareTo(bParts.length);
   }
 
   Future<void> loadCategories(String storeId) async {
@@ -435,6 +502,7 @@ class DataProvider extends ChangeNotifier {
   Future<bool> silentUpdateTablesAndOrders(String storeId) async {
     try {
       final newTables = await _backend.api.getTables(storeId);
+      final newSections = await _backend.api.getTableSections(storeId);
       final newOrders =
           await _backend.api.getOrders(storeId, status: 'active');
 
@@ -462,8 +530,23 @@ class DataProvider extends ChangeNotifier {
         }
       }
 
-      if (tablesChanged || ordersChanged) {
+      bool sectionsChanged = false;
+      if (newSections.length != _tableSections.length) {
+        sectionsChanged = true;
+      } else {
+        for (int i = 0; i < newSections.length; i++) {
+          final a = newSections[i];
+          final b = _tableSections[i];
+          if (a.id != b.id || a.name != b.name || a.isDefault != b.isDefault) {
+            sectionsChanged = true;
+            break;
+          }
+        }
+      }
+
+      if (tablesChanged || sectionsChanged || ordersChanged) {
         _tables = newTables;
+        _tableSections = newSections;
         _orders = newOrders;
         notifyListeners();
         return true;
@@ -481,7 +564,8 @@ class DataProvider extends ChangeNotifier {
         a.number == b.number &&
         a.name == b.name &&
         a.seats == b.seats &&
-        a.isActive == b.isActive;
+        a.isActive == b.isActive &&
+        a.section == b.section;
   }
 
   bool _areOrdersEqual(Order a, Order b) {

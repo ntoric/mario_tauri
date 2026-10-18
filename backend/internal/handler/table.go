@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,7 +11,31 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// isUniqueViolation reports whether err is a Postgres unique-constraint
+// violation (SQLSTATE 23505) coming back through the pgx stdlib driver.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// writeTableConflict translates a unique violation on the tables table into a
+// client-friendly 409 message. Returns false when err is not a conflict.
+func (h *Handler) writeTableConflict(w http.ResponseWriter, err error) bool {
+	if !isUniqueViolation(err) {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	errors.As(err, &pgErr)
+	if pgErr.ConstraintName == "idx_tables_store_section_name" {
+		h.writeError(w, http.StatusConflict, "A table with this name already exists in this section")
+	} else {
+		h.writeError(w, http.StatusConflict, "A table with this number already exists in this section")
+	}
+	return true
+}
 
 // GetTables handles GET /api/tables
 func (h *Handler) GetTables(w http.ResponseWriter, r *http.Request) {
@@ -74,9 +99,10 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clients may create a table with only a name — assign the next free
-	// internal number so numeric flows (sorting, old clients) keep working.
+	// internal number within the target section so numeric flows (sorting,
+	// old clients) keep working. Numbers may repeat across sections.
 	if req.Number <= 0 {
-		next, err := h.Repo.Table.NextNumber(r.Context(), targetStoreID)
+		next, err := h.Repo.Table.NextNumber(r.Context(), targetStoreID, req.Section)
 		if err != nil {
 			h.writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -91,6 +117,9 @@ func (h *Handler) CreateTable(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.Repo.Table.Create(r.Context(), req); err != nil {
 		fmt.Println("CreateTable: repo create error -", err)
+		if h.writeTableConflict(w, err) {
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -127,6 +156,9 @@ func (h *Handler) UpdateTable(w http.ResponseWriter, r *http.Request) {
 	req.ID = id
 	req.ModifiedBy = claims.ID
 	if err := h.Repo.Table.Update(r.Context(), req); err != nil {
+		if h.writeTableConflict(w, err) {
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -261,12 +293,61 @@ func (h *Handler) RenameSection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Repo.Table.RenameSection(r.Context(), storeID, req.OldName, req.NewName, claims.ID); err != nil {
+		if isUniqueViolation(err) {
+			var pgErr *pgconn.PgError
+			errors.As(err, &pgErr)
+			if pgErr.ConstraintName == "table_sections_store_id_name_key" {
+				h.writeError(w, http.StatusConflict, "A section with this name already exists")
+			} else {
+				h.writeError(w, http.StatusConflict, "Renaming would create tables with duplicate numbers or names in the target section")
+			}
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	h.broadcastTableStatusUpdate(storeID, "table_updated")
 
 	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Section renamed"})
+}
+
+// SetDefaultSection handles PUT /api/tables/sections/default
+// Body: { "name": "..." }
+// Marks the section as the store's default — the bucket unassigned (NULL)
+// tables are grouped under. Creates the catalog row if it doesn't exist yet.
+func (h *Handler) SetDefaultSection(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req struct {
+		Name    string `json:"name"`
+		StoreID string `json:"storeId"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	if req.Name == "" {
+		h.writeError(w, http.StatusBadRequest, "Section name is required")
+		return
+	}
+
+	storeID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
+	}
+
+	if err := h.Repo.Table.SetDefaultSection(r.Context(), storeID, req.Name, claims.ID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.broadcastTableStatusUpdate(storeID, "table_updated")
+
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Default section updated"})
 }
 
 // DeleteSection handles DELETE /api/tables/sections/:name
@@ -290,6 +371,10 @@ func (h *Handler) DeleteSection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Repo.Table.DeleteSection(r.Context(), storeID, sectionName, claims.ID); err != nil {
+		if isUniqueViolation(err) {
+			h.writeError(w, http.StatusConflict, "Deleting this section would create duplicate table numbers or names in the default section")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

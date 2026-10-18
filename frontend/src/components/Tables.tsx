@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye, MoreVertical } from 'lucide-react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye, MoreVertical, Layers, Pencil, Check, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -19,8 +19,12 @@ import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShort
 import notify from '../utils/toast';
 import type { Table } from '../types';
 
+// Tables without an explicit section (NULL in the DB) belong to the store's
+// default section. Falls back to this label when no catalog row is flagged.
+const DEFAULT_SECTION = 'Section 1';
+
 const Tables: React.FC = () => {
-  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, mergeOrders, cancelOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection } = useDataStore();
+  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, mergeOrders, cancelOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection, setDefaultTableSection } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -214,8 +218,8 @@ const Tables: React.FC = () => {
   const [checkingTableId, setCheckingTableId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteConfirmTable, setDeleteConfirmTable] = useState<Table | null>(null);
-  const [activeSection, setActiveSection] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'vacant' | 'occupied'>('all');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
   const [showSectionsModal, setShowSectionsModal] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showTableMenu, setShowTableMenu] = useState(false);
@@ -233,6 +237,7 @@ const Tables: React.FC = () => {
   const [billDialogTable, setBillDialogTable] = useState<Table | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrintingOnly, setIsPrintingOnly] = useState(false);
 
   // Change table dialog state
   const [changeTableDialog, setChangeTableDialog] = useState<{ fromTable: Table; order: any } | null>(null);
@@ -268,6 +273,18 @@ const Tables: React.FC = () => {
 
   // Display label: alphanumeric name when set, otherwise the numeric table number.
   const tableLabel = (t: Table) => t.name || String(t.number);
+
+  // The catalog section flagged is_default is the bucket for tables with no
+  // explicit section; falls back to "Section 1" when nothing is flagged.
+  const defaultSectionName = tableSections.find(s => s.isDefault)?.name || DEFAULT_SECTION;
+  const sectionNameOf = useCallback(
+    (t: Table) => t.section || defaultSectionName,
+    [defaultSectionName]
+  );
+  const catalogSectionNames = React.useMemo(
+    () => new Set(tableSections.map(s => s.name)),
+    [tableSections]
+  );
 
   // Set page header
   useEffect(() => {
@@ -314,6 +331,13 @@ const Tables: React.FC = () => {
                   >
                     <Plus size={14} />
                     Add Table
+                  </button>
+                  <button
+                    className="header-dropdown-option"
+                    onClick={() => { setShowTableMenu(false); setShowSectionsModal(true); }}
+                  >
+                    <Layers size={14} />
+                    Manage Sections
                   </button>
                   {isAdmin && (
                     <button
@@ -439,6 +463,73 @@ const Tables: React.FC = () => {
     }
   };
 
+  const printOrderInvoice = async (activeOrder: any, invoiceNo: string, total: number) => {
+    const printItems = activeOrder.items.map((oi: any) => {
+      const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
+      const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
+      return {
+        name: oi.item.name,
+        hsn: oi.item.description || '',
+        qty: oi.quantity,
+        unit: 'PCS',
+        rate: orderItemUnitPrice(oi),
+        tax_percent: taxPercent,
+        amount: itemTotal,
+      };
+    });
+
+    const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
+    const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
+    const cgst = actualTax / 2;
+    const sgst = actualTax / 2;
+
+    await printerService.printInvoice({
+      type: 'invoice',
+      printer: {
+        type: 'usb',
+        name: currentStore?.printerName || 'Thermal Printer',
+        vendor_id: currentStore?.printerVendorId || '0x0fe6',
+        product_id: currentStore?.printerProductId || '0x811e',
+        paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
+      },
+      invoice: {
+        store: {
+          name: currentStore?.name || 'Cafe',
+          branch: currentStore?.branch || '',
+          location: currentStore?.location || '',
+          ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+          ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
+          ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
+          address: currentStore?.location || '',
+        },
+        customer: {
+          name: 'Walk-in Customer',
+          mobile: '',
+        },
+        invoice_no: invoiceNo,
+        bill_no: invoiceNo,
+        date: new Date().toLocaleString('en-IN'),
+        items: printItems,
+        summary: {
+          sub_total: taxable,
+          discount: 0,
+          taxable: taxable,
+          cgst: cgst,
+          sgst: sgst,
+          grand_total: total,
+        },
+        payment: {
+          cash: paymentMethod === 'cash' ? total : 0,
+          card: paymentMethod === 'card' ? total : 0,
+          upi: paymentMethod === 'upi' ? total : 0,
+          balance: 0,
+        },
+        payment_mode: paymentMethod,
+        footer: ['Thank You Visit Again'],
+      },
+    });
+  };
+
   const handlePrintAndComplete = async (table?: Table) => {
     const targetTable = table || billDialogTable;
     if (!targetTable || isPrinting) return;
@@ -470,72 +561,8 @@ const Tables: React.FC = () => {
     setIsPrinting(true);
 
     try {
-      // Print invoice via printer service
-      const printItems = activeOrder.items.map((oi: any) => {
-        const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
-        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
-        return {
-          name: oi.item.name,
-          hsn: oi.item.description || '',
-          qty: oi.quantity,
-          unit: 'PCS',
-          rate: orderItemUnitPrice(oi),
-          tax_percent: taxPercent,
-          amount: itemTotal,
-        };
-      });
-
-      const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-      const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
-      const cgst = actualTax / 2;
-      const sgst = actualTax / 2;
-
       try {
-        await printerService.printInvoice({
-          type: 'invoice',
-          printer: {
-            type: 'usb',
-            name: currentStore?.printerName || 'Thermal Printer',
-            vendor_id: currentStore?.printerVendorId || '0x0fe6',
-            product_id: currentStore?.printerProductId || '0x811e',
-            paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-          },
-          invoice: {
-            store: {
-              name: currentStore?.name || 'Cafe',
-              branch: currentStore?.branch || '',
-              location: currentStore?.location || '',
-              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
-              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-              address: currentStore?.location || '',
-            },
-            customer: {
-              name: 'Walk-in Customer',
-              mobile: '',
-            },
-            invoice_no: invoiceNo,
-            bill_no: invoiceNo,
-            date: new Date().toLocaleString('en-IN'),
-            items: printItems,
-            summary: {
-              sub_total: taxable,
-              discount: 0,
-              taxable: taxable,
-              cgst: cgst,
-              sgst: sgst,
-              grand_total: total,
-            },
-            payment: {
-              cash: paymentMethod === 'cash' ? total : 0,
-              card: paymentMethod === 'card' ? total : 0,
-              upi: paymentMethod === 'upi' ? total : 0,
-              balance: 0,
-            },
-            payment_mode: paymentMethod,
-            footer: ['Thank You Visit Again'],
-          },
-        });
+        await printOrderInvoice(activeOrder, invoiceNo, total);
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);
@@ -572,6 +599,37 @@ const Tables: React.FC = () => {
       setErrorDialog({ show: true, message: (error as Error).message || 'Failed to complete order. Please try again.' });
     } finally {
       setIsPrinting(false);
+    }
+  };
+
+  const handlePrintOnly = async () => {
+    if (!billDialogTable || isPrinting || isPrintingOnly) return;
+
+    const activeOrder = getActiveOrderByTable(billDialogTable.id);
+    if (!activeOrder) return;
+
+    if (!currentStore?.printerName) {
+      notify.warning('No printer configured. Set one up in Settings.');
+      return;
+    }
+
+    const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
+    const tax = taxEnabled ? activeOrder.items.reduce((sum: number, oi: any) => {
+      const taxPercent = oi.item.taxPercent || 0;
+      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
+    }, 0) : 0;
+    const total = subtotal + tax;
+    const invoiceNo = `INV-${Date.now()}`;
+
+    setIsPrintingOnly(true);
+    try {
+      await printOrderInvoice(activeOrder, invoiceNo, total);
+      notify.success('Bill printed');
+    } catch (printError) {
+      console.error('Failed to print bill:', printError);
+      notify.error('Failed to print bill. Check your printer connection and settings.');
+    } finally {
+      setIsPrintingOnly(false);
     }
   };
 
@@ -645,15 +703,14 @@ const Tables: React.FC = () => {
     }
     setSectionLoading(true);
     try {
-      // oldName "" means the default (NULL) section — but we display "Ground Floor".
-      // The backend treats "" as NULL. We need to send the actual stored value.
-      const actualOldName = oldName === 'Ground Floor' ? '' : oldName;
+      // oldName "" targets the default (NULL) bucket. Only send "" when the
+      // renamed section is that bucket AND has no catalog row — a flagged
+      // catalog row renames like a normal section and keeps its default flag.
+      const actualOldName = oldName === defaultSectionName && !catalogSectionNames.has(oldName) ? '' : oldName;
       await renameTableSection(actualOldName, newName);
       notify.success(`Section renamed to "${newName}"`);
       setEditingSection(null);
       setEditingSectionValue('');
-      // If the active section was the renamed one, switch to the new name
-      if (activeSection === oldName) setActiveSection(newName);
     } catch (error) {
       notify.error((error as Error).message || 'Failed to rename section');
     } finally {
@@ -667,12 +724,23 @@ const Tables: React.FC = () => {
     setSectionToDelete(null);
     setSectionLoading(true);
     try {
-      const actualName = name === 'Ground Floor' ? '' : name;
+      const actualName = name === defaultSectionName && !catalogSectionNames.has(name) ? '' : name;
       await deleteTableSection(actualName);
       notify.success(`Section "${name}" deleted`);
-      if (activeSection === name) setActiveSection('all');
     } catch (error) {
       notify.error((error as Error).message || 'Failed to delete section');
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
+  const handleSetDefaultSection = async (name: string) => {
+    setSectionLoading(true);
+    try {
+      await setDefaultTableSection(name);
+      notify.success(`"${name}" is now the default section`);
+    } catch (error) {
+      notify.error((error as Error).message || 'Failed to set default section');
     } finally {
       setSectionLoading(false);
     }
@@ -692,31 +760,66 @@ const Tables: React.FC = () => {
 
   // Sections come from the table_sections catalog (independent of tables).
   // We merge in any sections still referenced by tables so nothing is hidden
-  // if the catalog and tables drift out of sync, plus the implicit "Ground
-  // Floor" default used for tables with no section assigned.
+  // if the catalog and tables drift out of sync. The default section — the
+  // bucket for tables with no section assigned — is always listed first.
   const sections = React.useMemo(() => {
     const set = new Set<string>();
     tableSections.forEach(s => set.add(s.name));
     tables.forEach(t => {
       if (t.section) set.add(t.section);
-      else set.add('Ground Floor');
     });
-    return Array.from(set);
-  }, [tableSections, tables]);
+    set.delete(defaultSectionName);
+    const rest = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return [defaultSectionName, ...rest];
+  }, [tableSections, tables, defaultSectionName]);
+
+  // Table counts per section — drives the section filter pills in the toolbar.
+  const sectionCounts = React.useMemo(() => {
+    const map = new Map<string, number>();
+    tables.forEach(t => {
+      const name = sectionNameOf(t);
+      map.set(name, (map.get(name) || 0) + 1);
+    });
+    return map;
+  }, [tables, sectionNameOf]);
+
+  // Only sections that actually contain tables get a filter pill.
+  const pillSections = React.useMemo(() => {
+    return sections.filter(name => (sectionCounts.get(name) || 0) > 0);
+  }, [sections, sectionCounts]);
 
   const filteredTables = React.useMemo(() => {
     return tables
-      .filter(t => activeSection === 'all' || (t.section || 'Ground Floor') === activeSection)
       .filter(t => {
+        if (sectionFilter !== 'all' && sectionNameOf(t) !== sectionFilter) return false;
         if (statusFilter === 'all') return true;
         const occupied = !!getActiveOrderByTable(t.id);
         return statusFilter === 'occupied' ? occupied : !occupied;
       })
       .sort((a, b) => a.number - b.number);
-  }, [tables, activeSection, statusFilter, getActiveOrderByTable]);
+  }, [tables, statusFilter, sectionFilter, sectionNameOf, getActiveOrderByTable]);
+
+  // Tables grouped per section — each section renders as its own group of rows.
+  const groupedTables = React.useMemo(() => {
+    return sections
+      .map(name => ({ name, tables: filteredTables.filter(t => sectionNameOf(t) === name) }))
+      .filter(g => g.tables.length > 0);
+  }, [sections, filteredTables, sectionNameOf]);
+
+  // Flat index of each table in filteredTables, used for keyboard focus.
+  const tableIndexById = React.useMemo(() => {
+    return new Map<string, number>(filteredTables.map((t, i) => [t.id, i]));
+  }, [filteredTables]);
 
   const occupiedCount = tables.filter(t => getActiveOrderByTable(t.id)).length;
   const vacantCount = tables.length - occupiedCount;
+
+  // Reset the section pill filter if its section no longer has any tables.
+  useEffect(() => {
+    if (sectionFilter !== 'all' && (sectionCounts.get(sectionFilter) || 0) === 0) {
+      setSectionFilter('all');
+    }
+  }, [sectionCounts, sectionFilter]);
 
   // Keep keyboard focus index in range when the filtered list changes.
   useEffect(() => {
@@ -741,7 +844,7 @@ const Tables: React.FC = () => {
     if (errorDialog.show) { setErrorDialog({ show: false, message: '' }); return; }
     if (sectionToDelete) { setSectionToDelete(null); return; }
     if (deleteConfirmTable) { setDeleteConfirmTable(null); return; }
-    if (billDialogTable) { if (!isPrinting) setBillDialogTable(null); return; }
+    if (billDialogTable) { if (!isPrinting && !isPrintingOnly) setBillDialogTable(null); return; }
     if (confirmTableChange) { setConfirmTableChange(null); return; }
     if (changeTableDialog) { setChangeTableDialog(null); return; }
     if (confirmCombineTable) { setConfirmCombineTable(null); return; }
@@ -752,7 +855,7 @@ const Tables: React.FC = () => {
     if (showStatusDropdown) { setShowStatusDropdown(false); return; }
     if (showSectionsModal) { setShowSectionsModal(false); return; }
     if (showAddModal) { setShowAddModal(false); return; }
-  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showTableMenu, showSectionsModal, showAddModal]);
+  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, isPrintingOnly, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showTableMenu, showSectionsModal, showAddModal]);
 
   const openFocusedTable = useCallback((table: Table) => {
     if (checkingTableId) return;
@@ -822,7 +925,7 @@ const Tables: React.FC = () => {
       handler: () => {
         // Bill dialog open -> confirm print & complete.
         if (billDialogTable) {
-          if (!isPrinting) handlePrintAndComplete();
+          if (!isPrinting && !isPrintingOnly) handlePrintAndComplete();
           return;
         }
         if (anyModalOpen) return;
@@ -893,11 +996,23 @@ const Tables: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* Status filter dropdown */}
+                {/* Section filter pills + status filter */}
                 <div className="tables-section-tabs">
-                  <div className="tables-section-tab tables-count-tab">
-                    All Tables <span className="tab-count">{tables.length}</span>
-                  </div>
+                  <button
+                    className={`tables-section-tab ${sectionFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setSectionFilter('all')}
+                  >
+                    All
+                  </button>
+                  {pillSections.map(name => (
+                    <button
+                      key={name}
+                      className={`tables-section-tab ${sectionFilter === name ? 'active' : ''}`}
+                      onClick={() => setSectionFilter(f => f === name ? 'all' : name)}
+                    >
+                      {name} <span className="tab-count">{sectionCounts.get(name)}</span>
+                    </button>
+                  ))}
 
                   <div className="status-filter-dropdown">
                     <button
@@ -935,22 +1050,17 @@ const Tables: React.FC = () => {
                       </>
                     )}
                   </div>
-
-                  <div className="tables-occupancy" title="Floor occupancy">
-                    <span className="tables-occupancy-label">
-                      {occupiedCount}/{tables.length} in use
-                    </span>
-                    <div className="tables-occupancy-bar">
-                      <div
-                        className="tables-occupancy-fill"
-                        style={{ width: `${tables.length ? (occupiedCount / tables.length) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
                 </div>
 
-                <div className="tables-layout-grid">
-                {filteredTables.map((table, idx) => {
+                {groupedTables.map(group => (
+                  <div key={group.name} className="tables-section-group">
+                    <div className="tables-section-header">
+                      {group.name}
+                      <span className="tab-count">{group.tables.length}</span>
+                    </div>
+                    <div className="tables-layout-grid">
+                {group.tables.map((table) => {
+                  const idx = tableIndexById.get(table.id) ?? -1;
                   const activeOrder = getActiveOrderByTable(table.id);
                   return (
                     <div
@@ -1030,7 +1140,9 @@ const Tables: React.FC = () => {
                     </div>
                   );
                 })}
-                </div>
+                    </div>
+                  </div>
+                ))}
               </>
             )}
           </div>
@@ -1047,8 +1159,15 @@ const Tables: React.FC = () => {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filteredTables.map((table, idx) => {
+                {groupedTables.map(group => (
+                <tbody key={group.name}>
+                  <tr className="tables-section-row">
+                    <td colSpan={5}>
+                      {group.name} <span className="tab-count">{group.tables.length}</span>
+                    </td>
+                  </tr>
+                  {group.tables.map((table) => {
+                    const idx = tableIndexById.get(table.id) ?? -1;
                     const activeOrder = getActiveOrderByTable(table.id);
                     return (
                       <tr
@@ -1146,6 +1265,7 @@ const Tables: React.FC = () => {
                     );
                   })}
                 </tbody>
+                ))}
               </table>
             </div>
           </div>
@@ -1197,6 +1317,17 @@ const Tables: React.FC = () => {
                       required
                     />
                   </div>
+                  <div className="form-group">
+                    <label>Section</label>
+                    <select
+                      value={newTable.section || defaultSectionName}
+                      onChange={e => setNewTable({ ...newTable, section: e.target.value })}
+                    >
+                      {sections.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
@@ -1222,16 +1353,136 @@ const Tables: React.FC = () => {
         </div>
       )}
 
+      {/* Manage Sections Modal */}
+      {showSectionsModal && (
+        <div className="modal-overlay" onClick={() => setShowSectionsModal(false)}>
+          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Floor Sections</h2>
+              <button className="close-btn" onClick={() => setShowSectionsModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="sections-add-row">
+                <input
+                  type="text"
+                  value={newSectionName}
+                  onChange={e => setNewSectionName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSection();
+                    }
+                  }}
+                  placeholder="New section name (e.g., First Floor)"
+                  disabled={sectionLoading}
+                />
+                <Button
+                  variant="primary"
+                  onClick={handleAddSection}
+                  isLoading={sectionLoading}
+                  disabled={!newSectionName.trim()}
+                  leftIcon={<Plus size={14} />}
+                >
+                  Add
+                </Button>
+              </div>
+              <div className="sections-list">
+                {sections.map(name => {
+                  const count = tables.filter(t => sectionNameOf(t) === name).length;
+                  const isDefault = name === defaultSectionName;
+                  return (
+                    <div className="section-item" key={name}>
+                      {editingSection === name ? (
+                        <>
+                          <input
+                            className="section-rename-input"
+                            value={editingSectionValue}
+                            autoFocus
+                            onChange={e => setEditingSectionValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleRenameSection(name);
+                              }
+                              if (e.key === 'Escape') setEditingSection(null);
+                            }}
+                            disabled={sectionLoading}
+                          />
+                          <button
+                            className="section-icon-btn"
+                            title="Save"
+                            onClick={() => handleRenameSection(name)}
+                            disabled={sectionLoading}
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            className="section-icon-btn"
+                            title="Cancel"
+                            onClick={() => setEditingSection(null)}
+                            disabled={sectionLoading}
+                          >
+                            <X size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="section-item-name">
+                            {name}
+                            {isDefault && <span className="section-default-badge">default</span>}
+                          </span>
+                          <span className="section-item-count">
+                            {count} table{count === 1 ? '' : 's'}
+                          </span>
+                          {!isDefault && (
+                            <button
+                              className="section-icon-btn"
+                              title="Set as default — unassigned tables go here"
+                              onClick={() => handleSetDefaultSection(name)}
+                              disabled={sectionLoading}
+                            >
+                              <Star size={14} />
+                            </button>
+                          )}
+                          <button
+                            className="section-icon-btn"
+                            title="Rename section"
+                            onClick={() => { setEditingSection(name); setEditingSectionValue(name); }}
+                            disabled={sectionLoading}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            className="section-icon-btn danger"
+                            title={isDefault ? 'The default section cannot be deleted' : 'Delete section'}
+                            onClick={() => setSectionToDelete(name)}
+                            disabled={sectionLoading || isDefault}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bill Dialog */}
       {billDialogTable && billDialogOrder && (
-        <div className="modal-overlay" onClick={() => !isPrinting && setBillDialogTable(null)}>
+        <div className="modal-overlay" onClick={() => !isPrinting && !isPrintingOnly && setBillDialogTable(null)}>
           <div className="modal bill-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Print Bill - Table {tableLabel(billDialogTable)}</h2>
               <button 
                 className="close-btn" 
-                onClick={() => !isPrinting && setBillDialogTable(null)}
-                disabled={isPrinting}
+                onClick={() => !isPrinting && !isPrintingOnly && setBillDialogTable(null)}
+                disabled={isPrinting || isPrintingOnly}
               >
                 <X size={24} />
               </button>
@@ -1242,19 +1493,28 @@ const Tables: React.FC = () => {
                 <span className="bill-total-value">{formatCurrency(billDialogTotal)}</span>
               </div>
               
-              <p className="bill-hint">Press Enter or click Print to complete</p>
+              <p className="bill-hint">Print Bill prints without completing · Enter completes the order</p>
             </div>
             <div className="modal-footer">
               <button
+                className="btn btn-secondary"
+                onClick={handlePrintOnly}
+                disabled={isPrinting || isPrintingOnly}
+              >
+                <Printer size={16} />
+                {isPrintingOnly ? 'Printing...' : 'Print Bill'}
+              </button>
+              <button
                 className="btn btn-primary btn-lg"
                 onClick={() => handlePrintAndComplete()}
+                disabled={isPrinting || isPrintingOnly}
               >
                 {isPrinting ? 'Completing...' : 'Complete Order'}
               </button>
               <button 
                 className="btn btn-secondary" 
                 onClick={() => setBillDialogTable(null)}
-                disabled={isPrinting}
+                disabled={isPrinting || isPrintingOnly}
               >
                 Cancel
               </button>
@@ -1292,6 +1552,16 @@ const Tables: React.FC = () => {
         variant="danger"
         onConfirm={confirmDeleteTable}
         onCancel={() => setDeleteConfirmTable(null)}
+      />
+      <ConfirmDialog
+        isOpen={!!sectionToDelete}
+        title="Delete Section"
+        message={`Delete section "${sectionToDelete || ''}"? Its tables will be moved to ${defaultSectionName}.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleDeleteSection}
+        onCancel={() => setSectionToDelete(null)}
       />
 
       {/* Change Table Dialog */}

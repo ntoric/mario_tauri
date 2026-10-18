@@ -110,6 +110,7 @@ export interface TableSection {
   id: string;
   storeId: string;
   name: string;
+  isDefault?: boolean;
   createdAt: string;
 }
 

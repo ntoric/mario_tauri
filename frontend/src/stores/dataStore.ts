@@ -59,6 +59,7 @@ interface DataState {
   createTableSection: (name: string) => Promise<void>;
   renameTableSection: (oldName: string, newName: string) => Promise<void>;
   deleteTableSection: (name: string) => Promise<void>;
+  setDefaultTableSection: (name: string) => Promise<void>;
   
   // Orders
   fetchOrders: () => Promise<void>;
@@ -422,6 +423,15 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
     await api.deleteTableSection(currentStoreId, name);
     await Promise.all([get().fetchTableSections(), get().fetchTables()]);
+  },
+
+  setDefaultTableSection: async (name) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.setDefaultTableSection(currentStoreId, name);
+    await get().fetchTableSections();
   },
 
   // Orders

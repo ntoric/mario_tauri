@@ -46,7 +46,7 @@ export const GlassToaster: React.FC = () => {
               }
             }}
             className="glass-toast-positioner"
-            style={{ transform: `translate(-50%, ${offset}px)` }}
+            style={{ transform: `translateY(${offset}px)` }}
           >
             <div
               className={`glass-toast glass-toast--${variant} ${t.visible ? 'glass-toast--visible' : 'glass-toast--hidden'}`}

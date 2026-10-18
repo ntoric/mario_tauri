@@ -169,6 +169,7 @@ func main() {
 		r.Get("/api/tables/sections", h.GetSections)
 		r.Post("/api/tables/sections", h.CreateSection)
 		r.Put("/api/tables/sections/rename", h.RenameSection)
+		r.Put("/api/tables/sections/default", h.SetDefaultSection)
 		r.Delete("/api/tables/sections/{name}", h.DeleteSection)
 
 		// Orders

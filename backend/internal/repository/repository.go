@@ -1070,11 +1070,19 @@ func (r *TableRepository) Create(ctx context.Context, t models.Table) error {
 	return err
 }
 
-// NextNumber returns the next free table number for a store. Used to assign an
-// internal number when a client creates a table with only an alphanumeric name.
-func (r *TableRepository) NextNumber(ctx context.Context, storeID string) (int, error) {
+// NextNumber returns the next free table number within a store+section. Used
+// to assign an internal number when a client creates a table with only an
+// alphanumeric name. Numbers may repeat across different sections, so the max
+// is scoped to the target section (NULL = the default section).
+func (r *TableRepository) NextNumber(ctx context.Context, storeID string, section *string) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(number), 0) + 1 FROM tables WHERE store_id = $1", storeID).Scan(&n)
+	var sec interface{}
+	if section != nil {
+		sec = *section
+	}
+	err := r.db.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(number), 0) + 1 FROM tables WHERE store_id = $1 AND COALESCE(section, '') = COALESCE($2::text, '')",
+		storeID, sec).Scan(&n)
 	return n, err
 }
 
@@ -1163,7 +1171,7 @@ func (r *TableRepository) DeleteSection(ctx context.Context, storeID, sectionNam
 // GetSections returns all sections defined for a store from the table_sections catalog.
 func (r *TableRepository) GetSections(ctx context.Context, storeID string) ([]models.TableSection, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT id, store_id, name, created_at FROM table_sections WHERE store_id = $1 ORDER BY name", storeID)
+		"SELECT id, store_id, name, is_default, created_at FROM table_sections WHERE store_id = $1 ORDER BY name", storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1172,7 +1180,7 @@ func (r *TableRepository) GetSections(ctx context.Context, storeID string) ([]mo
 	var sections []models.TableSection
 	for rows.Next() {
 		var s models.TableSection
-		if err := rows.Scan(&s.ID, &s.StoreID, &s.Name, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.StoreID, &s.Name, &s.IsDefault, &s.CreatedAt); err != nil {
 			return nil, err
 		}
 		sections = append(sections, s)
@@ -1187,6 +1195,31 @@ func (r *TableRepository) CreateSection(ctx context.Context, storeID, name strin
 		"INSERT INTO table_sections (id, store_id, name) VALUES ($1, $2, $3) ON CONFLICT (store_id, name) DO NOTHING",
 		uuid.New().String(), storeID, name)
 	return err
+}
+
+// SetDefaultSection marks one catalog section as the store's default and clears
+// the flag on every other section. The row is created first if the section is
+// only known via tables (or not at all) so the flag always has a home.
+func (r *TableRepository) SetDefaultSection(ctx context.Context, storeID, name, modifiedBy string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO table_sections (id, store_id, name) VALUES ($1, $2, $3) ON CONFLICT (store_id, name) DO NOTHING",
+		uuid.New().String(), storeID, name); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE table_sections SET is_default = (name = $2), modified_by = $3 WHERE store_id = $1",
+		storeID, name, modifiedBy); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // ==========================================

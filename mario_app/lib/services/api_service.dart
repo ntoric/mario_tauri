@@ -164,6 +164,14 @@ class ApiService {
     return (data as List).map((t) => TableModel.fromJson(t)).toList();
   }
 
+  // Table sections — the store's catalog of named table groupings.
+  Future<List<TableSection>> getTableSections(String storeId) async {
+    final response =
+        await _get('$_baseUrl/tables/sections?storeId=$storeId');
+    final data = await _handleResponse(response);
+    return (data as List).map((s) => TableSection.fromJson(s)).toList();
+  }
+
   // Categories
   Future<List<Category>> getCategories(String storeId) async {
     final response = await _get('$_baseUrl/categories?storeId=$storeId');

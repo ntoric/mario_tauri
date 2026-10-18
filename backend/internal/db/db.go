@@ -127,7 +127,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 
-		// Tables table
+		// Tables table — a table is unique per (store, section) by number and by
+		// name; the same number/name may be reused across different sections.
+		// Uniqueness is enforced by the section-scoped unique indexes created in
+		// the migration list below (they also run for fresh installs).
 		`CREATE TABLE IF NOT EXISTS tables (
 			id VARCHAR(255) PRIMARY KEY,
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
@@ -136,16 +139,15 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			seats INTEGER NOT NULL,
 			position_x INTEGER DEFAULT 0,
 			position_y INTEGER DEFAULT 0,
-			is_active BOOLEAN DEFAULT true,
-			UNIQUE(store_id, number),
-			UNIQUE(store_id, name)
+			section VARCHAR(255) DEFAULT NULL,
+			is_active BOOLEAN DEFAULT true
 		)`,
 
 		// Orders table
 		`CREATE TABLE IF NOT EXISTS orders (
 			id VARCHAR(255) PRIMARY KEY,
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
-			table_id VARCHAR(255) REFERENCES tables(id),
+			table_id VARCHAR(255) REFERENCES tables(id) ON DELETE SET NULL,
 			table_number INTEGER NOT NULL,
 			table_name VARCHAR(255),
 			status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled', 'merged')),
@@ -278,6 +280,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 			id VARCHAR(255) PRIMARY KEY,
 			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
 			name VARCHAR(255) NOT NULL,
+			is_default BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(store_id, name)
 		)`,
@@ -329,14 +332,25 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_mobile VARCHAR(20)`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled'))`,
 		`ALTER TABLE app_updates ADD COLUMN IF NOT EXISTS platform VARCHAR(20) CHECK (platform IN ('mobile', 'desktop'))`,
-		// Table sections — additive migration for existing deployments (NULL = default "Ground Floor")
+		// Table sections — additive migration for existing deployments (NULL = default section)
 		`ALTER TABLE tables ADD COLUMN IF NOT EXISTS section VARCHAR(255) DEFAULT NULL`,
+		// Table sections — marks which catalog section is the store's default,
+		// i.e. the bucket tables with NULL section are displayed under.
+		`ALTER TABLE table_sections ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE`,
 		// Alphanumeric table names — optional display label (e.g. "1A", "4AA").
 		// number stays the internal sort/compat key so old clients keep working.
 		`ALTER TABLE tables ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT NULL`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS table_name VARCHAR(255)`,
 		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS table_name VARCHAR(255)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tables_store_name ON tables (store_id, name) WHERE name IS NOT NULL`,
+		// Table identity is (store, section, number/name) — the same number or
+		// name may be reused across different sections of a store. Drop the
+		// older store-wide unique constraints/indexes from pre-section
+		// databases and replace them with section-scoped unique indexes.
+		`ALTER TABLE tables DROP CONSTRAINT IF EXISTS tables_store_id_number_key`,
+		`ALTER TABLE tables DROP CONSTRAINT IF EXISTS tables_store_id_name_key`,
+		`DROP INDEX IF EXISTS idx_tables_store_name`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tables_store_section_number ON tables (store_id, (COALESCE(section, '')), number)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tables_store_section_name ON tables (store_id, (COALESCE(section, '')), name) WHERE name IS NOT NULL`,
 		// Item preparation expenses — additive migration for existing deployments
 		`CREATE TABLE IF NOT EXISTS item_expenses (
 			id VARCHAR(255) PRIMARY KEY,
@@ -371,6 +385,13 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// with 'merged' included.
 		`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check`,
 		`ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (status IN ('active', 'completed', 'cancelled', 'merged'))`,
+		// Table deletion — orders keep denormalized table_number/table_name, so
+		// dropping a table should null the FK instead of raising a violation.
+		// Databases created before ON DELETE SET NULL existed need the FK
+		// re-created; this also unblocks store deletion (stores → tables cascade
+		// was previously blocked by orders.table_id).
+		`ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_table_id_fkey`,
+		`ALTER TABLE orders ADD CONSTRAINT orders_table_id_fkey FOREIGN KEY (table_id) REFERENCES tables(id) ON DELETE SET NULL`,
 		// Support tickets — lookup indexes
 		`CREATE INDEX IF NOT EXISTS idx_support_tickets_store ON support_tickets (store_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets (status)`,

@@ -1508,6 +1508,7 @@ body {
 /* Section tabs — floating frosted-glass toolbar */
 .tables-section-tabs {
   position: relative;
+  z-index: 30;
   display: flex;
   gap: 0.4rem;
   margin-bottom: 0.9rem;
@@ -1568,78 +1569,10 @@ body {
   color: white;
 }
 
-/* Non-interactive "All Tables" floor label */
-.tables-section-tab.tables-count-tab {
-  cursor: default;
-  font-weight: 700;
-  color: var(--dark);
-  letter-spacing: -0.01em;
-  font-size: 0.78rem;
-}
-
-.tables-section-tab.tables-count-tab:hover {
-  background: transparent;
-}
-
-.tables-count-tab .tab-count {
-  background: linear-gradient(135deg, var(--primary-light), var(--primary));
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(245, 130, 32, 0.35);
-}
-
-.tables-section-tab.manage-sections-btn {
-  margin-left: auto;
-  border: 1px dashed var(--gray-300);
-  color: var(--gray-500);
-  background: transparent;
-}
-
-.tables-section-tab.manage-sections-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-  background: var(--primary-50);
-}
-
-/* Floor occupancy meter */
-.tables-occupancy {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0 0.35rem;
-}
-
-.tables-occupancy-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: var(--gray-500);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.tables-occupancy-bar {
-  width: 84px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(var(--ink-rgb), 0.08);
-  box-shadow: inset 0 1px 2px rgba(var(--ink-rgb), 0.08);
-  overflow: hidden;
-}
-
-.tables-occupancy-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #34c759 0%, #f5a623 60%, #e53935 100%);
-  background-size: 84px 100%;
-  background-repeat: no-repeat;
-  box-shadow: 0 0 8px rgba(245, 166, 35, 0.45);
-  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* Status filter dropdown */
+/* Status filter dropdown — pinned to the right end of the pill bar */
 .status-filter-dropdown {
   position: relative;
+  margin-left: auto;
 }
 
 .status-filter-trigger {
@@ -1811,14 +1744,156 @@ body {
   color: var(--danger);
 }
 
+/* Floor section groups — each section gets a labelled group of tables */
+.tables-section-group {
+  margin-bottom: 0.35rem;
+}
+
 .tables-section-header {
-  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--dark);
-  margin: 0.35rem 0 0.5rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 2px solid var(--primary);
-  display: inline-block;
+  letter-spacing: -0.01em;
+  margin: 0.7rem 0 0.55rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.09);
+}
+
+.tables-section-header .tab-count {
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--gray-600);
+  padding: 0.05rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section divider row in list view */
+.tables-section-row td {
+  background: rgba(var(--ink-rgb), 0.035);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray-500);
+  padding: 0.4rem 0.75rem;
+}
+
+.tables-section-row .tab-count {
+  margin-left: 0.35rem;
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--gray-600);
+  padding: 0.05rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Manage Sections modal */
+.sections-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.sections-add-row input,
+.section-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--dark);
+}
+
+.sections-add-row input:focus,
+.section-rename-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.12);
+}
+
+.sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.section-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid rgba(var(--ink-rgb), 0.08);
+  border-radius: 10px;
+  background: rgba(var(--surface-2-rgb), 0.6);
+}
+
+.section-item-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.section-default-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+}
+
+.section-item-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  white-space: nowrap;
+}
+
+.section-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(var(--ink-rgb), 0.05);
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.section-icon-btn:hover:not(:disabled) {
+  background: rgba(var(--ink-rgb), 0.1);
+  color: var(--dark);
+}
+
+.section-icon-btn.danger:hover:not(:disabled) {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.section-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .tables-layout-grid {
@@ -6708,8 +6783,7 @@ body {
 .glass-toast-viewport {
   position: fixed;
   top: 14px;
-  left: 0;
-  right: 0;
+  right: 14px;
   z-index: 10000;
   pointer-events: none;
 }
@@ -6717,7 +6791,7 @@ body {
 .glass-toast-positioner {
   position: absolute;
   top: 0;
-  left: 50%;
+  right: 0;
   pointer-events: none;
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
@@ -6759,17 +6833,17 @@ body {
 
 .glass-toast--visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateX(0) scale(1);
 }
 
 .glass-toast--hidden {
   opacity: 0;
-  transform: translateY(-10px) scale(0.95);
+  transform: translateX(16px) scale(0.95);
 }
 
 @keyframes glassToastIn {
-  from { opacity: 0; transform: translateY(-14px) scale(0.94); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateX(24px) scale(0.94); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 .glass-toast--visible {
