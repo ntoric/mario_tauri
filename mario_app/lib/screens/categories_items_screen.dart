@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/category.dart';
 import '../models/item.dart';
 import '../utils/constants.dart';
@@ -311,6 +312,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     const isStaff =
         true; // Categories and items are read-only in the mobile app
@@ -328,7 +330,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 Container(
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.gray100,
                     borderRadius: BorderRadius.circular(18),
                     boxShadow: ClayStyles.raisedShadow(
                       blur: 16,
@@ -363,7 +365,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.gray100,
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: ClayStyles.raisedShadow(
                             blur: 14,
@@ -377,18 +379,18 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                             hintText: _tabController.index == 0
                                 ? 'Search categories...'
                                 : 'Search food or beverages...',
-                            hintStyle: const TextStyle(
+                            hintStyle: TextStyle(
                               fontSize: 14,
                               color: AppColors.gray400,
                             ),
-                            prefixIcon: const Icon(
+                            prefixIcon: Icon(
                               Icons.search,
                               color: AppColors.gray500,
                               size: 20,
                             ),
                             suffixIcon: _itemSearchController.text.isNotEmpty
                                 ? IconButton(
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.close,
                                       size: 18,
                                       color: AppColors.gray500,
@@ -411,7 +413,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                         width: 46,
                         height: 46,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.gray100,
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: ClayStyles.raisedShadow(
                             blur: 14,
@@ -419,7 +421,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                             lightOffset: const Offset(-5, -5),
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.tune_rounded,
                           color: AppColors.gray700,
                           size: 20,
@@ -537,8 +539,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         }
 
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: AppColors.gray100,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.fromLTRB(8, 14, 8, 24),
@@ -546,7 +548,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(
                   'Sort by',
@@ -600,13 +602,12 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(label,
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.gray600)),
+                      style: TextStyle(fontSize: 13, color: AppColors.gray600)),
                   Flexible(
                     child: Text(
                       value,
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: AppColors.dark,
@@ -618,8 +619,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
             );
 
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: AppColors.gray100,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
@@ -637,7 +638,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                       children: [
                         Text(
                           item.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                             color: AppColors.dark,
@@ -645,7 +646,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                         ),
                         Text(
                           categoryName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppColors.gray500,
                           ),
@@ -667,7 +668,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 const SizedBox(height: 12),
                 Text(
                   item.description!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     color: AppColors.gray600,
                   ),
@@ -728,7 +729,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.category_outlined,
                       size: 64,
                       color: AppColors.gray400,
@@ -738,8 +739,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                       query.isNotEmpty
                           ? 'No categories match your search'
                           : 'No categories found',
-                      style: const TextStyle(
-                          fontSize: 16, color: AppColors.gray600),
+                      style: TextStyle(fontSize: 16, color: AppColors.gray600),
                     ),
                     if (!isStaff && query.isEmpty) ...[
                       const SizedBox(height: 16),
@@ -769,7 +769,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 alignment: Alignment.centerRight,
                 child: Text(
                   '${categories.length} ${categories.length == 1 ? 'Category' : 'Categories'}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: AppColors.gray500,
@@ -821,7 +821,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                                     cat.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: AppColors.dark,
@@ -864,7 +864,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                             const SizedBox(height: 4),
                             Text(
                               '$itemsCount ${itemsCount == 1 ? 'item' : 'items'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.gray500,
                               ),
@@ -900,8 +900,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
   // --- Items List Panel with Search & Filter ---
   Widget _buildItemsTab(DataProvider data, bool isStaff) {
-    final categories = data.categories
-        .toList()
+    final categories = data.categories.toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
@@ -975,14 +974,14 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
             children: [
               Text(
                 '${filteredItems.length} ${filteredItems.length == 1 ? 'Item' : 'Items'}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: AppColors.dark,
                 ),
               ),
               const Spacer(),
-              const Text(
+              Text(
                 'Sort by',
                 style: TextStyle(fontSize: 11, color: AppColors.gray500),
               ),
@@ -993,21 +992,21 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.gray100,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
                       Text(
                         sortLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppColors.dark,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(
+                      Icon(
                         Icons.keyboard_arrow_down,
                         size: 16,
                         color: AppColors.gray600,
@@ -1023,7 +1022,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.gray100,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -1051,18 +1050,17 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.fastfood_outlined,
                               size: 64,
                               color: AppColors.gray400,
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              query.isNotEmpty ||
-                                      _selectedCategoryId != 'all'
+                              query.isNotEmpty || _selectedCategoryId != 'all'
                                   ? 'No matching food items found'
                                   : 'No food items added yet',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 16, color: AppColors.gray600),
                             ),
                             if (!isStaff &&
@@ -1120,9 +1118,8 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: selected
-              ? null
-              : Border.all(color: AppColors.gray200, width: 1),
+          border:
+              selected ? null : Border.all(color: AppColors.gray200, width: 1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1201,7 +1198,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.gray100,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -1217,7 +1214,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w800,
                       color: AppColors.dark,
@@ -1249,7 +1246,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                       item.description!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: AppColors.gray500,
                         fontStyle: FontStyle.italic,
@@ -1259,7 +1256,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                   const SizedBox(height: 5),
                   Text(
                     'Tax: ${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%   HSN: ${item.hsnCode ?? '-'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       color: AppColors.gray500,
                     ),
@@ -1275,9 +1272,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      item.isFavourite
-                          ? Icons.favorite
-                          : Icons.favorite_border,
+                      item.isFavourite ? Icons.favorite : Icons.favorite_border,
                       size: 18,
                       color: item.isFavourite
                           ? AppColors.danger
@@ -1286,7 +1281,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     const SizedBox(width: 2),
                     GestureDetector(
                       onTap: () => _showItemDetails(item, categoryName),
-                      child: const Icon(
+                      child: Icon(
                         Icons.more_vert,
                         size: 18,
                         color: AppColors.gray500,
@@ -1317,7 +1312,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.gray100,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -1338,9 +1333,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                     top: 6,
                     right: 6,
                     child: Icon(
-                      item.isFavourite
-                          ? Icons.favorite
-                          : Icons.favorite_border,
+                      item.isFavourite ? Icons.favorite : Icons.favorite_border,
                       size: 17,
                       color: item.isFavourite
                           ? AppColors.danger
@@ -1355,7 +1348,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
               item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 color: AppColors.dark,
@@ -1366,7 +1359,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
               categoryName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 color: AppColors.gray500,
               ),
@@ -1385,7 +1378,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                 ),
                 GestureDetector(
                   onTap: () => _showItemDetails(item, categoryName),
-                  child: const Icon(
+                  child: Icon(
                     Icons.more_vert,
                     size: 16,
                     color: AppColors.gray500,

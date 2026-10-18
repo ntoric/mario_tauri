@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/table.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 import '../widgets/order_timer.dart';
+import '../widgets/order_table_actions.dart';
+import '../widgets/tilt_3d_card.dart';
 import '../main.dart';
 import 'order_screen.dart';
 import 'bill_screen.dart';
@@ -156,374 +159,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     }
   }
 
-  void _showChangeTableDialog(
-      Order order, List<TableModel> tables, DataProvider data) {
-    final parentContext = context;
-    final availableTables = tables
-        .where((t) => t.id != order.tableId && !data.isTableOccupied(t.id))
-        .toList();
-
-    if (availableTables.isEmpty) {
-      ScaffoldMessenger.of(parentContext).showSnackBar(
-        const SnackBar(
-          content: Text('No available tables to move to'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: parentContext,
-      builder: (dialogContext) {
-        final navigator = Navigator.of(parentContext);
-        final scaffoldMessenger = ScaffoldMessenger.of(parentContext);
-
-        return AlertDialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding: EdgeInsets.zero,
-          titlePadding: EdgeInsets.zero,
-          content: Container(
-            width: double.maxFinite,
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-            decoration: ClayStyles.surface(radiusValue: 30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Move Order to Table',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.dark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Choose a free table for this active order',
-                  style: TextStyle(
-                    color: AppColors.gray500,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 1,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: availableTables.length,
-                  itemBuilder: (itemBuilderContext, index) {
-                    final table = availableTables[index];
-                    return InkWell(
-                      onTap: () async {
-                        Navigator.pop(dialogContext);
-
-                        showDialog(
-                          context: navigator.context,
-                          barrierDismissible: false,
-                          builder: (loadingContext) => Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        );
-
-                        try {
-                          final success = await data.moveOrderToTable(
-                            order.id,
-                            table.id,
-                            table.number,
-                          );
-
-                          navigator.pop();
-
-                          if (success) {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Order moved to ${table.label}'),
-                                backgroundColor: AppColors.success,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            );
-                          } else {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content:
-                                    Text(data.error ?? 'Failed to move order.'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          navigator.pop();
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Error: ${e.toString()}'),
-                              backgroundColor: AppColors.danger,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      borderRadius: ClayStyles.radius(18),
-                      child: Container(
-                        decoration: ClayStyles.surface(
-                          radiusValue: 18,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white,
-                              AppColors.clayBlue.withOpacity(0.65),
-                            ],
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              table.label,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            Text(
-                              '${table.seats} seats',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.gray500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCombineTableDialog(
-      Order order, List<TableModel> tables, DataProvider data) {
-    final parentContext = context;
-    // Only tables with an active order can be merged into this one.
-    final occupiedTables = tables
-        .where((t) => t.id != order.tableId && data.isTableOccupied(t.id))
-        .toList();
-
-    if (occupiedTables.isEmpty) {
-      ScaffoldMessenger.of(parentContext).showSnackBar(
-        const SnackBar(
-          content: Text('No other occupied tables to merge with'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: parentContext,
-      builder: (dialogContext) {
-        final navigator = Navigator.of(parentContext);
-        final scaffoldMessenger = ScaffoldMessenger.of(parentContext);
-
-        return AlertDialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding: EdgeInsets.zero,
-          titlePadding: EdgeInsets.zero,
-          content: Container(
-            width: double.maxFinite,
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-            decoration: ClayStyles.surface(radiusValue: 30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Merge Bill',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.dark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Pick an occupied table — its order merges into ${order.tableLabel} and the table is freed',
-                  style: const TextStyle(
-                    color: AppColors.gray500,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 1,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: occupiedTables.length,
-                  itemBuilder: (itemBuilderContext, index) {
-                    final table = occupiedTables[index];
-                    final otherOrder = data.getOrderForTable(table.id);
-                    return InkWell(
-                      onTap: () async {
-                        if (otherOrder == null) return;
-                        Navigator.pop(dialogContext);
-
-                        showDialog(
-                          context: navigator.context,
-                          barrierDismissible: false,
-                          builder: (loadingContext) => Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        );
-
-                        try {
-                          final merged = await data.mergeOrders(
-                            order.id,
-                            otherOrder.id,
-                          );
-
-                          navigator.pop();
-
-                          if (merged != null) {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    '${table.label} order merged — table freed'),
-                                backgroundColor: AppColors.success,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            );
-                          } else {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    data.error ?? 'Failed to merge orders.'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          navigator.pop();
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Error: ${e.toString()}'),
-                              backgroundColor: AppColors.danger,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      borderRadius: ClayStyles.radius(18),
-                      child: Container(
-                        decoration: ClayStyles.surface(
-                          radiusValue: 18,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white,
-                              AppColors.clayBlue.withOpacity(0.65),
-                            ],
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              table.label,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            Text(
-                              '₹${(otherOrder?.totalAmount ?? 0).toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.gray500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _showTableOptions(TableModel table, Order? order, DataProvider data) {
     final parentContext = context;
     final auth = parentContext.read<AuthProvider>();
@@ -536,9 +171,21 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
       builder: (sheetContext) => SafeArea(
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.gray100,
+                AppColors.backgroundSecondary,
+              ],
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withOpacity(AppColors.isDark ? 0.08 : 0.7),
+              ),
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -562,15 +209,31 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     width: 62,
                     height: 62,
                     decoration: BoxDecoration(
-                      color: AppColors.primarySoft.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: isOccupied
+                            ? [AppColors.primary, AppColors.primaryDark]
+                            : [
+                                AppColors.primarySoft.withOpacity(0.8),
+                                AppColors.primarySoft.withOpacity(0.4),
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: isOccupied
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withOpacity(0.35),
+                                blurRadius: 14,
+                                offset: const Offset(0, 5),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Icon(
                       Icons.table_restaurant,
                       size: 32,
-                      color: isOccupied
-                          ? AppColors.primary
-                          : AppColors.gray500,
+                      color: isOccupied ? Colors.white : AppColors.gray500,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -580,7 +243,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                       children: [
                         Text(
                           table.label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.w800,
                             color: AppColors.dark,
@@ -588,7 +251,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         ),
                         Text(
                           '${table.seats} seats',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             color: AppColors.gray500,
                           ),
@@ -636,13 +299,16 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.gray100,
+                        color: AppColors.backgroundSecondary,
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.gray300.withOpacity(0.5),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.credit_card,
@@ -671,13 +337,13 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                             order: order,
                             showIcon: true,
                             iconSize: 12,
-                            textStyle: const TextStyle(
+                            textStyle: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: AppColors.dark,
                             ),
                           ),
-                          const Text(
+                          Text(
                             'Order duration',
                             style: TextStyle(
                               fontSize: 9.5,
@@ -762,8 +428,8 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                           desc: 'Transfer this order to a different table',
                           onTap: () {
                             Navigator.pop(sheetContext);
-                            _showChangeTableDialog(
-                                order, data.tables, data);
+                            showMoveTableDialog(
+                                parentContext, order, data.tables, data);
                           },
                         ),
                       ),
@@ -778,7 +444,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                           titleColor: AppColors.danger,
                           onTap: () {
                             Navigator.pop(sheetContext);
-                            _cancelOrderFlow(order, data);
+                            cancelOrderFlow(parentContext, order, data);
                           },
                         ),
                       ),
@@ -790,7 +456,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                 // Quick Actions
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       'Quick Actions',
                       style: TextStyle(
                         fontSize: 14,
@@ -808,7 +474,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                           color: AppColors.gray200,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.close,
                           size: 14,
                           color: AppColors.gray600,
@@ -837,8 +503,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         label: 'Print Bill',
                         onTap: () {
                           Navigator.pop(sheetContext);
-                          if (auth.currentStore?.remoteBillingEnabled ==
-                              true) {
+                          if (auth.currentStore?.remoteBillingEnabled == true) {
                             Navigator.push(
                               parentContext,
                               MaterialPageRoute(
@@ -864,8 +529,8 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         label: 'Merge Bill',
                         onTap: () {
                           Navigator.pop(sheetContext);
-                          _showCombineTableDialog(
-                              order, data.tables, data);
+                          showMergeBillDialog(
+                              parentContext, order, data.tables, data);
                         },
                       ),
                     ),
@@ -910,7 +575,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.white,
+      color: AppColors.gray100,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -919,7 +584,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.gray200),
+            border: Border.all(color: AppColors.gray300.withOpacity(0.55)),
           ),
           child: Row(
             children: [
@@ -939,7 +604,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.dark,
@@ -947,7 +612,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     ),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10.5,
                         color: AppColors.gray500,
                       ),
@@ -955,8 +620,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  size: 18, color: AppColors.gray500),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.gray500),
             ],
           ),
         ),
@@ -974,7 +638,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     Color? titleColor,
   }) {
     return Material(
-      color: bg,
+      color: AppColors.isDark ? accent.withOpacity(0.13) : bg,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -1006,7 +670,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               Text(
                 desc,
                 maxLines: 2,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9.5,
                   height: 1.25,
                   color: AppColors.gray600,
@@ -1038,7 +702,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.white,
+      color: AppColors.gray100,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -1047,7 +711,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.gray200),
+            border: Border.all(color: AppColors.gray300.withOpacity(0.55)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1059,15 +723,14 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.dark,
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  size: 14, color: AppColors.gray500),
+              Icon(Icons.chevron_right, size: 14, color: AppColors.gray500),
             ],
           ),
         ),
@@ -1085,8 +748,15 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
             maxHeight: MediaQuery.of(context).size.height * 0.7,
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.gray100,
+                AppColors.backgroundSecondary,
+              ],
+            ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
@@ -1101,7 +771,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Order Summary',
                 style: TextStyle(
                   fontSize: 17,
@@ -1125,7 +795,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                             oi.item.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w600,
                               color: AppColors.dark,
@@ -1134,7 +804,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                         ),
                         Text(
                           '× ${oi.quantity}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             color: AppColors.gray500,
                           ),
@@ -1145,7 +815,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                           child: Text(
                             '₹${oi.totalPrice.toStringAsFixed(2)}',
                             textAlign: TextAlign.right,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               color: AppColors.dark,
@@ -1169,7 +839,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Total',
                     style: TextStyle(
                       fontSize: 16,
@@ -1200,11 +870,11 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 13, color: AppColors.gray600),
+          style: TextStyle(fontSize: 13, color: AppColors.gray600),
         ),
         Text(
           '₹${amount.toStringAsFixed(2)}',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
             color: AppColors.dark,
@@ -1289,75 +959,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
-  void _cancelOrderFlow(Order order, DataProvider data) async {
-    final navigator = Navigator.of(context);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final confirm = await showDialog<bool>(
-      context: navigator.context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cancel Order?'),
-        content:
-            const Text('Are you sure you want to cancel this order?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('No'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.danger,
-            ),
-            child: const Text('Yes, Cancel'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      showDialog(
-        context: navigator.context,
-        barrierDismissible: false,
-        builder: (loadingContext) => Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
-          ),
-        ),
-      );
-
-      try {
-        final success = await data.cancelOrder(order.id);
-        navigator.pop();
-
-        if (success) {
-          scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Order cancelled and table released'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        } else {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content:
-                  Text(data.error ?? 'Failed to cancel order.'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
-      } catch (e) {
-        navigator.pop();
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-    }
-  }
-
   _TableStatusFilter _statusFor(TableModel table, DataProvider data) {
     if (data.isTableOccupied(table.id)) return _TableStatusFilter.occupied;
     return table.isActive
@@ -1365,8 +966,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         : _TableStatusFilter.reserved;
   }
 
-  List<TableModel> _filteredTables(
-      List<TableModel> tables, DataProvider data) {
+  List<TableModel> _filteredTables(List<TableModel> tables, DataProvider data) {
     if (_statusFilter == _TableStatusFilter.all) return tables;
     return tables
         .where((table) => _statusFor(table, data) == _statusFilter)
@@ -1376,6 +976,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     context.watch<AuthProvider>();
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final tables = data.tables;
 
@@ -1385,8 +986,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     final reservedCount = tables
         .where((t) => _statusFor(t, data) == _TableStatusFilter.reserved)
         .length;
-    final availableCount =
-        tables.length - occupiedCount - reservedCount;
+    final availableCount = tables.length - occupiedCount - reservedCount;
     final filteredTables = _filteredTables(tables, data);
     final crossAxisCount = ResponsiveHelper.getGridCrossAxisCount(context);
 
@@ -1428,10 +1028,14 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                                 spacing: spacing,
                                 runSpacing: spacing,
                                 children: [
-                                  for (final table in filteredTables)
+                                  for (var i = 0;
+                                      i < filteredTables.length;
+                                      i++)
                                     SizedBox(
                                       width: cardWidth,
-                                      child: _buildTableCard(table, data),
+                                      height: 182,
+                                      child: _buildTableCard(
+                                          filteredTables[i], data, i),
                                     ),
                                 ],
                               );
@@ -1487,6 +1091,19 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
+  Color _accentForFilter(_TableStatusFilter value) {
+    switch (value) {
+      case _TableStatusFilter.occupied:
+        return AppColors.primary;
+      case _TableStatusFilter.available:
+        return AppColors.success;
+      case _TableStatusFilter.reserved:
+        return AppColors.info;
+      case _TableStatusFilter.all:
+        return AppColors.primary;
+    }
+  }
+
   Widget _statFilterPill({
     required IconData icon,
     required String label,
@@ -1494,28 +1111,43 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     required _TableStatusFilter value,
   }) {
     final selected = _statusFilter == value;
+    final accent = _accentForFilter(value);
+    final isDark = AppColors.isDark;
     return GestureDetector(
       onTap: () => setState(() => _statusFilter = value),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.white,
+          gradient: selected
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    accent,
+                    Color.lerp(accent, Colors.black, 0.18)!,
+                  ],
+                )
+              : null,
+          color: selected ? null : AppColors.gray100,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.gray300,
+            color: selected
+                ? Colors.transparent
+                : AppColors.gray300.withOpacity(0.8),
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    color: accent.withOpacity(isDark ? 0.4 : 0.3),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: AppColors.gray500.withOpacity(0.08),
+                    color: AppColors.dark.withOpacity(isDark ? 0.2 : 0.05),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -1529,13 +1161,32 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               size: 15,
               color: selected ? Colors.white : AppColors.gray600,
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 7),
             Text(
-              '$label ($count)',
+              label,
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
+                letterSpacing: 0.1,
                 color: selected ? Colors.white : AppColors.gray700,
+              ),
+            ),
+            const SizedBox(width: 7),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withOpacity(0.22)
+                    : accent.withOpacity(isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? Colors.white : accent,
+                ),
               ),
             ),
           ],
@@ -1544,242 +1195,260 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     );
   }
 
-  Widget _buildTableCard(TableModel table, DataProvider data) {
+  Widget _buildTableCard(TableModel table, DataProvider data, int index) {
     final order = data.getOrderForTable(table.id);
     final status = _statusFor(table, data);
     final isOccupied = status == _TableStatusFilter.occupied;
     final isReserved = status == _TableStatusFilter.reserved;
 
-    final Color cardBg;
-    final Color badgeColor;
-    final IconData badgeIcon;
+    final Color accent;
+    final String statusLabel;
     if (isOccupied) {
-      cardBg = const Color(0xFFFFEEE0);
-      badgeColor = AppColors.primary;
-      badgeIcon = Icons.people;
+      accent = AppColors.primary;
+      statusLabel = 'Occupied';
     } else if (isReserved) {
-      cardBg = const Color(0xFFEAF2FE);
-      badgeColor = AppColors.info;
-      badgeIcon = Icons.schedule;
+      accent = AppColors.info;
+      statusLabel = 'Reserved';
     } else {
-      cardBg = const Color(0xFFE7F7EC);
-      badgeColor = AppColors.success;
-      badgeIcon = Icons.check;
+      accent = AppColors.success;
+      statusLabel = 'Available';
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          if (isReserved) {
-            _showTableOptions(table, order, data);
-            return;
-          }
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OrderScreen(
-                table: table,
-                order: order,
-                isNewOrder: order == null,
-              ),
-            ),
-          );
-        },
-        onLongPress: () => _showTableOptions(table, order, data),
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: badgeColor.withOpacity(0.10),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 2),
-              Align(
-                alignment: Alignment.topRight,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _showTableOptions(table, order, data),
-                  child: const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 4, 10, 2),
-                    child: Icon(
-                      Icons.more_vert,
-                      size: 17,
-                      color: AppColors.gray600,
-                    ),
+    final isDark = AppColors.isDark;
+
+    return _StaggeredIn(
+      index: index,
+      child: Tilt3DCard(
+        tilt: 0.05,
+        scaleDown: 0.03,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (isReserved) {
+                _showTableOptions(table, order, data);
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => OrderScreen(
+                    table: table,
+                    order: order,
+                    isNewOrder: order == null,
                   ),
                 ),
-              ),
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  SizedBox(
-                    width: 58,
-                    height: 58,
-                    child: CustomPaint(
-                      painter: _DiningSetPainter(
-                        tableColor: badgeColor.withOpacity(0.35),
-                        chairColor: badgeColor,
-                      ),
-                    ),
+              );
+            },
+            onLongPress: () => _showTableOptions(table, order, data),
+            borderRadius: BorderRadius.circular(22),
+            child: Container(
+              height: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(AppColors.gray100, accent,
+                        isDark ? 0.22 : (isOccupied ? 0.16 : 0.10))!,
+                    Color.lerp(
+                        AppColors.gray100, accent, isDark ? 0.05 : 0.02)!,
+                  ],
+                ),
+                border: Border.all(
+                  color: accent.withOpacity(isDark ? 0.35 : 0.25),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withOpacity(isDark ? 0.25 : 0.16),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
                   ),
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      width: 21,
-                      height: 21,
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: Icon(
-                        badgeIcon,
-                        size: 11,
-                        color: Colors.white,
-                      ),
-                    ),
+                  BoxShadow(
+                    color: AppColors.dark.withOpacity(isDark ? 0.25 : 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                table.label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.dark,
-                  height: 1.15,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                '${table.seats} ${table.seats == 1 ? 'seat' : 'seats'}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.gray600,
-                ),
-              ),
-              const SizedBox(height: 9),
-              if (!isOccupied)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: isReserved
-                          ? AppColors.info
-                          : AppColors.success,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isReserved) ...[
-                          const Icon(Icons.schedule,
-                              size: 11, color: Colors.white),
-                          const SizedBox(width: 4),
-                        ],
-                        Text(
-                          isReserved ? 'Reserved' : 'Available',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (isOccupied) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '₹${order!.totalAmount.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  // Occupied cards show the elapsed timer centered; other
+                  // statuses show a dot-less badge in the same slot.
+                  if (isOccupied)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(isDark ? 0.20 : 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: OrderTimer(
+                        order: order!,
+                        showIcon: true,
+                        iconSize: 11,
+                        color: accent,
+                        textStyle: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                          letterSpacing: 0.4,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      OrderTimer(
-                        order: order,
-                        showIcon: false,
-                        textStyle: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                    ],
+                    )
+                  else
+                    _statusChip(accent: accent, label: statusLabel),
+                  const SizedBox(height: 12),
+                  Text(
+                    (table.name != null && table.name!.isNotEmpty)
+                        ? table.name!
+                        : '${table.number}',
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.6,
+                      height: 1.05,
+                      color: AppColors.dark,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Color(0x33D97B23)),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${table.seats} ${table.seats == 1 ? 'seat' : 'seats'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.gray500,
                     ),
                   ),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      children: [
-                        _cardAction(
-                          icon: Icons.description_outlined,
-                          color: AppColors.dark,
-                          onTap: () => _showOrderSummarySheet(order),
-                        ),
-                        _cardAction(
-                          icon: Icons.edit_outlined,
-                          color: AppColors.dark,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => OrderScreen(
-                                  table: table,
-                                  order: order,
-                                  isNewOrder: false,
-                                ),
+                  const SizedBox(height: 10),
+                  if (!isOccupied) ...[
+                    const Spacer(),
+                    if (isReserved)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 13,
+                              color: accent,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'View options',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: accent,
+                                letterSpacing: 0.1,
                               ),
-                            );
-                          },
+                            ),
+                          ],
                         ),
-                        _cardAction(
-                          icon: Icons.close,
-                          color: AppColors.danger,
-                          onTap: () => _cancelOrderFlow(order, data),
-                          isLast: true,
-                        ),
-                      ],
+                      ),
+                  ],
+                  if (isOccupied) ...[
+                    Text(
+                      '₹${order!.totalAmount.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                        letterSpacing: -0.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-              ],
-            ],
+                    const Spacer(),
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: accent.withOpacity(0.18),
+                          ),
+                        ),
+                      ),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          children: [
+                            _cardAction(
+                              icon: Icons.receipt_long_outlined,
+                              color: AppColors.dark,
+                              onTap: () {
+                                final remoteBilling = context
+                                        .read<AuthProvider>()
+                                        .currentStore
+                                        ?.remoteBillingEnabled ==
+                                    true;
+                                if (remoteBilling) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => BillScreen(order: order),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'Remote billing is not enabled for this store'),
+                                      backgroundColor: AppColors.warning,
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                            _cardAction(
+                              icon: Icons.swap_horiz_rounded,
+                              color: AppColors.dark,
+                              onTap: () => showMoveTableDialog(
+                                  context, order, data.tables, data),
+                            ),
+                            _cardAction(
+                              icon: Icons.close_rounded,
+                              color: AppColors.danger,
+                              onTap: () =>
+                                  cancelOrderFlow(context, order, data),
+                              isLast: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip({
+    required Color accent,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(AppColors.isDark ? 0.20 : 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          color: accent,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -1796,12 +1465,14 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          height: 42,
+          height: 44,
           decoration: BoxDecoration(
             border: isLast
                 ? null
-                : const Border(
-                    right: BorderSide(color: Color(0x33D97B23)),
+                : Border(
+                    right: BorderSide(
+                      color: AppColors.dark.withOpacity(0.08),
+                    ),
                   ),
           ),
           child: Icon(icon, size: 18, color: color),
@@ -1828,7 +1499,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white,
+                      AppColors.gray100,
                       AppColors.primarySoft,
                     ],
                   ),
@@ -1840,7 +1511,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'No tables available yet',
                 style: TextStyle(
                   fontSize: 18,
@@ -1849,7 +1520,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Pull to refresh after tables are synced from the store',
                 style: TextStyle(
                   color: AppColors.gray500,
@@ -1868,7 +1539,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
       physics: const AlwaysScrollableScrollPhysics(),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.4,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1892,61 +1563,60 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
 
 enum _TableStatusFilter { all, occupied, available, reserved }
 
-/// Top-down dining set illustration: a center table with 4 chairs.
-class _DiningSetPainter extends CustomPainter {
-  final Color tableColor;
-  final Color chairColor;
+/// Fades + slides a child in on first build, delayed by its grid index, for a
+/// staggered entrance when the grid first appears.
+class _StaggeredIn extends StatefulWidget {
+  final int index;
+  final Widget child;
 
-  _DiningSetPainter({required this.tableColor, required this.chairColor});
+  const _StaggeredIn({required this.index, required this.child});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final chairPaint = Paint()..color = chairColor;
-    final tablePaint = Paint()..color = tableColor;
+  State<_StaggeredIn> createState() => _StaggeredInState();
+}
 
-    const chairR = Radius.circular(3.5);
-    // Left & right chairs
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, h * 0.28, w * 0.17, h * 0.44), chairR),
-      chairPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(w * 0.83, h * 0.28, w * 0.17, h * 0.44), chairR),
-      chairPaint,
-    );
-    // Top & bottom chairs
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(w * 0.28, 0, w * 0.44, h * 0.17), chairR),
-      chairPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Rect.fromLTWH(w * 0.28, h * 0.83, w * 0.44, h * 0.17), chairR),
-      chairPaint,
-    );
-    // Table body + inner plate
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.24, h * 0.24, w * 0.52, h * 0.52),
-        const Radius.circular(8),
-      ),
-      tablePaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.31, h * 0.31, w * 0.38, h * 0.38),
-        const Radius.circular(5),
-      ),
-      Paint()..color = chairColor.withOpacity(0.45),
+class _StaggeredInState extends State<_StaggeredIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  );
+  late final Animation<double> _anim = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(
+      Duration(milliseconds: 40 * widget.index.clamp(0, 14)),
+      () {
+        if (mounted) _controller.forward();
+      },
     );
   }
 
   @override
-  bool shouldRepaint(_DiningSetPainter old) =>
-      old.tableColor != tableColor || old.chairColor != chairColor;
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      child: widget.child,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _anim.value,
+          child: Transform.translate(
+            offset: Offset(0, 14 * (1 - _anim.value)),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
 }

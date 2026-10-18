@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 class AppConstants {
   static const String appName = 'Mario App';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '2.2.0';
 
   static const String defaultApiUrl = 'https://mario-v2-backend.ntoric.com';
 }
@@ -12,32 +12,56 @@ class AppColors {
   // Theme-driven colors delegate to the active AppThemeOption, applied by
   // ThemeProvider whenever the user picks a theme in Settings.
   static AppThemeOption _theme = AppThemeOptions.defaultOption;
+  static bool _isDark = false;
 
   static AppThemeOption get theme => _theme;
   static void apply(AppThemeOption option) => _theme = option;
 
+  /// True while the app renders in dark mode. Synced from MaterialApp's
+  /// resolved brightness so widgets reading these statics follow the theme.
+  static bool get isDark => _isDark;
+  static void setDarkMode(bool value) => _isDark = value;
+
+  /// Blends a hint of the theme primary into a neutral dark surface so dark
+  /// mode stays subtly tinted by the selected color theme.
+  static Color _darkSurface(Color base, double tint) =>
+      Color.lerp(base, _theme.primary, tint)!;
+
   static Color get primary => _theme.primary;
   static Color get primaryDark => _theme.primaryDark;
   static Color get primaryLight => _theme.primaryLight;
-  static Color get primarySoft => _theme.primarySoft;
-  static Color get background => _theme.background;
-  static Color get backgroundSecondary => _theme.backgroundSecondary;
-  static Color get gray100 => _theme.cardColor;
-  static Color get gray200 => _theme.backgroundSecondary;
-  static Color get clayPink => _theme.primarySoft;
-  static Color get clayBlue => _theme.primarySoft;
-  static Color get clayPeach => _theme.accentTint;
+  static Color get primarySoft =>
+      _isDark ? _theme.primary.withOpacity(0.20) : _theme.primarySoft;
+  static Color get background =>
+      _isDark ? _darkSurface(const Color(0xFF131110), 0.05) : _theme.background;
+  static Color get backgroundSecondary => _isDark
+      ? _darkSurface(const Color(0xFF1D1815), 0.07)
+      : _theme.backgroundSecondary;
+  static Color get gray100 =>
+      _isDark ? _darkSurface(const Color(0xFF262019), 0.08) : _theme.cardColor;
+  static Color get gray200 => backgroundSecondary;
+  static Color get clayPink => primarySoft;
+  static Color get clayBlue => primarySoft;
+  static Color get clayPeach =>
+      _isDark ? _theme.primary.withOpacity(0.28) : _theme.accentTint;
 
   static const Color secondary = Color(0xFF1E1A17);
-  static const Color dark = Color(0xFF151515);
+  static Color get dark =>
+      _isDark ? const Color(0xFFF5EFE8) : const Color(0xFF151515);
   static const Color darker = Color(0xFF090909);
   static const Color light = Color(0xFFFFFFFF);
-  static const Color gray300 = Color(0xFFE7D8C8);
-  static const Color gray400 = Color(0xFFD0C0B0);
-  static const Color gray500 = Color(0xFFA89584);
-  static const Color gray600 = Color(0xFF7A6859);
-  static const Color gray700 = Color(0xFF4F433A);
-  static const Color gray800 = Color(0xFF2B2622);
+  static Color get gray300 =>
+      _isDark ? const Color(0xFF4A4038) : const Color(0xFFE7D8C8);
+  static Color get gray400 =>
+      _isDark ? const Color(0xFF6B5F52) : const Color(0xFFD0C0B0);
+  static Color get gray500 =>
+      _isDark ? const Color(0xFF9A8B7A) : const Color(0xFFA89584);
+  static Color get gray600 =>
+      _isDark ? const Color(0xFFC4B6A4) : const Color(0xFF7A6859);
+  static Color get gray700 =>
+      _isDark ? const Color(0xFFDDD2C2) : const Color(0xFF4F433A);
+  static Color get gray800 =>
+      _isDark ? const Color(0xFFEFE7DA) : const Color(0xFF2B2622);
   static const Color success = Color(0xFF00C896);
   static const Color warning = Color(0xFFFFB547);
   static const Color danger = Color(0xFFFF6B6B);
@@ -51,20 +75,23 @@ class ClayStyles {
       BorderRadius.circular(value);
 
   static List<BoxShadow> raisedShadow({
-    Color darkShadow = const Color(0x1F9B7A5B),
-    Color lightShadow = const Color(0xCCFFFFFF),
+    Color? darkShadow,
+    Color? lightShadow,
     double blur = 26,
     Offset darkOffset = const Offset(14, 14),
     Offset lightOffset = const Offset(-10, -10),
   }) {
+    final bool isDark = AppColors.isDark;
     return [
       BoxShadow(
-        color: darkShadow,
+        color: darkShadow ??
+            (isDark ? Colors.black.withOpacity(0.45) : const Color(0x1F9B7A5B)),
         blurRadius: blur,
         offset: darkOffset,
       ),
       BoxShadow(
-        color: lightShadow,
+        color: lightShadow ??
+            (isDark ? Colors.white.withOpacity(0.05) : const Color(0xCCFFFFFF)),
         blurRadius: blur,
         offset: lightOffset,
       ),
@@ -72,24 +99,44 @@ class ClayStyles {
   }
 
   static LinearGradient surfaceGradient({
-    Color top = const Color(0xFFFFFDFC),
-    Color bottom = const Color(0xFFF1E5D8),
+    Color? top,
+    Color? bottom,
   }) {
+    final bool isDark = AppColors.isDark;
     return LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [top, bottom],
+      colors: [
+        top ??
+            (isDark
+                ? Color.lerp(const Color(0xFF2B241D), AppColors.primary, 0.06)!
+                : const Color(0xFFFFFDFC)),
+        bottom ??
+            (isDark
+                ? Color.lerp(const Color(0xFF1B1613), AppColors.primary, 0.06)!
+                : const Color(0xFFF1E5D8)),
+      ],
     );
   }
 
   static LinearGradient insetGradient({
-    Color top = const Color(0xFFF0E4D7),
-    Color bottom = const Color(0xFFFFFCF8),
+    Color? top,
+    Color? bottom,
   }) {
+    final bool isDark = AppColors.isDark;
     return LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [top, bottom],
+      colors: [
+        top ??
+            (isDark
+                ? Color.lerp(const Color(0xFF1A1512), AppColors.primary, 0.06)!
+                : const Color(0xFFF0E4D7)),
+        bottom ??
+            (isDark
+                ? Color.lerp(const Color(0xFF272019), AppColors.primary, 0.06)!
+                : const Color(0xFFFFFCF8)),
+      ],
     );
   }
 
@@ -120,17 +167,19 @@ class ClayStyles {
       borderRadius: radius(radiusValue),
       border: border ??
           Border.all(
-            color: Colors.white.withOpacity(0.65),
+            color: Colors.white.withOpacity(AppColors.isDark ? 0.10 : 0.65),
             width: 1,
           ),
       boxShadow: [
         BoxShadow(
-          color: Colors.white.withOpacity(0.75),
+          color: Colors.white.withOpacity(AppColors.isDark ? 0.05 : 0.75),
           blurRadius: 16,
           offset: const Offset(-6, -6),
         ),
         BoxShadow(
-          color: AppColors.gray500.withOpacity(0.10),
+          color: AppColors.isDark
+              ? Colors.black.withOpacity(0.35)
+              : AppColors.gray500.withOpacity(0.10),
           blurRadius: 16,
           offset: const Offset(8, 8),
         ),
@@ -154,7 +203,7 @@ class ClayStyles {
       ),
       borderRadius: radius(radiusValue),
       border: Border.all(
-        color: Colors.white.withOpacity(0.45),
+        color: Colors.white.withOpacity(AppColors.isDark ? 0.12 : 0.45),
       ),
       boxShadow: [
         ...raisedShadow(
@@ -309,12 +358,12 @@ class AppTheme {
         onBackground: AppColors.dark,
         onError: AppColors.light,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: AppColors.dark,
         elevation: 0,
         centerTitle: false,
-        systemOverlayStyle: SystemUiOverlayStyle(
+        systemOverlayStyle: const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.dark,
         ),
@@ -390,12 +439,12 @@ class AppTheme {
           borderRadius: ClayStyles.radius(20),
           borderSide: const BorderSide(color: AppColors.danger),
         ),
-        labelStyle: const TextStyle(color: AppColors.gray600),
-        hintStyle: const TextStyle(color: AppColors.gray400),
+        labelStyle: TextStyle(color: AppColors.gray600),
+        hintStyle: TextStyle(color: AppColors.gray400),
         prefixIconColor: AppColors.gray600,
         suffixIconColor: AppColors.gray500,
       ),
-      textTheme: const TextTheme(
+      textTheme: TextTheme(
         displayLarge: TextStyle(
           fontSize: 34,
           fontWeight: FontWeight.w800,
@@ -452,7 +501,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: option.backgroundSecondary,
         selectedColor: option.primary.withOpacity(0.15),
-        labelStyle: const TextStyle(color: AppColors.gray700),
+        labelStyle: TextStyle(color: AppColors.gray700),
         secondaryLabelStyle: TextStyle(color: option.primary),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
@@ -469,18 +518,168 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       primaryColor: option.primary,
-      scaffoldBackgroundColor: AppColors.darker,
+      scaffoldBackgroundColor: AppColors.background,
       colorScheme: ColorScheme.dark(
         primary: option.primary,
         secondary: AppColors.secondary,
-        surface: AppColors.dark,
-        background: AppColors.darker,
+        surface: AppColors.gray100,
+        background: AppColors.background,
         error: AppColors.danger,
         onPrimary: AppColors.light,
         onSecondary: AppColors.light,
-        onSurface: AppColors.light,
-        onBackground: AppColors.light,
+        onSurface: AppColors.dark,
+        onBackground: AppColors.dark,
         onError: AppColors.light,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        foregroundColor: AppColors.dark,
+        elevation: 0,
+        centerTitle: false,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: ClayStyles.radius(24),
+        ),
+        color: AppColors.gray100,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: option.primary,
+          foregroundColor: AppColors.light,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: ClayStyles.radius(20),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+          shadowColor: Colors.transparent,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: option.primary,
+          backgroundColor: AppColors.gray100,
+          side: BorderSide(color: Colors.white.withOpacity(0.12), width: 1.2),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: ClayStyles.radius(20),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: option.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          textStyle: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.backgroundSecondary,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: ClayStyles.radius(20),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: ClayStyles.radius(20),
+          borderSide: BorderSide(
+            color: Colors.white.withOpacity(0.08),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: ClayStyles.radius(20),
+          borderSide: BorderSide(color: option.primary, width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: ClayStyles.radius(20),
+          borderSide: const BorderSide(color: AppColors.danger),
+        ),
+        labelStyle: TextStyle(color: AppColors.gray600),
+        hintStyle: TextStyle(color: AppColors.gray400),
+        prefixIconColor: AppColors.gray600,
+        suffixIconColor: AppColors.gray500,
+      ),
+      textTheme: TextTheme(
+        displayLarge: TextStyle(
+          fontSize: 34,
+          fontWeight: FontWeight.w800,
+          color: AppColors.dark,
+          letterSpacing: -0.5,
+        ),
+        displayMedium: TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark,
+          letterSpacing: -0.3,
+        ),
+        displaySmall: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark,
+        ),
+        headlineMedium: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark,
+        ),
+        bodyLarge: TextStyle(
+          fontSize: 16,
+          color: AppColors.gray800,
+          fontWeight: FontWeight.w500,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: 14,
+          color: AppColors.gray700,
+        ),
+        bodySmall: TextStyle(
+          fontSize: 12,
+          color: AppColors.gray600,
+        ),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        selectedItemColor: option.primary,
+        unselectedItemColor: AppColors.gray500,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: option.primary,
+        foregroundColor: AppColors.light,
+        elevation: 0,
+      ),
+      dividerTheme: DividerThemeData(
+        color: AppColors.backgroundSecondary,
+        thickness: 1,
+        space: 1,
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.backgroundSecondary,
+        selectedColor: option.primary.withOpacity(0.15),
+        labelStyle: TextStyle(color: AppColors.gray700),
+        secondaryLabelStyle: TextStyle(color: option.primary),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: ClayStyles.radius(18),
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:ui';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/item.dart';
 import '../models/order.dart';
 import '../models/category.dart';
@@ -262,22 +263,25 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     // IDs of disabled categories — items belonging to these are hidden from ordering.
-    final disabledCategoryIds = data.categories
-        .where((c) => !c.enabled)
-        .map((c) => c.id)
-        .toSet();
+    final disabledCategoryIds =
+        data.categories.where((c) => !c.enabled).map((c) => c.id).toSet();
     final categoryNames = {for (var c in data.categories) c.id: c.name};
-    final categories = data.categories
-        .where((c) => c.enabled)
-        .toList()
+    final categories = data.categories.where((c) => c.enabled).toList()
       ..sort((a, b) {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
         if (af != bf) return bf - af;
+        if (a.sortOrder != b.sortOrder) {
+          return a.sortOrder.compareTo(b.sortOrder);
+        }
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
+    final categoryRank = {
+      for (var i = 0; i < categories.length; i++) categories[i].id: i
+    };
     final items = data.items.where((item) {
       if (!item.enabled) return false;
       if (disabledCategoryIds.contains(item.categoryId)) return false;
@@ -293,6 +297,9 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         final af = a.isFavourite ? 1 : 0;
         final bf = b.isFavourite ? 1 : 0;
         if (af != bf) return bf - af;
+        final ra = categoryRank[a.categoryId] ?? 1 << 30;
+        final rb = categoryRank[b.categoryId] ?? 1 << 30;
+        if (ra != rb) return ra - rb;
         switch (_sortMode) {
           case 'name_desc':
             return b.name.toLowerCase().compareTo(a.name.toLowerCase());
@@ -520,7 +527,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
@@ -586,7 +593,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   children: [
                     Text(
                       'Total ($count ${count == 1 ? 'item' : 'items'})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: AppColors.gray600,
                         fontWeight: FontWeight.w500,
@@ -595,7 +602,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     const SizedBox(height: 2),
                     Text(
                       '₹${_total.toStringAsFixed(2)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                         color: AppColors.dark,
@@ -612,8 +619,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 13),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -720,7 +727,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
             padding: const EdgeInsets.fromLTRB(20, 16, 16, 10),
             child: Row(
               children: [
-                const Text(
+                Text(
                   'Order Items',
                   style: TextStyle(
                     fontSize: 17,
@@ -731,7 +738,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '$count ${count == 1 ? 'item' : 'items'}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: AppColors.gray500,
                   ),
@@ -745,8 +752,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                             _showSummary = false;
                           }),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: AppColors.danger.withOpacity(0.10),
                       borderRadius: BorderRadius.circular(10),
@@ -779,7 +786,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
           // Cart items + notes (scrollable)
           Expanded(
             child: _orderItems.isEmpty
-                ? const Center(
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -810,7 +817,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                       const SizedBox(height: 6),
                       _dashedDivider(),
                       const SizedBox(height: 18),
-                      const Row(
+                      Row(
                         children: [
                           Icon(
                             Icons.description_outlined,
@@ -850,7 +857,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                         decoration: InputDecoration(
                           hintText:
                               'Add special instructions for this parcel order...',
-                          hintStyle: const TextStyle(
+                          hintStyle: TextStyle(
                             fontSize: 13,
                             color: AppColors.gray400,
                           ),
@@ -873,7 +880,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(20),
             ),
             child: SafeArea(
@@ -897,7 +904,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text(
+                      Text(
                         'Order Summary',
                         style: TextStyle(
                           fontSize: 15,
@@ -908,7 +915,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  _summaryRow('Subtotal ($count ${count == 1 ? 'item' : 'items'})',
+                  _summaryRow(
+                      'Subtotal ($count ${count == 1 ? 'item' : 'items'})',
                       _subtotal),
                   const SizedBox(height: 8),
                   _summaryRow('Tax', _taxAmount),
@@ -919,7 +927,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Total',
                         style: TextStyle(
                           fontSize: 17,
@@ -995,11 +1003,11 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 13.5, color: AppColors.gray700),
+          style: TextStyle(fontSize: 13.5, color: AppColors.gray700),
         ),
         Text(
           '₹${amount.toStringAsFixed(2)}',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
             color: AppColors.dark,
@@ -1029,7 +1037,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -1056,7 +1064,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   orderItem.item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
                     color: AppColors.dark,
@@ -1100,9 +1108,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
-                    onTap: _isSaving
-                        ? null
-                        : () => _removeItem(orderItem.itemId),
+                    onTap:
+                        _isSaving ? null : () => _removeItem(orderItem.itemId),
                     child: Container(
                       width: 26,
                       height: 26,
@@ -1110,7 +1117,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                         color: AppColors.gray200,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.remove,
                         size: 15,
                         color: AppColors.gray700,
@@ -1121,7 +1128,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 9),
                     child: Text(
                       '${orderItem.quantity}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         color: AppColors.dark,
@@ -1177,7 +1184,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.gray100,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: ClayStyles.raisedShadow(
                       blur: 14,
@@ -1189,18 +1196,18 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Search menu items...',
-                      hintStyle: const TextStyle(
+                      hintStyle: TextStyle(
                         fontSize: 14,
                         color: AppColors.gray400,
                       ),
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.search,
                         color: AppColors.gray500,
                         size: 20,
                       ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.close,
                                 size: 18,
                                 color: AppColors.gray500,
@@ -1209,8 +1216,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                             )
                           : null,
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 13),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 13),
                     ),
                   ),
                 ),
@@ -1222,7 +1228,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.gray100,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: ClayStyles.raisedShadow(
                       blur: 14,
@@ -1230,7 +1236,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                       lightOffset: const Offset(-5, -5),
                     ),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.tune_rounded,
                     color: AppColors.gray700,
                     size: 20,
@@ -1254,8 +1260,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   return _categoryPill(
                     label: 'All',
                     isSelected: _selectedCategoryId == null,
-                    onTap: () =>
-                        setState(() => _selectedCategoryId = null),
+                    onTap: () => setState(() => _selectedCategoryId = null),
                   );
                 }
                 final cat = categories[index - 1];
@@ -1279,7 +1284,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.fastfood_outlined,
                         size: 64,
                         color: AppColors.gray400,
@@ -1289,7 +1294,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                         _searchQuery.isNotEmpty || _selectedCategoryId != null
                             ? 'No matching items found'
                             : 'No items available',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           color: AppColors.gray600,
                         ),
@@ -1365,7 +1370,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -1392,7 +1397,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
                     color: AppColors.dark,
@@ -1400,8 +1405,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 ),
                 const SizedBox(height: 5),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.primarySoft.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(6),
@@ -1453,10 +1458,9 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                     width: 26,
                     height: 26,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.gray100,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: AppColors.primary, width: 1.4),
+                      border: Border.all(color: AppColors.primary, width: 1.4),
                     ),
                     child: Icon(
                       Icons.remove,
@@ -1469,7 +1473,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     '$qty',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: AppColors.dark,
@@ -1530,8 +1534,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         }
 
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: AppColors.gray100,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.fromLTRB(8, 14, 8, 24),
@@ -1539,7 +1543,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(
                   'Sort by',

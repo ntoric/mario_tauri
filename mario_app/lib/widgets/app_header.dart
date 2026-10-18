@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
@@ -54,7 +55,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Switch Store',
                   style: TextStyle(
                     fontSize: 22,
@@ -113,7 +114,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                           ),
                           subtitle: Text(
                             store.branch ?? store.location ?? 'Main Branch',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               color: AppColors.gray500,
                             ),
@@ -121,7 +122,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                           trailing: isCurrent
                               ? const Icon(Icons.check_circle_rounded,
                                   color: AppColors.success)
-                              : const Icon(Icons.chevron_right_rounded,
+                              : Icon(Icons.chevron_right_rounded,
                                   color: AppColors.gray500),
                           onTap: () async {
                             navigator.pop();
@@ -181,6 +182,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    // Rebuild when the theme/mode changes so AppColors-driven decorations
+    // (logo tile, store icon shell) never keep stale colors.
+    context.watch<ThemeProvider>();
 
     final titleWidget = showStoreName && auth.currentStore != null
         ? Column(
@@ -188,7 +192,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   color: AppColors.dark,
@@ -198,7 +202,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               const SizedBox(height: 2),
               Text(
                 auth.currentStore!.displayName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: AppColors.gray500,
@@ -208,7 +212,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           )
         : Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
               color: AppColors.dark,
@@ -297,6 +301,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                         style: TextStyle(
                           fontWeight:
                               isCurrent ? FontWeight.bold : FontWeight.normal,
+                          color: AppColors.dark,
                         ),
                       ),
                     ),
@@ -318,15 +323,17 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: automaticallyImplyLeading,
       leading: Padding(
         padding: const EdgeInsets.only(left: 16.0),
-        child: SizedBox.square(
-          dimension: 48,
-          child: Container(
-            decoration: ClayStyles.surface(radiusValue: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.contain,
+        child: Center(
+          child: SizedBox.square(
+            dimension: 40,
+            child: Container(
+              decoration: ClayStyles.surface(radiusValue: 13),
+              child: Padding(
+                padding: const EdgeInsets.all(7),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
           ),
@@ -368,7 +375,7 @@ class _HeaderIconShell extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
+            AppColors.gray100,
             accentColor ?? AppColors.gray100,
           ],
         ),

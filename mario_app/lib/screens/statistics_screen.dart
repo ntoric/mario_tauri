@@ -6,6 +6,7 @@ import '../models/bill.dart';
 import '../models/statistics.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 
@@ -169,9 +170,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         break;
       case _StatsPeriod.custom:
         slots = w.end.difference(w.start).inDays + 1;
-        slotOf = (t) => DateTime(t.year, t.month, t.day)
-            .difference(w.start)
-            .inDays;
+        slotOf =
+            (t) => DateTime(t.year, t.month, t.day).difference(w.start).inDays;
         break;
     }
 
@@ -187,7 +187,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     _bucketLabels = List<String>.filled(slots, '');
     switch (_period) {
       case _StatsPeriod.today:
-        const marks = {6: '6 AM', 9: '9 AM', 12: '12 PM', 15: '3 PM', 18: '6 PM', 21: '9 PM'};
+        const marks = {
+          6: '6 AM',
+          9: '9 AM',
+          12: '12 PM',
+          15: '3 PM',
+          18: '6 PM',
+          21: '9 PM'
+        };
         marks.forEach((i, label) {
           if (i < slots) _bucketLabels[i] = label;
         });
@@ -228,22 +235,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final stats = data.stats;
     final w = _window();
 
-    final currentBills = data.bills
-        .where((b) => !b.generatedAt.isBefore(w.start))
-        .toList();
-    final prevBills = data.bills
-        .where((b) => b.generatedAt.isBefore(w.start))
-        .toList();
+    final currentBills =
+        data.bills.where((b) => !b.generatedAt.isBefore(w.start)).toList();
+    final prevBills =
+        data.bills.where((b) => b.generatedAt.isBefore(w.start)).toList();
     final currentOrders = data.historyOrders
         .where((o) => !o.createdAt.isBefore(w.start))
         .toList();
-    final prevOrders = data.historyOrders
-        .where((o) => o.createdAt.isBefore(w.start))
-        .toList();
+    final prevOrders =
+        data.historyOrders.where((o) => o.createdAt.isBefore(w.start)).toList();
 
     final totalRevenue =
         currentBills.fold<double>(0, (sum, bill) => sum + bill.total);
@@ -268,8 +273,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         title: 'Statistics',
       ),
       body: _isLoading || stats == null
-          ? Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
+          ? Center(child: CircularProgressIndicator(color: AppColors.primary))
           : RefreshIndicator(
               onRefresh: _loadStats,
               color: AppColors.primary,
@@ -331,10 +335,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           GestureDetector(
             onTap: _pickCustomRange,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.gray100,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _period == _StatsPeriod.custom
@@ -352,19 +355,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today_outlined,
+                  Icon(Icons.calendar_today_outlined,
                       size: 15, color: AppColors.gray600),
                   const SizedBox(width: 8),
                   Text(
                     _rangeLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.gray700,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Icon(Icons.keyboard_arrow_down,
+                  Icon(Icons.keyboard_arrow_down,
                       size: 16, color: AppColors.gray500),
                 ],
               ),
@@ -424,10 +427,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   // ------------------------------------------------------------------- cards
 
-  Widget _buildRevenueCard(
-      double revenue, double pct, double prevRevenue) {
-    final maxY = _buckets.fold<double>(
-        0, (m, v) => v > m ? v : m);
+  Widget _buildRevenueCard(double revenue, double pct, double prevRevenue) {
+    final maxY = _buckets.fold<double>(0, (m, v) => v > m ? v : m);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -465,11 +466,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: AppColors.gray100.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.bar_chart,
-                    color: Colors.white, size: 18),
+                child:
+                    const Icon(Icons.bar_chart, color: Colors.white, size: 18),
               ),
             ],
           ),
@@ -486,10 +487,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
               const SizedBox(width: 10),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.gray100,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -506,8 +506,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
-                        color:
-                            pct >= 0 ? AppColors.success : AppColors.danger,
+                        color: pct >= 0 ? AppColors.success : AppColors.danger,
                       ),
                     ),
                   ],
@@ -522,14 +521,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
+                  color: AppColors.gray100.withOpacity(0.18),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.bar_chart,
-                        color: Colors.white, size: 16),
+                    const Icon(Icons.bar_chart, color: Colors.white, size: 16),
                     const SizedBox(height: 6),
                     Text(
                       _compareLabel,
@@ -569,14 +567,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                     alignment: Alignment.bottomCenter,
                                     child: Container(
                                       height: maxY > 0
-                                          ? (8 +
-                                              56 * (_buckets[i] / maxY))
+                                          ? (8 + 56 * (_buckets[i] / maxY))
                                           : 8,
                                       decoration: BoxDecoration(
                                         color:
-                                            Colors.white.withOpacity(0.9),
-                                        borderRadius:
-                                            BorderRadius.circular(3),
+                                            AppColors.gray100.withOpacity(0.9),
+                                        borderRadius: BorderRadius.circular(3),
                                       ),
                                     ),
                                   ),
@@ -605,8 +601,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontSize: 8.5,
-                                          color: Colors.white
-                                              .withOpacity(0.85),
+                                          color: Colors.white.withOpacity(0.85),
                                         ),
                                       ),
                                     ),
@@ -644,8 +639,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           iconBg: AppColors.primarySoft,
           value: '$totalOrders',
           label: 'Total Orders',
-          pct: _pctChange(
-              totalOrders.toDouble(), prevTotalOrders.toDouble()),
+          pct: _pctChange(totalOrders.toDouble(), prevTotalOrders.toDouble()),
         ),
         const SizedBox(width: 8),
         _miniStatCard(
@@ -654,8 +648,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           iconBg: AppColors.success.withOpacity(0.12),
           value: '$completed',
           label: 'Completed',
-          pct: _pctChange(
-              completed.toDouble(), prevCompleted.toDouble()),
+          pct: _pctChange(completed.toDouble(), prevCompleted.toDouble()),
         ),
         const SizedBox(width: 8),
         _miniStatCard(
@@ -673,8 +666,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           iconBg: AppColors.danger.withOpacity(0.1),
           value: '$cancelled',
           label: 'Cancelled',
-          pct: _pctChange(
-              cancelled.toDouble(), prevCancelled.toDouble()),
+          pct: _pctChange(cancelled.toDouble(), prevCancelled.toDouble()),
         ),
       ],
     );
@@ -697,7 +689,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.gray100,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -724,7 +716,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 const SizedBox(width: 8),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: AppColors.dark,
@@ -735,7 +727,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 color: AppColors.gray500,
@@ -745,8 +737,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: pctColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -782,14 +773,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildSalesOverviewCard() {
-    final maxY =
-        _buckets.fold<double>(0, (m, v) => v > m ? v : m);
+    final maxY = _buckets.fold<double>(0, (m, v) => v > m ? v : m);
     final chartMax = maxY <= 0 ? 100.0 : maxY * 1.15;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -802,7 +792,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
                 child: Text(
@@ -814,8 +804,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right,
-                  size: 18, color: AppColors.gray400),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.gray400),
             ],
           ),
           const SizedBox(height: 12),
@@ -830,10 +819,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   touchTooltipData: BarTouchTooltipData(
                     // ignore: deprecated_member_use
                     tooltipBgColor: AppColors.dark,
-                    tooltipPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    getTooltipItem:
-                        (group, groupIndex, rod, rodIndex) {
+                    tooltipPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       return BarTooltipItem(
                         '₹${NumberFormat('#,##,###').format(rod.toY.round())}\n${_hourLabel(group.x)}',
                         const TextStyle(
@@ -861,7 +849,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           value >= 1000
                               ? '${(value / 1000).toStringAsFixed(value % 1000 == 0 ? 0 : 1)}K'
                               : value.toStringAsFixed(0),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 8.5,
                             color: AppColors.gray500,
                           ),
@@ -885,7 +873,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           padding: const EdgeInsets.only(top: 3),
                           child: Text(
                             _bucketLabels[i],
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 8.5,
                               color: AppColors.gray500,
                             ),
@@ -929,7 +917,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -942,7 +930,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
                 child: Text(
@@ -954,8 +942,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right,
-                  size: 18, color: AppColors.gray400),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.gray400),
             ],
           ),
           const SizedBox(height: 8),
@@ -971,14 +958,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       color: AppColors.gray200,
                       borderRadius: BorderRadius.circular(9),
                     ),
-                    child:
-                        Icon(row.$1, size: 15, color: AppColors.gray600),
+                    child: Icon(row.$1, size: 15, color: AppColors.gray600),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       row.$2,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: AppColors.gray700,
@@ -989,15 +975,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                   Text(
                     '${row.$3}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: AppColors.dark,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.gray400),
+                  Icon(Icons.chevron_right, size: 16, color: AppColors.gray400),
                 ],
               ),
             ),
@@ -1039,13 +1024,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       'Card': AppColors.clayPeach,
       'Others': AppColors.gray300,
     };
-    final grandTotal = paymentTotals.values
-        .fold<double>(0, (sum, v) => sum + v);
+    final grandTotal =
+        paymentTotals.values.fold<double>(0, (sum, v) => sum + v);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -1058,7 +1043,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Payment Methods',
             style: TextStyle(
               fontSize: 15,
@@ -1082,9 +1067,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         sections: [
                           for (final entry in paymentTotals.entries)
                             PieChartSectionData(
-                              value: entry.value <= 0
-                                  ? 0.001
-                                  : entry.value,
+                              value: entry.value <= 0 ? 0.001 : entry.value,
                               color: methodColors[entry.key],
                               radius: 16,
                               showTitle: false,
@@ -1097,13 +1080,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       children: [
                         Text(
                           '₹${NumberFormat('#,##,###').format(totalRevenue.round())}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
                             color: AppColors.dark,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Total',
                           style: TextStyle(
                             fontSize: 10,
@@ -1135,7 +1118,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             const SizedBox(width: 8),
                             Text(
                               entry.key,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.gray700,
@@ -1144,7 +1127,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             const Spacer(),
                             Text(
                               '₹${NumberFormat('#,##,###').format(entry.value.round())} (${grandTotal > 0 ? (entry.value / grandTotal * 100).toStringAsFixed(0) : 0}%)',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.dark,
@@ -1168,7 +1151,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -1200,19 +1183,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   color: AppColors.primary,
                 ),
               ),
-              Icon(Icons.chevron_right,
-                  size: 16, color: AppColors.primary),
+              Icon(Icons.chevron_right, size: 16, color: AppColors.primary),
             ],
           ),
           const SizedBox(height: 6),
           if (recent.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
                   'No bills in this period',
-                  style:
-                      TextStyle(color: AppColors.gray500, fontSize: 14),
+                  style: TextStyle(color: AppColors.gray500, fontSize: 14),
                 ),
               ),
             )
@@ -1229,7 +1210,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         color: AppColors.gray200,
                         borderRadius: BorderRadius.circular(11),
                       ),
-                      child: const Icon(Icons.receipt_long,
+                      child: Icon(Icons.receipt_long,
                           size: 17, color: AppColors.gray600),
                     ),
                     const SizedBox(width: 12),
@@ -1239,7 +1220,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         children: [
                           Text(
                             bill.invoiceNo ?? 'Invoice',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: AppColors.dark,
@@ -1249,7 +1230,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           ),
                           Text(
                             '${bill.tableLabel} · ${DateFormat('MMM dd, HH:mm').format(bill.generatedAt)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11.5,
                               color: AppColors.gray500,
                             ),
@@ -1265,7 +1246,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         color: AppColors.primary,
                       ),
                     ),
-                    const Icon(Icons.chevron_right,
+                    Icon(Icons.chevron_right,
                         size: 18, color: AppColors.gray400),
                   ],
                 ),

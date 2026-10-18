@@ -34,15 +34,29 @@ class MarioApp extends StatelessWidget {
         ),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) => MaterialApp(
-          title: AppConstants.appName,
-          debugShowCheckedModeBanner: false,
-          theme: themeProvider.lightTheme,
-          darkTheme: themeProvider.darkTheme,
-          themeMode: ThemeMode.light,
-          navigatorObservers: [routeObserver],
-          home: const AppInitializer(),
-        ),
+        builder: (context, themeProvider, _) {
+          // Keep the AppColors static palette in sync with the resolved
+          // brightness so widgets reading AppColors.* follow the theme.
+          AppColors.setDarkMode(themeProvider.isDarkMode());
+          return MaterialApp(
+            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            theme: themeProvider.lightTheme,
+            darkTheme: themeProvider.darkTheme,
+            themeMode: themeProvider.themeMode,
+            navigatorObservers: [routeObserver],
+            builder: (context, child) {
+              // Defensive re-sync if the OS brightness changed without a
+              // provider rebuild (system mode).
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              if (isDark != AppColors.isDark) {
+                AppColors.setDarkMode(isDark);
+              }
+              return child ?? const SizedBox.shrink();
+            },
+            home: const AppInitializer(),
+          );
+        },
       ),
     );
   }

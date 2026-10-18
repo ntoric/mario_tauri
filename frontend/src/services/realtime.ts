@@ -3,10 +3,11 @@ export const getTableStatusWsUrl = (storeId: string): string => {
   if (!token) return '';
 
   const env = (import.meta as any).env;
+  const isWeb = /^https?:$/.test(window.location.protocol);
   const backend =
     env?.VITE_BACKEND_URL ||
     env?.VITE_API_URL ||
-    (window.location.protocol === 'file:' ? 'http://localhost:8088/api' : '/api');
+    (isWeb ? '/api' : 'http://localhost:8088/api');
 
   let base = backend;
 

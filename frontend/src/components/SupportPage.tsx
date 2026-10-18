@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Phone, MessageCircle, AlertCircle, LogOut } from 'lucide-react';
 import { useAuthStore } from '../stores';
+import { API_URL } from '../services/api';
 
 interface SupportConfig {
   email: string;
@@ -23,7 +24,7 @@ const SupportPage: React.FC = () => {
 
   const fetchSupportConfig = async () => {
     try {
-      const response = await fetch('/api/support-config');
+      const response = await fetch(`${API_URL}/support-config`);
       if (response.ok) {
         const data = await response.json();
         setConfig({

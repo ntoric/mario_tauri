@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Lock, Eye, EyeOff, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { useAuthStore, useUIStore, getEffectiveColorMode } from '../stores';
 import { Button } from '../components/ui/Button';
+import { API_URL } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface DefaultStore {
@@ -27,7 +28,7 @@ const Login: React.FC = () => {
     const fetchDefaultStore = async () => {
       try {
         // Use direct fetch without any auth headers
-        const response = await fetch('/api/stores/default', {
+        const response = await fetch(`${API_URL}/stores/default`, {
           headers: {
             'Content-Type': 'application/json',
             // Explicitly exclude Authorization header

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/order.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
@@ -44,8 +45,7 @@ class _BillScreenState extends State<BillScreen> {
       final billData = {
         'orderId': widget.order.id,
         'tableNumber': widget.order.tableNumber,
-        if (widget.order.tableName != null)
-          'tableName': widget.order.tableName,
+        if (widget.order.tableName != null) 'tableName': widget.order.tableName,
         'invoiceNo': invoiceNo,
         'items': widget.order.items
             .map((i) => {
@@ -106,6 +106,7 @@ class _BillScreenState extends State<BillScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final order = widget.order;
     final subtotal = order.totalAmount - order.taxAmount;
 
@@ -152,9 +153,10 @@ class _BillScreenState extends State<BillScreen> {
                   ),
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
+                      color: AppColors.gray100.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
@@ -170,7 +172,7 @@ class _BillScreenState extends State<BillScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 4, bottom: 12),
               child: Text(
                 'ORDER ITEMS',
@@ -184,7 +186,7 @@ class _BillScreenState extends State<BillScreen> {
             ),
             Container(
               decoration: BoxDecoration(
-                color: AppColors.light,
+                color: AppColors.gray100,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
@@ -212,7 +214,7 @@ class _BillScreenState extends State<BillScreen> {
                                 children: [
                                   Text(
                                     item.item.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 15,
                                       color: AppColors.dark,
@@ -221,7 +223,7 @@ class _BillScreenState extends State<BillScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     '${item.quantity} x ₹${item.item.price.toStringAsFixed(0)}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: AppColors.gray500,
                                     ),
@@ -231,7 +233,7 @@ class _BillScreenState extends State<BillScreen> {
                             ),
                             Text(
                               '₹${itemTotal.toStringAsFixed(0)}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
                                 color: AppColors.dark,
@@ -252,7 +254,7 @@ class _BillScreenState extends State<BillScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(left: 4, bottom: 12),
               child: Text(
                 'PAYMENT METHOD',
@@ -281,10 +283,14 @@ class _BillScreenState extends State<BillScreen> {
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : AppColors.light,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.gray100,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isSelected ? AppColors.primary : AppColors.gray300,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.gray300,
                             width: 1.5,
                           ),
                           boxShadow: isSelected
@@ -301,7 +307,8 @@ class _BillScreenState extends State<BillScreen> {
                           children: [
                             Icon(
                               method['icon'],
-                              color: isSelected ? Colors.white : AppColors.gray500,
+                              color:
+                                  isSelected ? Colors.white : AppColors.gray500,
                               size: 24,
                             ),
                             const SizedBox(height: 8),
@@ -309,8 +316,12 @@ class _BillScreenState extends State<BillScreen> {
                               method['name'],
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                color: isSelected ? Colors.white : AppColors.gray600,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppColors.gray600,
                               ),
                             ),
                           ],
@@ -341,7 +352,8 @@ class _BillScreenState extends State<BillScreen> {
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
                     : const Text(

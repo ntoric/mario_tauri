@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:ui' as ui;
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'support_screen.dart';
@@ -97,6 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    context.watch<ThemeProvider>();
     final isTablet = ResponsiveHelper.isTablet(context);
     final isDesktop = ResponsiveHelper.isDesktop(context);
 
@@ -125,29 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
             left: -40,
             child: _blurredBlob(150, const Color(0xFFFFE9D2)),
           ),
-          // Olive branches (top-right sharp, bottom-right blurred)
-          const Positioned(
-            top: -8,
-            right: -16,
-            child: SizedBox(
-              width: 150,
-              height: 150,
-              child: CustomPaint(painter: _LeafBranchPainter()),
-            ),
-          ),
-          Positioned(
-            bottom: -20,
-            right: -30,
-            child: ImageFiltered(
-              imageFilter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-              child: const SizedBox(
-                width: 170,
-                height: 170,
-                child: CustomPaint(painter: _LeafBranchPainter()),
-              ),
-            ),
-          ),
-
           // Content
           SafeArea(
             child: Center(
@@ -162,13 +140,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const SizedBox(height: 40),
-                      Image.asset(
-                        'assets/images/logo.png',
-                        height: 62,
-                        fit: BoxFit.contain,
+                      Container(
+                        width: 92,
+                        height: 92,
+                        decoration: ClayStyles.surface(
+                          radiusValue: 26,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.gray100,
+                              AppColors.primarySoft,
+                            ],
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 26),
-                      const Text(
+                      Text(
                         'Welcome back',
                         style: TextStyle(
                           fontSize: 28,
@@ -178,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Sign in to manage your restaurant',
                         style: TextStyle(
                           fontSize: 14.5,
@@ -189,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.gray100,
                           borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
@@ -235,33 +230,34 @@ class _LoginScreenState extends State<LoginScreen> {
                             Form(
                               key: _formKey,
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const _FieldLabel('Username'),
+                                  _FieldLabel('Username'),
                                   const SizedBox(height: 8),
                                   TextFormField(
                                     controller: _usernameController,
                                     decoration: InputDecoration(
                                       hintText: 'Username',
-                                      hintStyle: const TextStyle(
+                                      hintStyle: TextStyle(
                                         fontSize: 14,
                                         color: AppColors.gray400,
                                       ),
-                                      prefixIcon: const Icon(
+                                      prefixIcon: Icon(
                                         Icons.person_outline,
                                         color: AppColors.gray600,
                                         size: 21,
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white,
+                                      fillColor: AppColors.isDark
+                                          ? AppColors.backgroundSecondary
+                                          : Colors.white,
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                               vertical: 16),
                                       enabledBorder:
                                           fieldBorder(AppColors.gray300),
-                                      focusedBorder: fieldBorder(
-                                          AppColors.primary),
+                                      focusedBorder:
+                                          fieldBorder(AppColors.primary),
                                       errorBorder:
                                           fieldBorder(AppColors.danger),
                                       focusedErrorBorder:
@@ -276,18 +272,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                     textInputAction: TextInputAction.next,
                                   ),
                                   const SizedBox(height: 18),
-                                  const _FieldLabel('Password'),
+                                  _FieldLabel('Password'),
                                   const SizedBox(height: 8),
                                   TextFormField(
                                     controller: _passwordController,
                                     obscureText: _obscurePassword,
                                     decoration: InputDecoration(
                                       hintText: 'Password',
-                                      hintStyle: const TextStyle(
+                                      hintStyle: TextStyle(
                                         fontSize: 14,
                                         color: AppColors.gray400,
                                       ),
-                                      prefixIcon: const Icon(
+                                      prefixIcon: Icon(
                                         Icons.lock_outline,
                                         color: AppColors.gray600,
                                         size: 21,
@@ -308,14 +304,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                         },
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white,
+                                      fillColor: AppColors.isDark
+                                          ? AppColors.backgroundSecondary
+                                          : Colors.white,
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                               vertical: 16),
                                       enabledBorder:
                                           fieldBorder(AppColors.gray300),
-                                      focusedBorder: fieldBorder(
-                                          AppColors.primary),
+                                      focusedBorder:
+                                          fieldBorder(AppColors.primary),
                                       errorBorder:
                                           fieldBorder(AppColors.danger),
                                       focusedErrorBorder:
@@ -339,22 +337,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                           const SnackBar(
                                             content: Text(
                                                 'Contact your administrator to reset your password'),
-                                            behavior:
-                                                SnackBarBehavior.floating,
+                                            behavior: SnackBarBehavior.floating,
                                           ),
                                         );
                                       },
                                       style: TextButton.styleFrom(
-                                        padding:
-                                            const EdgeInsets.symmetric(
-                                                horizontal: 4,
-                                                vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 8),
                                         minimumSize: Size.zero,
                                         tapTargetSize:
-                                            MaterialTapTargetSize
-                                                .shrinkWrap,
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'Forgot password?',
                                         style: TextStyle(
                                           fontSize: 13,
@@ -369,8 +363,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     width: double.infinity,
                                     height: 52,
                                     child: ElevatedButton(
-                                      onPressed:
-                                          auth.isLoading ? null : _login,
+                                      onPressed: auth.isLoading ? null : _login,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.primary,
                                         foregroundColor: Colors.white,
@@ -384,8 +377,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ? const SizedBox(
                                               width: 22,
                                               height: 22,
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 strokeWidth: 2,
                                                 color: Colors.white,
                                               ),
@@ -394,8 +386,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                               'Sign in',
                                               style: TextStyle(
                                                 fontSize: 15.5,
-                                                fontWeight:
-                                                    FontWeight.w700,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                     ),
@@ -407,7 +398,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 22),
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
@@ -464,63 +455,11 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13.5,
         fontWeight: FontWeight.w700,
         color: AppColors.dark,
       ),
     );
   }
-}
-
-/// Simple olive-branch: a curved stem with alternating elliptical leaves.
-class _LeafBranchPainter extends CustomPainter {
-  const _LeafBranchPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    final stemPaint = Paint()
-      ..color = const Color(0xFF7C9259)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final leafPaint = Paint()..color = const Color(0xFF8FA36B);
-
-    final stem = Path()
-      ..moveTo(w * 0.05, h * 0.95)
-      ..quadraticBezierTo(w * 0.45, h * 0.55, w * 0.95, h * 0.08);
-    canvas.drawPath(stem, stemPaint);
-
-    const leaves = [
-      [0.22, 0.80, -0.9, 30.0, 12.0],
-      [0.30, 0.66, 0.5, 30.0, 12.0],
-      [0.44, 0.56, -0.9, 32.0, 13.0],
-      [0.55, 0.44, 0.5, 32.0, 13.0],
-      [0.68, 0.33, -0.9, 30.0, 12.0],
-      [0.78, 0.24, 0.5, 28.0, 11.0],
-      [0.90, 0.13, -0.8, 26.0, 10.0],
-    ];
-
-    for (final leaf in leaves) {
-      canvas.save();
-      canvas.translate(w * leaf[0], h * leaf[1]);
-      canvas.rotate(leaf[2]);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: leaf[3],
-          height: leaf[4],
-        ),
-        leafPaint,
-      );
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

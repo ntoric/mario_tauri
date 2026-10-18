@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import 'tables_screen.dart';
 import 'orders_screen.dart';
@@ -109,6 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     if (_isCheckingStore) {
       return Scaffold(
         backgroundColor: Colors.transparent,
@@ -191,7 +194,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: ClayStyles.surface(
                   radiusValue: 32,
-                  border: Border.all(color: Colors.white.withOpacity(0.55)),
+                  border: Border.all(
+                      color: Colors.white
+                          .withOpacity(AppColors.isDark ? 0.08 : 0.55)),
                 ),
                 child: Column(
                   children: [
@@ -216,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           if (isDesktop) ...[
                             const SizedBox(width: 12),
-                            const Text(
+                            Text(
                               'Mario POS',
                               style: TextStyle(
                                 fontSize: 18,
@@ -326,55 +331,73 @@ class _HomeScreenState extends State<HomeScreen> {
       extendBody: true,
       bottomNavigationBar: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.gray100,
           borderRadius: ClayStyles.radius(30),
-          border: Border.all(color: Colors.white.withOpacity(0.6)),
           boxShadow: ClayStyles.raisedShadow(),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(navItems.length, (index) {
-            final item = navItems[index];
-            final isSelected = index == _currentIndex;
-            return GestureDetector(
-              onTap: () => setState(() => _currentIndex = index),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: isSelected
-                    ? ClayStyles.accent(
-                        accent: AppColors.primary,
-                        radiusValue: 22,
-                        opacity: 0.16,
-                      )
-                    : null,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isSelected ? item.activeIcon : item.icon,
-                      color: isSelected ? AppColors.primary : AppColors.gray500,
-                      size: 24,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color:
-                            isSelected ? AppColors.primary : AppColors.gray500,
+        child: ClipRRect(
+          borderRadius: ClayStyles.radius(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.gray100
+                    .withOpacity(AppColors.isDark ? 0.45 : 0.55),
+                borderRadius: ClayStyles.radius(30),
+                border: Border.all(
+                    color: Colors.white
+                        .withOpacity(AppColors.isDark ? 0.12 : 0.55)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(navItems.length, (index) {
+                  final item = navItems[index];
+                  final isSelected = index == _currentIndex;
+                  return GestureDetector(
+                    onTap: () => setState(() => _currentIndex = index),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: isSelected
+                          ? ClayStyles.accent(
+                              accent: AppColors.primary,
+                              radiusValue: 22,
+                              opacity: 0.16,
+                            )
+                          : null,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isSelected ? item.activeIcon : item.icon,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.gray500,
+                            size: 24,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.gray500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  );
+                }),
               ),
-            );
-          }),
+            ),
+          ),
         ),
       ),
     );

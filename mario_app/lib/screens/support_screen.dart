@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 
 class SupportScreen extends StatelessWidget {
@@ -50,13 +51,13 @@ class SupportScreen extends StatelessWidget {
   Future<void> _launchWhatsApp() async {
     // Try to extract phone number from the link and use whatsapp:// scheme for better Android support
     String whatsappUrl = whatsappLink;
-    
+
     // If the link is https://wa.me/ format, convert to whatsapp:// scheme for Android
     if (whatsappLink.startsWith('https://wa.me/')) {
       final phoneNumber = whatsappLink.replaceFirst('https://wa.me/', '');
       whatsappUrl = 'whatsapp://send?phone=$phoneNumber';
     }
-    
+
     final uri = Uri.parse(whatsappUrl);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -73,6 +74,7 @@ class SupportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -88,7 +90,7 @@ class SupportScreen extends StatelessWidget {
             child: Container(
               constraints: const BoxConstraints(maxWidth: 480),
               decoration: BoxDecoration(
-                color: AppColors.light,
+                color: AppColors.gray100,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
@@ -120,8 +122,10 @@ class SupportScreen extends StatelessWidget {
 
                   // Store Name
                   Text(
-                    storeBranch != null ? '$storeName - $storeBranch' : storeName,
-                    style: const TextStyle(
+                    storeBranch != null
+                        ? '$storeName - $storeBranch'
+                        : storeName,
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                       color: AppColors.gray600,
@@ -131,7 +135,7 @@ class SupportScreen extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   // Title
-                  const Text(
+                  Text(
                     'Store Disabled',
                     style: TextStyle(
                       fontSize: 28,
@@ -142,7 +146,7 @@ class SupportScreen extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   // Subtitle
-                  const Text(
+                  Text(
                     'Your store is currently disabled. Please contact support for assistance.',
                     style: TextStyle(
                       fontSize: 16,
@@ -191,7 +195,8 @@ class SupportScreen extends StatelessWidget {
                     height: 50,
                     child: OutlinedButton(
                       onPressed: () {
-                        final auth = Provider.of<AuthProvider>(context, listen: false);
+                        final auth =
+                            Provider.of<AuthProvider>(context, listen: false);
                         auth.logout();
                       },
                       style: OutlinedButton.styleFrom(
@@ -258,7 +263,7 @@ class _ContactCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       color: AppColors.gray500,
                       fontWeight: FontWeight.w500,
@@ -267,7 +272,7 @@ class _ContactCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       color: AppColors.dark,
                       fontWeight: FontWeight.w600,
@@ -276,7 +281,7 @@ class _ContactCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.arrow_forward_ios,
               size: 16,
               color: AppColors.gray400,

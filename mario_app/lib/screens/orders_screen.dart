@@ -4,6 +4,7 @@ import '../models/order.dart';
 import '../models/table.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 import '../widgets/order_timer.dart';
@@ -58,16 +59,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   _OrderTypeFilter _typeOf(Order order) {
     if (order.isParcelOrder) return _OrderTypeFilter.parcel;
-    if (order.orderType == 'delivery' ||
-        order.orderType == 'takeaway') {
+    if (order.orderType == 'delivery' || order.orderType == 'takeaway') {
       return _OrderTypeFilter.takeaway;
     }
     return _OrderTypeFilter.dineIn;
   }
 
   bool _matchesFilter(Order order) {
-    if (_typeFilter != _OrderTypeFilter.all &&
-        _typeOf(order) != _typeFilter) {
+    if (_typeFilter != _OrderTypeFilter.all && _typeOf(order) != _typeFilter) {
       return false;
     }
     final query = _searchQuery.trim().toLowerCase();
@@ -75,8 +74,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return order.tableLabel.toLowerCase().contains(query) ||
         order.id.toLowerCase().contains(query) ||
         order.orderTypeLabel.toLowerCase().contains(query) ||
-        order.items
-            .any((item) => item.item.name.toLowerCase().contains(query));
+        order.items.any((item) => item.item.name.toLowerCase().contains(query));
   }
 
   List<Order> _sortedOrders(List<Order> orders) {
@@ -94,22 +92,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return sorted;
   }
 
-  Color _accentForIndex(int index) =>
-      _cardAccents[index % _cardAccents.length];
+  Color _accentForIndex(int index) => _cardAccents[index % _cardAccents.length];
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final activeOrders = data.activeOrders;
     final filteredOrders =
         _sortedOrders(activeOrders.where(_matchesFilter).toList());
 
-    final dineInCount = activeOrders
-        .where((o) => _typeOf(o) == _OrderTypeFilter.dineIn)
-        .length;
-    final parcelCount = activeOrders
-        .where((o) => _typeOf(o) == _OrderTypeFilter.parcel)
-        .length;
+    final dineInCount =
+        activeOrders.where((o) => _typeOf(o) == _OrderTypeFilter.dineIn).length;
+    final parcelCount =
+        activeOrders.where((o) => _typeOf(o) == _OrderTypeFilter.parcel).length;
     final takeawayCount = activeOrders
         .where((o) => _typeOf(o) == _OrderTypeFilter.takeaway)
         .length;
@@ -146,8 +142,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   : filteredOrders.isEmpty
                       ? _buildNoResultsState()
                       : ListView.builder(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
                           itemCount: filteredOrders.length,
                           itemBuilder: (context, index) {
                             final order = filteredOrders[index];
@@ -270,7 +265,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
@@ -282,16 +277,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             child: TextField(
               controller: _searchController,
-              onChanged: (value) =>
-                  setState(() => _searchQuery = value),
+              onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: 'Search table, item or order...',
-                hintStyle: const TextStyle(
+                hintStyle: TextStyle(
                   color: AppColors.gray400,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.search,
                   color: AppColors.gray400,
                   size: 20,
@@ -299,7 +293,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 suffixIcon: _searchQuery.isEmpty
                     ? null
                     : IconButton(
-                        icon: const Icon(Icons.close,
+                        icon: Icon(Icons.close,
                             color: AppColors.gray400, size: 18),
                         onPressed: () {
                           _searchController.clear();
@@ -309,8 +303,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 14),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
@@ -322,7 +316,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
@@ -348,7 +342,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void _showSortSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.gray100,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -356,7 +350,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Text(
                 'Sort orders',
@@ -367,14 +361,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
             ),
-            _sortOption(sheetContext, 'Newest first',
-                _OrderSortMode.newest),
-            _sortOption(sheetContext, 'Oldest first',
-                _OrderSortMode.oldest),
-            _sortOption(sheetContext, 'Amount: high to low',
-                _OrderSortMode.amountDesc),
-            _sortOption(sheetContext, 'Amount: low to high',
-                _OrderSortMode.amountAsc),
+            _sortOption(sheetContext, 'Newest first', _OrderSortMode.newest),
+            _sortOption(sheetContext, 'Oldest first', _OrderSortMode.oldest),
+            _sortOption(
+                sheetContext, 'Amount: high to low', _OrderSortMode.amountDesc),
+            _sortOption(
+                sheetContext, 'Amount: low to high', _OrderSortMode.amountAsc),
             const SizedBox(height: 12),
           ],
         ),
@@ -426,7 +418,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -462,8 +454,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.table_restaurant,
-                              size: 19, color: accent),
+                          Icon(Icons.table_restaurant, size: 19, color: accent),
                           const SizedBox(height: 2),
                           Text(
                             order.tableLabel,
@@ -487,7 +478,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFEDE6),
+                              color: AppColors.isDark
+                                  ? AppColors.primary.withOpacity(0.18)
+                                  : const Color(0xFFFFEDE6),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: OrderTimer(
@@ -511,7 +504,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               Flexible(
                                 child: Text(
                                   '$itemCount ${itemCount == 1 ? 'item' : 'items'} • ${order.orderTypeLabel}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                     color: AppColors.gray500,
@@ -530,7 +523,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       children: [
                         Text(
                           '₹${order.totalAmount.toStringAsFixed(0)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                             color: AppColors.dark,
@@ -574,12 +567,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
         Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFF6F7F9),
+            color: AppColors.backgroundSecondary,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             children: [
-              const Row(
+              Row(
                 children: [
                   SizedBox(width: 44),
                   Expanded(
@@ -631,8 +624,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
               ),
               const SizedBox(height: 4),
-              for (final orderItem in order.items)
-                _buildItemRow(orderItem),
+              for (final orderItem in order.items) _buildItemRow(orderItem),
             ],
           ),
         ),
@@ -698,7 +690,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Expanded(
             child: Text(
               orderItem.item.name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppColors.gray800,
@@ -712,7 +704,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: Text(
               '${orderItem.quantity}',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 color: AppColors.gray700,
               ),
@@ -723,7 +715,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: Text(
               '₹${(orderItem.unitPrice ?? orderItem.item.price).toStringAsFixed(0)}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: AppColors.gray700,
@@ -735,7 +727,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: Text(
               '₹${orderItem.totalPrice.toStringAsFixed(0)}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: AppColors.dark,
@@ -787,8 +779,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   void _editOrder(Order order, DataProvider data) {
-    final table =
-        data.tables.where((t) => t.id == order.tableId).firstOrNull;
+    final table = data.tables.where((t) => t.id == order.tableId).firstOrNull;
     if (table == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -814,22 +805,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final parentContext = context;
     final availableTables = data.tables
         .where((t) =>
-            t.id != order.tableId &&
-            t.isActive &&
-            !data.isTableOccupied(t.id))
+            t.id != order.tableId && t.isActive && !data.isTableOccupied(t.id))
         .toList();
 
     showDialog(
       context: parentContext,
       builder: (dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Move to Table'),
           content: SizedBox(
             width: double.maxFinite,
             child: availableTables.isEmpty
-                ? const Padding(
+                ? Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Text(
                       'No available tables right now.',
@@ -861,10 +850,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _moveTableTile(
-      TableModel table, Order order, DataProvider data) {
+  Widget _moveTableTile(TableModel table, Order order, DataProvider data) {
     return Material(
-      color: const Color(0xFFE7F7EC),
+      color: AppColors.isDark
+          ? AppColors.success.withOpacity(0.16)
+          : const Color(0xFFE7F7EC),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -897,8 +887,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ? 'Order moved to ${table.label}'
                       : (data.error ?? 'Failed to move order.'),
                 ),
-                backgroundColor:
-                    success ? AppColors.success : AppColors.danger,
+                backgroundColor: success ? AppColors.success : AppColors.danger,
               ),
             );
           } catch (e) {
@@ -916,7 +905,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           children: [
             Text(
               table.label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: AppColors.dark,
@@ -924,7 +913,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             Text(
               '${table.seats} seats',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.gray500,
               ),
@@ -1018,7 +1007,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white,
+                      AppColors.gray100,
                       AppColors.primarySoft,
                     ],
                   ),
@@ -1030,7 +1019,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'No active orders',
                 style: TextStyle(
                   fontSize: 18,
@@ -1039,7 +1028,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Create orders from the Tables tab',
                 style: TextStyle(
                   fontSize: 14,
@@ -1058,7 +1047,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.4,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -7,18 +9,25 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFFCF8),
-              Color(0xFFFFF1E0),
-              Color(0xFFF3E6D8),
-            ],
+            colors: AppColors.isDark
+                ? [
+                    AppColors.background,
+                    AppColors.backgroundSecondary,
+                    AppColors.darker,
+                  ]
+                : const [
+                    Color(0xFFFFFCF8),
+                    Color(0xFFFFF1E0),
+                    Color(0xFFF3E6D8),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -35,7 +44,7 @@ class SplashScreen extends StatelessWidget {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.white,
+                        AppColors.gray100,
                         AppColors.primarySoft,
                       ],
                     ),
@@ -51,7 +60,7 @@ class SplashScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 Text(
                   'Mario POS',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
                     color: AppColors.dark,

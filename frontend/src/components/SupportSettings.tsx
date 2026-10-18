@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Mail, Phone, MessageCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 import notify from '../utils/toast';
 
 interface SupportConfig {
@@ -36,7 +36,7 @@ const SupportSettings: React.FC = () => {
 
   const fetchSupportConfig = async () => {
     try {
-      const response = await fetch('/api/support-config');
+      const response = await fetch(`${API_URL}/support-config`);
       if (response.ok) {
         const data = await response.json();
         setConfig({
@@ -58,7 +58,7 @@ const SupportSettings: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/support-config', {
+      const response = await fetch(`${API_URL}/support-config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

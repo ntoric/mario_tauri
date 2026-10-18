@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/order.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 import 'bill_screen.dart';
@@ -49,12 +50,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final range = _selectedDateRange;
     context.read<DataProvider>().loadHistoryOrders(
           auth.currentStore!.id,
-          from: range?.start ??
-              DateTime.now().subtract(const Duration(days: 7)),
+          from:
+              range?.start ?? DateTime.now().subtract(const Duration(days: 7)),
           to: range == null
               ? null
-              : DateTime(range.end.year, range.end.month, range.end.day, 23,
-                  59, 59),
+              : DateTime(
+                  range.end.year, range.end.month, range.end.day, 23, 59, 59),
         );
   }
 
@@ -136,6 +137,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final historyOrders =
         data.historyOrders.where((o) => o.status != 'active').toList();
@@ -185,7 +187,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.gray100,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
@@ -199,12 +201,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           controller: _searchController,
                           decoration: InputDecoration(
                             hintText: 'Search by table or item...',
-                            hintStyle: const TextStyle(
+                            hintStyle: TextStyle(
                               color: AppColors.gray400,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
-                            prefixIcon: const Icon(
+                            prefixIcon: Icon(
                               Icons.search,
                               color: AppColors.gray400,
                               size: 20,
@@ -212,7 +214,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             suffixIcon: _searchQuery.isEmpty
                                 ? null
                                 : IconButton(
-                                    icon: const Icon(Icons.close,
+                                    icon: Icon(Icons.close,
                                         color: AppColors.gray400, size: 18),
                                     onPressed: () {
                                       _searchController.clear();
@@ -237,7 +239,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     const SizedBox(width: 10),
                     Material(
-                      color: Colors.white,
+                      color: AppColors.gray100,
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
                         onTap: _selectDateRange,
@@ -323,14 +325,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             color: AppColors.gray200,
                             borderRadius: BorderRadius.circular(24),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.history_outlined,
                             size: 40,
                             color: AppColors.gray400,
                           ),
                         ),
                         const SizedBox(height: 20),
-                        const Text(
+                        Text(
                           'No orders found',
                           style: TextStyle(
                             fontSize: 18,
@@ -447,7 +449,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.gray100,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -504,7 +506,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   order.tableNumber == 0
                                       ? 'Parcel Order'
                                       : order.tableLabel,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.dark,
@@ -539,7 +541,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           Text(
                             DateFormat('MMM dd, yyyy · HH:mm')
                                 .format(order.createdAt),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w500,
                               color: AppColors.gray500,
@@ -551,7 +553,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     const SizedBox(width: 8),
                     Text(
                       '₹${order.totalAmount.toStringAsFixed(0)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w800,
                         color: AppColors.dark,
@@ -563,8 +565,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ? Icons.keyboard_arrow_up
                           : Icons.keyboard_arrow_down,
                       size: 22,
-                      color:
-                          expanded ? AppColors.primary : AppColors.gray500,
+                      color: expanded ? AppColors.primary : AppColors.gray500,
                     ),
                   ],
                 ),
@@ -590,7 +591,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 14),
-        const Text(
+        Text(
           'Order Items',
           style: TextStyle(
             fontSize: 15,
@@ -602,12 +603,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF6F7F9),
+            color: AppColors.backgroundSecondary,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             children: [
-              const Row(
+              Row(
                 children: [
                   SizedBox(
                     width: 24,
@@ -663,13 +664,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Subtotal',
                     style: TextStyle(color: AppColors.gray500, fontSize: 13.5),
                   ),
                   Text(
                     '₹${(order.totalAmount - order.taxAmount).toStringAsFixed(0)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.gray700,
@@ -683,14 +684,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Tax',
                         style:
                             TextStyle(color: AppColors.gray500, fontSize: 13.5),
                       ),
                       Text(
                         '₹${order.taxAmount.toStringAsFixed(0)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
                           color: AppColors.gray700,
@@ -710,7 +711,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Total',
                       style: TextStyle(
                         fontSize: 15,
@@ -735,7 +736,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(Icons.credit_card,
                             size: 16, color: AppColors.gray500),
@@ -751,7 +752,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     ),
                     Text(
                       order.paymentMethod!.toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13.5,
                         color: AppColors.dark,
@@ -786,8 +787,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.print,
-                              size: 17, color: AppColors.primary),
+                          Icon(Icons.print, size: 17, color: AppColors.primary),
                           SizedBox(width: 8),
                           Text(
                             'View Receipt',
@@ -814,7 +814,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                color: Colors.white,
+                color: AppColors.gray100,
                 itemBuilder: (context) => const [
                   PopupMenuItem<String>(
                     value: 'cancel',
@@ -840,7 +840,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     color: AppColors.gray200,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.more_vert,
                     size: 18,
                     color: AppColors.gray600,
@@ -863,7 +863,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             width: 24,
             child: Text(
               '$index',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: AppColors.gray600,
@@ -873,7 +873,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Expanded(
             child: Text(
               orderItem.item.name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppColors.gray800,
@@ -887,7 +887,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Text(
               '${orderItem.quantity}',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 color: AppColors.gray700,
               ),
@@ -898,7 +898,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Text(
               '₹${orderItem.totalPrice.toStringAsFixed(0)}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: AppColors.dark,

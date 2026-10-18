@@ -215,10 +215,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Profile card
           Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFFFDDB8), Color(0xFFFFF3E8)],
+                colors: AppColors.isDark
+                    ? const [AppColors.cardDarkLight, AppColors.cardDark]
+                    : const [Color(0xFFFFDDB8), Color(0xFFFFF3E8)],
               ),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -232,7 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: 170,
                     height: 170,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.28),
+                      color: AppColors.gray100.withOpacity(0.28),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -279,7 +281,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               user?.name ?? 'Unknown',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.dark,
@@ -287,7 +289,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             Text(
                               user?.username ?? '',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.gray600,
                               ),
@@ -297,7 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 9, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.75),
+                                color: AppColors.gray100.withOpacity(0.75),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -329,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 auth.currentStore!.displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.gray600,
                                 ),
@@ -380,7 +382,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'New Version Available',
                                 style: TextStyle(
                                   fontSize: 16,
@@ -390,7 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               Text(
                                 'Version ${data.appUpdate!.version}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   color: AppColors.gray500,
                                 ),
@@ -405,7 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 12),
                       Text(
                         data.appUpdate!.releaseNotes!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           color: AppColors.gray600,
                         ),
@@ -463,7 +465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('Account'),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -477,8 +479,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 InkWell(
                   borderRadius: BorderRadius.circular(18),
-                  onTap: () => setState(
-                      () => _passwordExpanded = !_passwordExpanded),
+                  onTap: () =>
+                      setState(() => _passwordExpanded = !_passwordExpanded),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Row(
@@ -489,7 +491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           AppColors.primarySoft.withOpacity(0.7),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -514,7 +516,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         AnimatedRotation(
                           turns: _passwordExpanded ? 0.5 : 0,
                           duration: const Duration(milliseconds: 200),
-                          child: const Icon(
+                          child: Icon(
                             Icons.keyboard_arrow_down,
                             color: AppColors.gray500,
                           ),
@@ -608,8 +610,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 13),
+                              padding: const EdgeInsets.symmetric(vertical: 13),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -619,8 +620,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white),
+                                        strokeWidth: 2, color: Colors.white),
                                   )
                                 : const Text(
                                     'Change Password',
@@ -640,7 +640,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('Appearance'),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -667,7 +667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Color Theme',
                               style: TextStyle(
                                 fontSize: 14.5,
@@ -677,7 +677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             Text(
                               'Choose the app theme. Saved for ${user?.name ?? 'this user'} on this device.',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11.5,
                                 color: AppColors.gray500,
                               ),
@@ -710,6 +710,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
+                  const SizedBox(height: 16),
+                  Divider(height: 1, color: AppColors.gray200),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _iconBox(
+                        Icons.dark_mode_outlined,
+                        AppColors.primary,
+                        AppColors.primarySoft.withOpacity(0.7),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Dark Mode',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              'Light, dark, or follow the system setting.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _buildModeCard(
+                        label: 'Light',
+                        icon: Icons.light_mode_outlined,
+                        isSelected: themeProvider.themeMode == ThemeMode.light,
+                        onTap: () =>
+                            themeProvider.setThemeMode(ThemeMode.light),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildModeCard(
+                        label: 'Dark',
+                        icon: Icons.dark_mode_outlined,
+                        isSelected: themeProvider.themeMode == ThemeMode.dark,
+                        onTap: () => themeProvider.setThemeMode(ThemeMode.dark),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildModeCard(
+                        label: 'System',
+                        icon: Icons.settings_suggest_outlined,
+                        isSelected: themeProvider.themeMode == ThemeMode.system,
+                        onTap: () =>
+                            themeProvider.setThemeMode(ThemeMode.system),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -718,7 +780,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('Support'),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -738,7 +800,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const Color(0xFF25D366),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -790,7 +852,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('App'),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.gray100,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -834,8 +896,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   iconColor: AppColors.info,
                   iconBg: AppColors.info.withOpacity(0.12),
                   title: 'About',
-                  subtitle:
-                      'Mario App v${AppConstants.appVersion}',
+                  subtitle: 'Mario App v${AppConstants.appVersion}',
                   onTap: null,
                 ),
                 _rowDivider(),
@@ -860,7 +921,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.only(left: 4, bottom: 10),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: AppColors.gray600,
@@ -882,8 +943,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _rowDivider() {
-    return Divider(height: 1, indent: 66, endIndent: 16,
-        color: AppColors.gray200);
+    return Divider(
+        height: 1, indent: 66, endIndent: 16, color: AppColors.gray200);
   }
 
   Widget _settingsRow({
@@ -918,7 +979,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (subtitle != null)
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         color: AppColors.gray500,
                       ),
@@ -926,8 +987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right,
-                color: AppColors.gray400, size: 20),
+            Icon(Icons.chevron_right, color: AppColors.gray400, size: 20),
           ],
         ),
       ),
@@ -947,7 +1007,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? option.primarySoft.withOpacity(0.4)
-              : AppColors.gray100,
+              : (AppColors.isDark
+                  ? AppColors.backgroundSecondary
+                  : AppColors.gray100),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? option.primary : Colors.transparent,
@@ -971,7 +1033,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               option.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.dark,
@@ -982,7 +1044,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               option.description,
               maxLines: 2,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9,
                 height: 1.2,
                 color: AppColors.gray500,
@@ -1002,6 +1064,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeCard({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primarySoft.withOpacity(0.4)
+                : (AppColors.isDark
+                    ? AppColors.backgroundSecondary
+                    : AppColors.gray100),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : Colors.transparent,
+              width: 1.6,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected ? AppColors.primary : AppColors.gray500,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? AppColors.primary : AppColors.dark,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

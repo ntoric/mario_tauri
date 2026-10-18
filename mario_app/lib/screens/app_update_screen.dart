@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
 
@@ -40,7 +41,7 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
     setState(() => _isLoading = true);
     final data = context.read<DataProvider>();
     await data.loadAppUpdate(platform: _platform);
-    
+
     if (mounted) {
       final appUpdate = data.appUpdate;
       if (appUpdate != null) {
@@ -82,8 +83,8 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
       enabled: _enabled,
       version: _versionController.text.trim(),
       downloadUrl: _downloadUrlController.text.trim(),
-      releaseNotes: _releaseNotesController.text.trim().isEmpty 
-          ? null 
+      releaseNotes: _releaseNotesController.text.trim().isEmpty
+          ? null
           : _releaseNotesController.text.trim(),
     );
 
@@ -92,7 +93,8 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
     if (result != null) {
       _showFeedback('App update configuration saved successfully');
     } else {
-      _showFeedback(data.error ?? 'Failed to save app update configuration', isError: true);
+      _showFeedback(data.error ?? 'Failed to save app update configuration',
+          isError: true);
     }
   }
 
@@ -109,14 +111,15 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    
+    context.watch<ThemeProvider>();
+
     // Check if user is superadmin
     if (!(auth.user?.isSuperAdmin ?? false)) {
       return Scaffold(
         appBar: const AppHeader(
           title: 'App Update Management',
         ),
-        body: const Center(
+        body: Center(
           child: Text(
             'Access Denied. Superadmin role required.',
             style: TextStyle(fontSize: 16, color: AppColors.gray600),
@@ -221,7 +224,9 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                                 : 'Update notification is currently disabled',
                             style: TextStyle(
                               fontSize: 14,
-                              color: _enabled ? AppColors.success : AppColors.gray600,
+                              color: _enabled
+                                  ? AppColors.success
+                                  : AppColors.gray600,
                             ),
                           ),
                         ],
@@ -265,7 +270,8 @@ class _AppUpdateScreenState extends State<AppUpdateScreen> {
                             maxLines: 4,
                             decoration: const InputDecoration(
                               labelText: 'Release Notes (optional)',
-                              hintText: 'Describe what\'s new in this version...',
+                              hintText:
+                                  'Describe what\'s new in this version...',
                               prefixIcon: Icon(Icons.description),
                             ),
                           ),
