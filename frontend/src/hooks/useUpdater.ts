@@ -4,19 +4,25 @@ import { isQuietHours } from '../utils/quietHours';
 
 export interface UseUpdaterReturn {
   updateInfo: UpdateInfo | null;
+  downgradeInfo: UpdateInfo | null;
   isChecking: boolean;
+  isCheckingDowngrade: boolean;
   isDownloading: boolean;
   isInstalling: boolean;
   downloadProgress: UpdateProgress | null;
   error: string | null;
   checkForUpdates: () => Promise<void>;
+  checkForDowngrade: () => Promise<void>;
   downloadAndInstall: () => Promise<void>;
+  downgrade: () => Promise<void>;
   dismissUpdate: () => void;
 }
 
 export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdaterReturn => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [downgradeInfo, setDowngradeInfo] = useState<UpdateInfo | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [isCheckingDowngrade, setIsCheckingDowngrade] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<UpdateProgress | null>(null);
@@ -59,6 +65,19 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
     }
   }, []);
 
+  const checkForDowngrade = useCallback(async () => {
+    setIsCheckingDowngrade(true);
+    try {
+      const info = await updaterService.checkForDowngrade();
+      setDowngradeInfo(info);
+    } catch (err) {
+      setDowngradeInfo(null);
+      console.error('Downgrade check failed:', err);
+    } finally {
+      setIsCheckingDowngrade(false);
+    }
+  }, []);
+
   const downloadAndInstall = useCallback(async () => {
     setIsDownloading(true);
     setIsInstalling(false);
@@ -76,6 +95,27 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
       setIsInstalling(false);
       setError(msg);
       console.error('Update install failed:', err);
+      throw err;
+    }
+  }, []);
+
+  const downgrade = useCallback(async () => {
+    setIsDownloading(true);
+    setIsInstalling(false);
+    setError(null);
+    setDownloadProgress(null);
+
+    try {
+      await updaterService.downloadAndInstallDowngrade();
+      // Resolves only on failure — on success the app restarts.
+      setIsDownloading(false);
+      setIsInstalling(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to install downgrade';
+      setIsDownloading(false);
+      setIsInstalling(false);
+      setError(msg);
+      console.error('Downgrade install failed:', err);
       throw err;
     }
   }, []);
@@ -106,13 +146,17 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
 
   return {
     updateInfo,
+    downgradeInfo,
     isChecking,
+    isCheckingDowngrade,
     isDownloading,
     isInstalling,
     downloadProgress,
     error,
     checkForUpdates,
+    checkForDowngrade,
     downloadAndInstall,
+    downgrade,
     dismissUpdate,
   };
 };

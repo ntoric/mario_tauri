@@ -64,6 +64,29 @@ class UpdaterService {
   }
 
   /**
+   * Check for an earlier released version the app can roll back to.
+   * `latestVersion` holds the previous version when `available` is true.
+   */
+  async checkForDowngrade(): Promise<UpdateInfo> {
+    if (!isTauri()) {
+      return { available: false, currentVersion: 'unknown' };
+    }
+    try {
+      const result = await invoke<DesktopUpdateCheckResult>('check_for_downgrade');
+      return {
+        available: result.available,
+        currentVersion: result.currentVersion,
+        latestVersion: result.version ?? undefined,
+        body: result.notes ?? undefined,
+        date: result.date ?? undefined,
+      };
+    } catch (error) {
+      console.error('Failed to check for downgrade:', error);
+      throw new Error(`Failed to check for downgrade: ${error}`);
+    }
+  }
+
+  /**
    * Download and install the update, then restart the app.
    * The invoke promise only resolves on failure — on success the app restarts.
    * Download/install progress is delivered via subscribeToProgress().
@@ -77,6 +100,22 @@ class UpdaterService {
     } catch (error) {
       console.error('Failed to install update:', error);
       throw new Error(`Failed to install update: ${error}`);
+    }
+  }
+
+  /**
+   * Download and install the previous version, then restart the app.
+   * Same contract as downloadAndInstall() — resolves only on failure.
+   */
+  async downloadAndInstallDowngrade(): Promise<void> {
+    if (!isTauri()) {
+      throw new Error('Downgrades are only available in the desktop app.');
+    }
+    try {
+      await invoke('download_and_install_downgrade');
+    } catch (error) {
+      console.error('Failed to install downgrade:', error);
+      throw new Error(`Failed to install downgrade: ${error}`);
     }
   }
 

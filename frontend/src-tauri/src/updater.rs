@@ -105,8 +105,29 @@ fn kill_processes_at_path(exe: &Path) {
     let _ = exe;
 }
 
+/// Effective update manifest endpoint: env override first, then the
+/// compiled-in `plugins.updater.endpoints[0]` from tauri.conf.json.
+fn configured_endpoint<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    if let Ok(raw) = std::env::var("MARIO_UPDATE_ENDPOINT") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    app.config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|cfg| cfg.get("endpoints"))
+        .and_then(|endpoints| endpoints.as_array())
+        .and_then(|endpoints| endpoints.first())
+        .and_then(|endpoint| endpoint.as_str())
+        .map(|s| s.to_string())
+}
+
 fn build_updater<R: Runtime>(
     app: &AppHandle<R>,
+    rollback: bool,
 ) -> Result<tauri_plugin_updater::Updater, String> {
     let mut builder = app.updater_builder().on_before_exit(move || {
         // Windows NSIS cannot overwrite mario-printer.exe while it is locked.
@@ -114,7 +135,21 @@ fn build_updater<R: Runtime>(
         kill_bundled_printer_processes();
     });
 
-    if let Ok(raw) = std::env::var("MARIO_UPDATE_ENDPOINT") {
+    if rollback {
+        // Same update server, but it serves the latest.json of the newest
+        // release below {{current_version}} — the comparator then treats an
+        // older remote version as the release to install.
+        let base = configured_endpoint(app)
+            .ok_or_else(|| "update endpoint is not configured".to_string())?;
+        let sep = if base.contains('?') { "&" } else { "?" };
+        let endpoint = format!("{base}{sep}rollback=1&version={{{{current_version}}}}")
+            .parse()
+            .map_err(|e| format!("invalid rollback endpoint: {e}"))?;
+        builder = builder
+            .endpoints(vec![endpoint])
+            .map_err(|e| e.to_string())?
+            .version_comparator(|current, release| release.version < current);
+    } else if let Ok(raw) = std::env::var("MARIO_UPDATE_ENDPOINT") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
             let endpoint = trimmed
@@ -151,8 +186,11 @@ const UPDATE_CHECK_TIMEOUT_SECS: u64 = 45;
 const UPDATE_CHECK_ATTEMPTS: u32 = 2;
 const UPDATE_CHECK_RETRY_DELAY_SECS: u64 = 4;
 
-async fn fetch_update<R: Runtime>(app: &AppHandle<R>) -> Result<Option<Update>, String> {
-    let updater = build_updater(app)?;
+async fn fetch_update<R: Runtime>(
+    app: &AppHandle<R>,
+    rollback: bool,
+) -> Result<Option<Update>, String> {
+    let updater = build_updater(app, rollback)?;
     let mut last_error: Option<tauri_plugin_updater::Error> = None;
     let mut timed_out = false;
 
@@ -191,10 +229,12 @@ pub fn app_version(app: AppHandle) -> String {
     current_version(&app)
 }
 
-#[tauri::command]
-pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult, String> {
-    let current = current_version(&app);
-    match fetch_update(&app).await? {
+async fn check_remote_release<R: Runtime>(
+    app: &AppHandle<R>,
+    rollback: bool,
+) -> Result<UpdateCheckResult, String> {
+    let current = current_version(app);
+    match fetch_update(app, rollback).await? {
         Some(update) => Ok(UpdateCheckResult {
             available: true,
             current_version: current,
@@ -213,11 +253,37 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult, Stri
 }
 
 #[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult, String> {
+    check_remote_release(&app, false).await
+}
+
+/// Reports the newest release older than the current version, if any.
+#[tauri::command]
+pub async fn check_for_downgrade(app: AppHandle) -> Result<UpdateCheckResult, String> {
+    check_remote_release(&app, true).await
+}
+
+#[tauri::command]
 pub async fn download_and_install_update(app: AppHandle) -> Result<(), String> {
-    let Some(update) = fetch_update(&app).await? else {
+    let Some(update) = fetch_update(&app, false).await? else {
         return Err("No update available".into());
     };
+    download_install_and_restart(app, update).await
+}
 
+/// Installs the newest release older than the current version, then restarts.
+#[tauri::command]
+pub async fn download_and_install_downgrade(app: AppHandle) -> Result<(), String> {
+    let Some(update) = fetch_update(&app, true).await? else {
+        return Err("No earlier version available".into());
+    };
+    download_install_and_restart(app, update).await
+}
+
+async fn download_install_and_restart<R: Runtime>(
+    app: AppHandle<R>,
+    update: Update,
+) -> Result<(), String> {
     println!(
         "downloading Mario Juicy update {} -> {}",
         current_version(&app),
@@ -285,7 +351,7 @@ pub fn spawn_startup_check(app: AppHandle) {
         // Let the window and renderer come up before network checks.
         tokio::time::sleep(std::time::Duration::from_secs(8)).await;
 
-        let update = match fetch_update(&app).await {
+        let update = match fetch_update(&app, false).await {
             Ok(update) => update,
             Err(err) => {
                 eprintln!("startup update check skipped: {err}");

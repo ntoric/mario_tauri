@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2, Monitor, Package } from 'lucide-react';
+import { RefreshCw, Download, CheckCircle, AlertCircle, Loader2, Monitor, Package, History } from 'lucide-react';
 import { useUpdater } from '../hooks/useUpdater';
+import { useConfirm } from '../hooks/useConfirm';
+import { ConfirmDialog } from './ConfirmDialog';
 import { updaterService } from '../services/updater';
 
 function isTauri(): boolean {
@@ -10,19 +12,25 @@ function isTauri(): boolean {
 const SoftwareUpdates: React.FC = () => {
   const {
     updateInfo,
+    downgradeInfo,
     isChecking,
+    isCheckingDowngrade,
     isDownloading,
     isInstalling,
     downloadProgress,
     error,
     checkForUpdates,
+    checkForDowngrade,
     downloadAndInstall,
+    downgrade,
     dismissUpdate,
   } = useUpdater(false);
 
+  const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
   const [hasChecked, setHasChecked] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [isDowngrading, setIsDowngrading] = useState(false);
 
   // Show the real desktop app version (from the Tauri binary) on mount.
   useEffect(() => {
@@ -32,17 +40,20 @@ const SoftwareUpdates: React.FC = () => {
   }, []);
 
   // Check once when this page opens — update errors surface here only.
+  // The downgrade check only runs here (not on the hourly poll) since it
+  // queries the release list on the backend.
   useEffect(() => {
     if (isTauri()) {
       setHasChecked(true);
       checkForUpdates();
+      checkForDowngrade();
     }
-  }, [checkForUpdates]);
+  }, [checkForUpdates, checkForDowngrade]);
 
   const handleCheck = async () => {
     setHasChecked(true);
     setInstallError(null);
-    await checkForUpdates();
+    await Promise.all([checkForUpdates(), checkForDowngrade()]);
   };
 
   const handleDownloadAndInstall = async () => {
@@ -54,10 +65,25 @@ const SoftwareUpdates: React.FC = () => {
     }
   };
 
-  const formatBytes = (bytes: number) => {
-    if (!bytes || bytes <= 0) return '—';
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const handleDowngrade = async () => {
+    const target = downgradeInfo?.latestVersion;
+    const accepted = await confirm({
+      title: 'Restore Previous Version',
+      message: `This will downgrade Mario Juicy from ${downgradeInfo?.currentVersion || appVersion || 'the current version'} to ${target || 'the previous version'} and restart the app. Continue?`,
+      confirmLabel: 'Downgrade',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+    });
+    if (!accepted) return;
+
+    setInstallError(null);
+    setIsDowngrading(true);
+    try {
+      await downgrade();
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : 'Failed to install downgrade');
+      setIsDowngrading(false);
+    }
   };
 
   // Non-Tauri (web browser) — updates only available in the desktop app
@@ -85,6 +111,44 @@ const SoftwareUpdates: React.FC = () => {
     );
   }
 
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes <= 0) return '—';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const progressBar = downloadProgress && (
+    <div style={{ marginTop: '1rem' }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: '0.8rem',
+        color: 'var(--gray-600)',
+        marginBottom: '0.25rem',
+      }}>
+        <span>Downloading...</span>
+        <span>{downloadProgress.percentage}%</span>
+      </div>
+      <div style={{
+        height: '8px',
+        background: 'var(--gray-200)',
+        borderRadius: '4px',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%',
+          width: `${downloadProgress.percentage}%`,
+          background: 'var(--success)',
+          borderRadius: '4px',
+          transition: 'width 0.3s ease',
+        }} />
+      </div>
+      <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
+        {formatBytes(downloadProgress.downloaded)} / {formatBytes(downloadProgress.total)}
+      </div>
+    </div>
+  );
+
   if (isInstalling) {
     return (
       <div className="card">
@@ -97,7 +161,7 @@ const SoftwareUpdates: React.FC = () => {
         <div className="card-body">
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <Loader2 size={40} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem' }}>Installing Update</h3>
+            <h3 style={{ margin: '0 0 0.5rem' }}>{isDowngrading ? 'Installing Previous Version' : 'Installing Update'}</h3>
             <p style={{ color: 'var(--gray-500)', margin: 0 }}>The application will relaunch shortly. Please do not close the window.</p>
           </div>
         </div>
@@ -218,37 +282,7 @@ const SoftwareUpdates: React.FC = () => {
             )}
 
             {/* Download progress */}
-            {isDownloading && downloadProgress && (
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontSize: '0.8rem',
-                  color: 'var(--gray-600)',
-                  marginBottom: '0.25rem',
-                }}>
-                  <span>Downloading update...</span>
-                  <span>{downloadProgress.percentage}%</span>
-                </div>
-                <div style={{
-                  height: '8px',
-                  background: 'var(--gray-200)',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${downloadProgress.percentage}%`,
-                    background: 'var(--success)',
-                    borderRadius: '4px',
-                    transition: 'width 0.3s ease',
-                  }} />
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                  {formatBytes(downloadProgress.downloaded)} / {formatBytes(downloadProgress.total)}
-                </div>
-              </div>
-            )}
+            {isDownloading && progressBar}
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
@@ -315,7 +349,83 @@ const SoftwareUpdates: React.FC = () => {
             </p>
           </div>
         )}
+
+        {/* Rollback to previous version */}
+        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <History size={16} style={{ color: 'var(--gray-500)' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Rollback
+            </span>
+          </div>
+
+          {isCheckingDowngrade && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--gray-500)', fontSize: '0.9rem' }}>
+              <Loader2 size={16} className="animate-spin" />
+              Checking for a previous version...
+            </div>
+          )}
+
+          {!isCheckingDowngrade && downgradeInfo?.available && (
+            <div style={{
+              padding: '1.25rem',
+              background: 'rgba(245,158,11, 0.08)',
+              border: '1px solid rgba(245,158,11, 0.3)',
+              borderRadius: 'var(--radius)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <History size={20} style={{ color: '#f59e0b' }} />
+                <strong style={{ color: '#f59e0b' }}>
+                  Previous version {downgradeInfo.latestVersion} is available
+                </strong>
+              </div>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+                If this version is causing problems, you can restore version {downgradeInfo.latestVersion}.
+                The app will restart after installing.
+              </p>
+
+              {/* Download progress */}
+              {isDownloading && progressBar}
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                {!isDownloading ? (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleDowngrade}
+                    disabled={isChecking}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    <History size={16} />
+                    Restore Version {downgradeInfo.latestVersion}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.9rem', color: 'var(--gray-600)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Loader2 size={16} className="animate-spin" />
+                    Downloading...
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!isCheckingDowngrade && hasChecked && !downgradeInfo?.available && (
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--gray-500)' }}>
+              No earlier version is available to roll back to.
+            </p>
+          )}
+        </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        cancelLabel={confirmState.cancelLabel}
+        variant={confirmState.variant}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 };

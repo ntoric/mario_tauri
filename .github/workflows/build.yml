@@ -38,12 +38,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            artifact: mac-arm64
-          # - platform: macos-13
-          #   target: x86_64-apple-darwin
-          #   artifact: mac-amd64
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: windows
@@ -97,12 +91,6 @@ jobs:
           cd frontend/src-tauri/mario-printer
           if [ "${{ matrix.platform }}" = "windows-latest" ]; then
             GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ../binaries/mario-printer-${{ matrix.target }}.exe .
-          elif [ "${{ matrix.platform }}" = "macos-latest" ] || [ "${{ matrix.platform }}" = "macos-13" ]; then
-            if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-              GOOS=darwin GOARCH=arm64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
-            else
-              GOOS=darwin GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
-            fi
           else
             GOOS=linux GOARCH=amd64 go build -o ../binaries/mario-printer-${{ matrix.target }} .
           fi
@@ -221,12 +209,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            mario-juicy-mac-arm64/**/*.dmg
-            mario-juicy-mac-arm64/**/*.app.tar.gz
-            mario-juicy-mac-arm64/**/*.app.tar.gz.sig
-            mario-juicy-mac-amd64/**/*.dmg
-            mario-juicy-mac-amd64/**/*.app.tar.gz
-            mario-juicy-mac-amd64/**/*.app.tar.gz.sig
             mario-juicy-windows/**/*.exe
             mario-juicy-windows/**/*.exe.sig
             mario-juicy-windows/**/*.nsis.zip

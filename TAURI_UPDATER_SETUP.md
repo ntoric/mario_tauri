@@ -72,6 +72,16 @@ cd frontend && npm install
 4. Update package is downloaded and verified against the public key
 5. App relaunches with the new version
 
+## Downgrade / Rollback
+
+The Software Updates page also offers a "Rollback" section to restore the previous release.
+
+- **Backend**: `GET /api/update/manifest?rollback=1&version=<current>` lists GitHub releases, picks the newest release below `current`, and proxies that release's `latest.json` (404 when none exists).
+- **Rust**: `check_for_downgrade` / `download_and_install_downgrade` reuse the signed update pipeline. The updater uses the same endpoint plus `rollback=1&version={{current_version}}` and a custom `version_comparator` that accepts older remote versions (the default comparator only allows newer).
+- **Frontend**: `updaterService.checkForDowngrade()` / `downloadAndInstallDowngrade()`; the `SoftwareUpdates` page shows the previous version with a confirmation dialog before installing. Download/install progress and signature verification are identical to upgrades.
+- **Context menu**: `AppContextMenu` (mounted at the app root, so it works on the login page too) adds a right-click menu showing the app version and a "Restore version X.Y.Z" action with the same confirm → download → restart flow. Desktop only; the browser keeps its native context menu.
+- The hourly auto-check never rolls back — downgrades are always user-initiated from Software Updates or the context menu.
+
 ## latest.json Format
 
 ```json

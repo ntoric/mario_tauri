@@ -163,7 +163,9 @@ pub fn run() {
             save_csv_file,
             updater::app_version,
             updater::check_for_updates,
-            updater::download_and_install_update
+            updater::download_and_install_update,
+            updater::check_for_downgrade,
+            updater::download_and_install_downgrade
         ])
         .setup(|app| {
             // Quiet startup update check (release builds only) — native dialog prompt.

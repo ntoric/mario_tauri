@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/models"
@@ -409,6 +412,12 @@ func (h *Handler) GetUpdateManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rollback := r.URL.Query().Get("rollback")
+	if rollback == "1" || rollback == "true" {
+		h.proxyRollbackManifest(w, r, repo)
+		return
+	}
+
 	manifestURL := "https://github.com/" + repo + "/releases/latest/download/latest.json"
 
 	client := &http.Client{}
@@ -438,6 +447,151 @@ func (h *Handler) GetUpdateManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.Copy(w, resp.Body); err != nil {
+		// Best-effort copy; headers already written
+		return
+	}
+}
+
+type githubReleaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+type githubRelease struct {
+	TagName    string               `json:"tag_name"`
+	Draft      bool                 `json:"draft"`
+	Prerelease bool                 `json:"prerelease"`
+	Assets     []githubReleaseAsset `json:"assets"`
+}
+
+// parseSemverTag parses "v1.2.3" or "1.2.3" into numeric parts.
+// Returns false for anything that isn't a plain dotted-numeric version.
+func parseSemverTag(tag string) ([3]int, bool) {
+	var out [3]int
+	t := strings.TrimPrefix(strings.TrimSpace(tag), "v")
+	if t == "" {
+		return out, false
+	}
+	// Ignore any pre-release/build suffixes (e.g. "1.2.3-beta").
+	t = strings.SplitN(t, "-", 2)[0]
+	t = strings.SplitN(t, "+", 2)[0]
+	parts := strings.Split(t, ".")
+	if len(parts) < 2 || len(parts) > 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+func semverLess(a, b [3]int) bool {
+	for i := 0; i < 3; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// proxyRollbackManifest serves the latest.json of the newest GitHub release
+// whose version is lower than the client's current version, so the Tauri
+// updater can roll back to the previous release.
+func (h *Handler) proxyRollbackManifest(w http.ResponseWriter, r *http.Request, repo string) {
+	currentParam := strings.TrimSpace(r.URL.Query().Get("version"))
+	current, ok := parseSemverTag(currentParam)
+	if !ok {
+		h.writeError(w, http.StatusBadRequest, "version query parameter is required (e.g. ?version=1.2.3)")
+		return
+	}
+
+	releasesURL := "https://api.github.com/repos/" + repo + "/releases?per_page=30"
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, releasesURL, nil)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to create releases request")
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "mario-juicy-update-server")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		h.writeError(w, http.StatusBadGateway, "Failed to list releases from GitHub")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		h.writeError(w, http.StatusBadGateway, "GitHub returned non-200 status: "+resp.Status)
+		return
+	}
+
+	var releases []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		h.writeError(w, http.StatusBadGateway, "Failed to parse GitHub releases response")
+		return
+	}
+
+	type candidate struct {
+		version     [3]int
+		manifestURL string
+	}
+	var candidates []candidate
+	for _, rel := range releases {
+		if rel.Draft || rel.Prerelease {
+			continue
+		}
+		v, ok := parseSemverTag(rel.TagName)
+		if !ok || !semverLess(v, current) {
+			continue
+		}
+		for _, asset := range rel.Assets {
+			if asset.Name == "latest.json" && asset.BrowserDownloadURL != "" {
+				candidates = append(candidates, candidate{version: v, manifestURL: asset.BrowserDownloadURL})
+				break
+			}
+		}
+	}
+
+	if len(candidates) == 0 {
+		h.writeError(w, http.StatusNotFound, "No earlier release is available for rollback")
+		return
+	}
+
+	// Newest release below the current version wins.
+	sort.Slice(candidates, func(i, j int) bool {
+		return semverLess(candidates[j].version, candidates[i].version)
+	})
+
+	manifestReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, candidates[0].manifestURL, nil)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to create manifest request")
+		return
+	}
+	manifestReq.Header.Set("Accept", "application/json")
+	manifestReq.Header.Set("User-Agent", "mario-juicy-update-server")
+
+	manifestResp, err := client.Do(manifestReq)
+	if err != nil {
+		h.writeError(w, http.StatusBadGateway, "Failed to fetch rollback manifest from GitHub")
+		return
+	}
+	defer manifestResp.Body.Close()
+
+	if manifestResp.StatusCode != http.StatusOK {
+		h.writeError(w, http.StatusBadGateway, "GitHub returned non-200 status: "+manifestResp.Status)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := io.Copy(w, manifestResp.Body); err != nil {
 		// Best-effort copy; headers already written
 		return
 	}
