@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star, ArrowUpDown, GripVertical } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -78,7 +78,18 @@ const Items: React.FC = () => {
   const [loadingCategoryId, setLoadingCategoryId] = useState<string | null>(null);
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [sortList, setSortList] = useState<Category[]>([]);
-  const [sortDragIndex, setSortDragIndex] = useState<number | null>(null);
+  const [sortDrag, setSortDrag] = useState<{
+    index: number;
+    overIndex: number;
+    offsetY: number;
+    rowHeight: number;
+  } | null>(null);
+  const sortDragRef = useRef<{
+    index: number;
+    startY: number;
+    rowHeight: number;
+    length: number;
+  } | null>(null);
   const [isReordering, setIsReordering] = useState(false);
 
   const editingItem = itemModal.data;
@@ -492,20 +503,60 @@ const Items: React.FC = () => {
 
   const openSortModal = () => {
     setSortList(sortCategories(categories));
-    setSortDragIndex(null);
+    sortDragRef.current = null;
+    setSortDrag(null);
     setSortModalOpen(true);
   };
 
-  const handleSortDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+  const clearSortDrag = () => {
+    sortDragRef.current = null;
+    setSortDrag(null);
+    document.body.style.cursor = '';
+  };
+
+  // HTML5 drag-and-drop does not start in the Tauri webview: WebKit refuses to
+  // drag anything inside an ancestor with backdrop-filter, which the modal uses.
+  const handleSortPointerDown = (e: React.PointerEvent<HTMLDivElement>, index: number) => {
+    if (e.button !== 0) return;
+    const row = e.currentTarget;
+    const list = row.parentElement;
+    if (!list) return;
     e.preventDefault();
-    if (sortDragIndex === null || sortDragIndex === index) return;
+    const gapValue = getComputedStyle(list).rowGap;
+    const gap = parseFloat(gapValue && gapValue !== 'normal' ? gapValue : getComputedStyle(list).gap) || 0;
+    const rowHeight = row.getBoundingClientRect().height + gap;
+    row.setPointerCapture(e.pointerId);
+    sortDragRef.current = { index, startY: e.clientY, rowHeight, length: sortList.length };
+    setSortDrag({ index, overIndex: index, offsetY: 0, rowHeight });
+    document.body.style.cursor = 'grabbing';
+  };
+
+  const handleSortPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = sortDragRef.current;
+    if (!drag || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const offsetY = e.clientY - drag.startY;
+    const overIndex = Math.max(0, Math.min(drag.length - 1, drag.index + Math.round(offsetY / drag.rowHeight)));
+    setSortDrag({ index: drag.index, overIndex, offsetY, rowHeight: drag.rowHeight });
+  };
+
+  const endSortDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = sortDragRef.current;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    document.body.style.cursor = '';
+    sortDragRef.current = null;
+    setSortDrag(null);
+    if (!drag) return;
+    const offsetY = e.clientY - drag.startY;
+    const overIndex = Math.max(0, Math.min(drag.length - 1, drag.index + Math.round(offsetY / drag.rowHeight)));
+    if (overIndex === drag.index) return;
     setSortList(prev => {
       const next = [...prev];
-      const [moved] = next.splice(sortDragIndex, 1);
-      next.splice(index, 0, moved);
+      const [moved] = next.splice(drag.index, 1);
+      next.splice(overIndex, 0, moved);
       return next;
     });
-    setSortDragIndex(index);
   };
 
   const handleSortSave = async () => {
@@ -992,11 +1043,11 @@ const Items: React.FC = () => {
       )}
 
       {sortModalOpen && (
-        <div className="modal-overlay" onClick={() => setSortModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => { clearSortDrag(); setSortModalOpen(false); }}>
           <div className="modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Sort Categories</h2>
-              <button className="close-btn" onClick={() => setSortModalOpen(false)}>
+              <button className="close-btn" onClick={() => { clearSortDrag(); setSortModalOpen(false); }}>
                 <X size={20} />
               </button>
             </div>
@@ -1005,13 +1056,22 @@ const Items: React.FC = () => {
                 Drag categories to reorder them. This order is used on the order page. Favourite categories always appear first.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {sortList.map((cat, index) => (
+                {sortList.map((cat, index) => {
+                  let translateY = 0;
+                  if (sortDrag) {
+                    const { index: from, overIndex: over, offsetY, rowHeight } = sortDrag;
+                    if (index === from) translateY = offsetY;
+                    else if (from < over && index > from && index <= over) translateY = -rowHeight;
+                    else if (from > over && index >= over && index < from) translateY = rowHeight;
+                  }
+                  const isDragging = sortDrag?.index === index;
+                  return (
                   <div
                     key={cat.id}
-                    draggable
-                    onDragStart={() => setSortDragIndex(index)}
-                    onDragOver={e => handleSortDragOver(e, index)}
-                    onDragEnd={() => setSortDragIndex(null)}
+                    onPointerDown={e => handleSortPointerDown(e, index)}
+                    onPointerMove={handleSortPointerMove}
+                    onPointerUp={endSortDrag}
+                    onPointerCancel={endSortDrag}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1019,9 +1079,17 @@ const Items: React.FC = () => {
                       padding: '0.55rem 0.75rem',
                       border: '1px solid var(--gray-200)',
                       borderRadius: '8px',
-                      background: sortDragIndex === index ? 'var(--gray-100)' : 'var(--white, #fff)',
-                      cursor: 'grab',
+                      background: isDragging ? 'var(--gray-100)' : 'var(--white, #fff)',
+                      cursor: isDragging ? 'grabbing' : 'grab',
                       opacity: cat.enabled === false ? 0.55 : 1,
+                      position: 'relative',
+                      zIndex: isDragging ? 2 : 1,
+                      transform: translateY ? `translateY(${translateY}px)` : undefined,
+                      transition: sortDrag && !isDragging ? 'transform 160ms ease' : 'none',
+                      boxShadow: isDragging ? '0 8px 20px rgba(10, 15, 22, 0.16)' : undefined,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      touchAction: 'none',
                     }}
                   >
                     <GripVertical size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
@@ -1033,11 +1101,12 @@ const Items: React.FC = () => {
                       <span style={{ fontSize: '0.7rem', color: 'var(--gray-500)' }}>Disabled</span>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setSortModalOpen(false)} disabled={isReordering}>
+              <Button type="button" variant="secondary" onClick={() => { clearSortDrag(); setSortModalOpen(false); }} disabled={isReordering}>
                 Cancel
               </Button>
               <Button type="button" variant="primary" isLoading={isReordering} loadingText="Saving..." onClick={handleSortSave}>
