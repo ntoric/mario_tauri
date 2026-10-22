@@ -591,7 +591,7 @@ const Tables: React.FC = () => {
         customerName: 'Walk-in Customer',
       });
 
-      await completeOrder(activeOrder.id, paymentMethod, { skipRefresh: true });
+      await completeOrder(activeOrder.id, paymentMethod); // Optimistic update frees the table immediately
 
       setBillDialogTable(null);
     } catch (error) {
