@@ -302,7 +302,7 @@ const ParcelOrderModal: React.FC = () => {
       }
 
       notify.success('Parcel order placed');
-      await fetchOrders();
+      await fetchOrders({ status: 'active' });
       closeParcelOrderModal();
     } catch (error) {
       console.error('Failed to create parcel order:', error);

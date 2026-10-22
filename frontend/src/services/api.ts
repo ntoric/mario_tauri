@@ -358,9 +358,10 @@ class ApiService {
   }
 
   // Orders
-  async getOrders(storeId: string, status?: string) {
+  async getOrders(storeId: string, status?: string, limit?: number) {
     let url = `/orders?storeId=${storeId}`;
     if (status) url += `&status=${status}`;
+    if (limit) url += `&limit=${limit}`;
     return this.fetch(url);
   }
 

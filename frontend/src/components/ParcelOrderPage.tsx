@@ -183,7 +183,7 @@ const ParcelOrderPage: React.FC = () => {
     try {
       await api.createParcelOrder(buildPayload());
       notify.success('Parcel order placed');
-      await fetchOrders();
+      await fetchOrders({ status: 'active' });
       navigate('/');
       setOrderItems([]);
     } catch (error: any) {
@@ -337,7 +337,7 @@ const ParcelOrderPage: React.FC = () => {
       }
 
       notify.success('Parcel order billed');
-      await fetchOrders();
+      await fetchOrders({ status: 'active' });
       navigate('/');
       setOrderItems([]);
     } catch (error: any) {

@@ -12,7 +12,7 @@ import notify from '../utils/toast';
 import type { OrderItem, Item } from '../types';
 
 const OrderModal: React.FC = () => {
-  const { categories, items, stores, createOrder, updateOrder, completeOrder, createBill, fetchCategories, fetchItems } = useDataStore();
+  const { categories, items, stores, createOrder, updateOrder, completeOrder, createBill, fetchCategories, fetchItems, fetchOrders } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const { orderModal, closeOrderModal } = useUIStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -176,7 +176,7 @@ const OrderModal: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
-        });
+        }, { skipRefresh: true });
       } else {
         const newOrder = await createOrder({
           tableId: table.id,
@@ -186,7 +186,7 @@ const OrderModal: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod: 'cash',
-        });
+        }, { skipRefresh: true });
 
         // Print KOT if enabled for the store
         if (!skipKot && currentStore?.kotPrintEnabled && newOrder?.id) {
@@ -226,7 +226,7 @@ const OrderModal: React.FC = () => {
           }
         }
       }
-      notify.success(existingOrder ? 'Order updated' : `Order placed for ${table.name || `Table ${table.number}`}`);
+      notify.success(existingOrder ? 'Order updated' : `Order placed for ${table.name || `Table ${table.number}}`);
       closeOrderModal();
       setOrderItems([]);
     } catch (error: any) {
@@ -271,7 +271,7 @@ const OrderModal: React.FC = () => {
               paymentMethod,
               customerName: 'Walk-in Customer',
             });
-            await completeOrder(existingOrder.id, paymentMethod);
+            await completeOrder(existingOrder.id, paymentMethod); // No skipRefresh - optimistic update will handle it
             setShowBillDialog(false);
             closeOrderModal();
             setOrderItems([]);
@@ -379,7 +379,7 @@ const OrderModal: React.FC = () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
             setIsPrinting(true);
             try {
-              await completeOrder(existingOrder.id, paymentMethod);
+              await completeOrder(existingOrder.id, paymentMethod); // No skipRefresh - optimistic update will handle it
               setShowBillDialog(false);
               closeOrderModal();
               setOrderItems([]);
@@ -395,7 +395,7 @@ const OrderModal: React.FC = () => {
       }
 
       // Complete order
-      await completeOrder(existingOrder.id, paymentMethod);
+      await completeOrder(existingOrder.id, paymentMethod); // No skipRefresh - optimistic update will handle it
 
       // Close modal and reset
       setShowBillDialog(false);

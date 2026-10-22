@@ -30,7 +30,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   Timer? _wsReconnectTimer;
   bool _isSocketActive = false;
 
-  _TableStatusFilter _statusFilter = _TableStatusFilter.all;
   String? _sectionFilter;
 
   @override
@@ -970,27 +969,12 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         : _TableStatusFilter.reserved;
   }
 
-  List<TableModel> _filteredTables(List<TableModel> tables, DataProvider data) {
-    if (_statusFilter == _TableStatusFilter.all) return tables;
-    return tables
-        .where((table) => _statusFor(table, data) == _statusFilter)
-        .toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     context.watch<AuthProvider>();
     context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final tables = data.tables;
-
-    final occupiedCount = tables
-        .where((t) => _statusFor(t, data) == _TableStatusFilter.occupied)
-        .length;
-    final reservedCount = tables
-        .where((t) => _statusFor(t, data) == _TableStatusFilter.reserved)
-        .length;
-    final availableCount = tables.length - occupiedCount - reservedCount;
 
     // Section grouping — mirrors the desktop app: the flagged default section
     // (or the "Section 1" fallback) buckets tables with no explicit section.
@@ -1008,7 +992,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         ? _sectionFilter
         : null;
 
-    final filteredTables = _filteredTables(tables, data)
+    final filteredTables = tables
         .where((t) =>
             activeSection == null || data.sectionNameOf(t) == activeSection)
         .toList()
@@ -1032,29 +1016,19 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Column(
-              children: [
-                if (pillSections.length > 1) ...[
-                  _buildSectionPills(
-                    total: tables.length,
-                    sections: pillSections,
-                    counts: sectionCounts,
-                    active: activeSection,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                _buildFilterPills(
-                  total: tables.length,
-                  occupied: occupiedCount,
-                  available: availableCount,
-                  reserved: reservedCount,
-                ),
-              ],
+          if (pillSections.length > 1) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: _buildSectionPills(
+                total: tables.length,
+                sections: pillSections,
+                counts: sectionCounts,
+                active: activeSection,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
+          ] else
+            const SizedBox(height: 4),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshData,
@@ -1193,77 +1167,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFilterPills({
-    required int total,
-    required int occupied,
-    required int available,
-    required int reserved,
-  }) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _statFilterPill(
-            icon: Icons.grid_view_rounded,
-            label: 'All',
-            count: total,
-            value: _TableStatusFilter.all,
-          ),
-          const SizedBox(width: 8),
-          _statFilterPill(
-            icon: Icons.people_alt_outlined,
-            label: 'Occupied',
-            count: occupied,
-            value: _TableStatusFilter.occupied,
-          ),
-          const SizedBox(width: 8),
-          _statFilterPill(
-            icon: Icons.table_restaurant,
-            label: 'Available',
-            count: available,
-            value: _TableStatusFilter.available,
-          ),
-          const SizedBox(width: 8),
-          _statFilterPill(
-            icon: Icons.schedule,
-            label: 'Reserved',
-            count: reserved,
-            value: _TableStatusFilter.reserved,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _accentForFilter(_TableStatusFilter value) {
-    switch (value) {
-      case _TableStatusFilter.occupied:
-        return AppColors.primary;
-      case _TableStatusFilter.available:
-        return AppColors.success;
-      case _TableStatusFilter.reserved:
-        return AppColors.info;
-      case _TableStatusFilter.all:
-        return AppColors.primary;
-    }
-  }
-
-  Widget _statFilterPill({
-    required IconData icon,
-    required String label,
-    required int count,
-    required _TableStatusFilter value,
-  }) {
-    return _filterPill(
-      icon: icon,
-      label: label,
-      count: count,
-      selected: _statusFilter == value,
-      accent: _accentForFilter(value),
-      onTap: () => setState(() => _statusFilter = value),
     );
   }
 
@@ -1724,7 +1627,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   }
 }
 
-enum _TableStatusFilter { all, occupied, available, reserved }
+enum _TableStatusFilter { occupied, available, reserved }
 
 /// Fades + slides a child in on first build, delayed by its grid index, for a
 /// staggered entrance when the grid first appears.

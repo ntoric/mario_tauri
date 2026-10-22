@@ -9,7 +9,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
 
 const BillModal: React.FC = () => {
-  const { stores, orders, createBill, completeOrder } = useDataStore();
+  const { stores, orders, createBill, completeOrder, fetchOrders } = useDataStore();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const taxEnabled = isTaxEnabled(currentStore);
@@ -72,7 +72,7 @@ const BillModal: React.FC = () => {
               paymentMethod,
               customerName: 'Walk-in Customer',
             });
-            await completeOrder(order.id, paymentMethod);
+            await completeOrder(order.id, paymentMethod); // No skipRefresh - optimistic update will handle it
             closeBillModal();
           } catch (error: any) {
             setErrorDialog({ show: true, message: error.message || 'Failed to complete order' });
@@ -178,7 +178,7 @@ const BillModal: React.FC = () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
             setIsPrinting(true);
             try {
-              await completeOrder(order.id, paymentMethod);
+              await completeOrder(order.id, paymentMethod); // No skipRefresh - optimistic update will handle it
               closeBillModal();
             } catch (err: any) {
               setErrorDialog({ show: true, message: err.message || 'Failed to complete order' });
@@ -191,7 +191,7 @@ const BillModal: React.FC = () => {
       }
 
       // Complete order
-      await completeOrder(order.id, paymentMethod);
+      await completeOrder(order.id, paymentMethod); // No skipRefresh - optimistic update will handle it
 
       closeBillModal();
     } catch (error: any) {

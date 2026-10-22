@@ -36,7 +36,7 @@ const Tables: React.FC = () => {
   useEffect(() => {
     fetchTables();
     fetchTableSections();
-    fetchOrders();
+    fetchOrders({ status: 'active' }); // Only fetch active orders for Tables page
     fetchCategories();
     fetchItems();
   }, [fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems]);
@@ -56,7 +56,7 @@ const Tables: React.FC = () => {
       try {
         await Promise.all([
           fetchTables(),
-          fetchOrders(),
+          fetchOrders({ status: 'active' }), // Only fetch active orders
         ]);
       } finally {
         isSyncing = false;
@@ -121,7 +121,7 @@ const Tables: React.FC = () => {
         const queueItems = useDataStore.getState().billQueue;
         if (!queueItems.length) return;
 
-        await fetchOrders();
+        await fetchOrders({ limit: 0 }); // Fetch all orders for bill queue processing (needs completed orders)
         const allOrders = useDataStore.getState().orders;
 
         for (const queueItem of queueItems) {
@@ -400,7 +400,7 @@ const Tables: React.FC = () => {
       await updateOrder(changeTableDialog.order.id, {
         tableId: confirmTableChange.id,
         tableNumber: confirmTableChange.number,
-      });
+      }); // Optimistic update will handle refresh
       setConfirmTableChange(null);
       setChangeTableDialog(null);
     } catch (error) {
@@ -429,7 +429,7 @@ const Tables: React.FC = () => {
     if (!cancelOrderConfirm) return;
     setIsCancellingOrder(true);
     try {
-      await cancelOrder(cancelOrderConfirm.id);
+      await cancelOrder(cancelOrderConfirm.id, undefined); // Optimistic update will handle refresh
       setCancelOrderConfirm(null);
       setPreviewTable(null);
     } catch (error) {
@@ -591,7 +591,7 @@ const Tables: React.FC = () => {
         customerName: 'Walk-in Customer',
       });
 
-      await completeOrder(activeOrder.id, paymentMethod);
+      await completeOrder(activeOrder.id, paymentMethod, { skipRefresh: true });
 
       setBillDialogTable(null);
     } catch (error) {

@@ -79,7 +79,7 @@ const OrderPage: React.FC = () => {
     fetchCategories();
     fetchItems();
     fetchTables();
-    fetchOrders();
+    fetchOrders({ status: 'active' });
   }, [fetchCategories, fetchItems, fetchTables, fetchOrders]);
 
   // Set page header
@@ -315,7 +315,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
       } else {
         await createOrder({
           tableId: table.id,
@@ -325,10 +325,9 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
       }
 
-      await fetchOrders();
       notify.success(existingOrder ? 'Order updated' : `Order placed for ${table.name || `Table ${table.number}`}`);
       navigate('/');
       setOrderItems([]);
@@ -381,7 +380,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
         console.log('[KOT] Order updated successfully');
       } else {
         console.log('[KOT] Creating new order', { tableId: table.id, tableNumber: table.number, items: orderItems, totalAmount, taxAmount, paymentMethod });
@@ -393,15 +392,10 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
         console.log('[KOT] New order created', newOrder);
         orderId = newOrder.id;
       }
-
-      console.log('[KOT] Refreshing orders...');
-      // Ensure orders are refreshed before navigation
-      await fetchOrders();
-      console.log('[KOT] Orders refreshed');
 
       if (withPrint && orderId) {
         try {
@@ -450,7 +444,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
         await savePrint(existingOrder.id, {
           orderId: existingOrder.id,
           tableNumber: table.number,
@@ -462,7 +456,7 @@ const OrderPage: React.FC = () => {
           total: totalAmount + taxAmount,
           paymentMethod,
           customerName: 'Walk-in Customer',
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
       } else {
         await saveEBill({
           tableId: table.id,
@@ -473,7 +467,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
       }
       notify.success('E-bill saved');
       navigate('/');
@@ -524,7 +518,7 @@ const OrderPage: React.FC = () => {
           items: orderItems,
           totalAmount,
           taxAmount,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
         orderId = existingOrder.id;
       } else {
         const newOrder = await createOrder({
@@ -535,7 +529,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
-        });
+        }, { skipRefresh: true }); // Skip refresh since we navigate away
         orderId = newOrder.id;
       }
 
@@ -553,7 +547,6 @@ const OrderPage: React.FC = () => {
           message: 'Failed to print the bill. Save order only?',
           onConfirm: async () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
-            await fetchOrders();
             navigate('/');
             setOrderItems([]);
           },
@@ -573,7 +566,7 @@ const OrderPage: React.FC = () => {
         total,
         paymentMethod,
         customerName: 'Walk-in Customer',
-      });
+      }, { skipRefresh: true });
 
       notify.success('Order billed and printed');
       navigate('/');
@@ -596,7 +589,7 @@ const OrderPage: React.FC = () => {
         onConfirm: async () => {
           setPrinterConfirm(p => ({ ...p, show: false }));
           try {
-            await cancelOrder(existingOrder.id);
+            await cancelOrder(existingOrder.id, undefined, { skipRefresh: true });
             notify.success('Order cancelled');
             navigate('/');
             setOrderItems([]);

@@ -2736,6 +2736,13 @@ body {
   flex: 1;
 }
 
+.modal > form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .order-modal .modal-body {
   overflow: hidden;
 }

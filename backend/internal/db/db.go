@@ -396,6 +396,28 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`CREATE INDEX IF NOT EXISTS idx_support_tickets_store ON support_tickets (store_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets (status)`,
 		`CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_messages (ticket_id)`,
+		// Orders — performance indexes for common queries
+		`CREATE INDEX IF NOT EXISTS idx_orders_store_status_created ON orders (store_id, status, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_store_created ON orders (store_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_table_id ON orders (table_id) WHERE table_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_created_by ON orders (created_by)`,
+		// Order items — optimize the JOIN on order_items.order_id
+		`CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_order_items_item_id ON order_items (item_id)`,
+		// Items — optimize the JOIN on items.category_id
+		`CREATE INDEX IF NOT EXISTS idx_items_category_id ON items (category_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_items_store_id ON items (store_id)`,
+		// Bills — for fetching bills by store and order
+		`CREATE INDEX IF NOT EXISTS idx_bills_store_id ON bills (store_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_bills_order_id ON bills (order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_bills_generated_at ON bills (generated_at DESC)`,
+		// Categories — for fetching items by category
+		`CREATE INDEX IF NOT EXISTS idx_categories_store_id ON categories (store_id)`,
+		// Tables — for fetching tables by store
+		`CREATE INDEX IF NOT EXISTS idx_tables_store_id ON tables (store_id)`,
+		// Bill queue — for polling pending bills
+		`CREATE INDEX IF NOT EXISTS idx_bill_queue_store_status ON bill_queue (store_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_bill_queue_order_id ON bill_queue (order_id)`,
 	}
 
 	for _, q := range alterQueries {

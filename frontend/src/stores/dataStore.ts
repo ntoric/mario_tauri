@@ -62,13 +62,13 @@ interface DataState {
   setDefaultTableSection: (name: string) => Promise<void>;
   
   // Orders
-  fetchOrders: () => Promise<void>;
-  createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
-  saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>) => Promise<Order>;
-  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
-  updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
-  completeOrder: (id: string, paymentMethod?: string) => Promise<void>;
-  cancelOrder: (id: string, reason?: string) => Promise<void>;
+  fetchOrders: (options?: { status?: string; limit?: number }) => Promise<void>;
+  createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
+  saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
+  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>, options?: { skipRefresh?: boolean }) => Promise<void>;
+  updateOrder: (id: string, order: Partial<Order>, options?: { skipRefresh?: boolean }) => Promise<void>;
+  completeOrder: (id: string, paymentMethod?: string, options?: { skipRefresh?: boolean }) => Promise<void>;
+  cancelOrder: (id: string, reason?: string, options?: { skipRefresh?: boolean }) => Promise<void>;
   mergeOrders: (id: string, mergeOrderId: string) => Promise<void>;
   getActiveOrderByTable: (tableId: string) => Order | undefined;
   
@@ -153,7 +153,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         get().fetchItems(),
         get().fetchTables(),
         get().fetchTableSections(),
-        get().fetchOrders(),
+        get().fetchOrders({ limit: 0 }), // Fetch all orders for refresh
         get().fetchBills(),
         get().fetchUsers(),
       ]);
@@ -435,23 +435,23 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Orders
-  fetchOrders: async () => {
+  fetchOrders: async (options?: { status?: string; limit?: number }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
-      const orders = await api.getOrders(currentStoreId);
+      const orders = await api.getOrders(currentStoreId, options?.status, options?.limit);
       set({ orders });
     } catch (error) {
       console.error('Failed to fetch orders:', error);
     }
   },
 
-  createOrder: async (order) => {
+  createOrder: async (order, options?: { skipRefresh?: boolean }) => {
     let currentStoreId = useAuthStore.getState().currentStoreId;
     let currentUser = useAuthStore.getState().user;
-    
+
     console.log('[DataStore] Auth check:', { currentStoreId, currentUser, hasStoreId: !!currentStoreId, hasUser: !!currentUser });
-    
+
     // If user is null, try to refresh from server
     if (!currentUser) {
       console.log('[DataStore] User is null, attempting to refresh...');
@@ -460,7 +460,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       currentStoreId = authStore.currentStoreId;
       console.log('[DataStore] After refresh:', { currentUser, currentStoreId });
     }
-    
+
     if (!currentStoreId || !currentUser) {
       console.error('[DataStore] Auth failed:', { currentStoreId, currentUser });
       throw new Error('User or store not authenticated');
@@ -472,11 +472,15 @@ export const useDataStore = create<DataState>((set, get) => ({
       createdBy: currentUser.id,
     });
     console.log('[DataStore] Order created successfully', newOrder);
-    await get().fetchOrders();
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: add new order to the beginning of the array
+      set(state => ({ orders: [newOrder, ...state.orders] }));
+    }
     return newOrder;
   },
 
-  saveEBill: async (order) => {
+  saveEBill: async (order, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     const currentUser = useAuthStore.getState().user;
     if (!currentStoreId || !currentUser) {
@@ -487,53 +491,87 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    await get().fetchOrders();
-    await get().fetchBills();
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: add new order to the beginning of the array
+      set(state => ({ orders: [savedOrder, ...state.orders] }));
+      // Also refresh bills since a bill was created
+      await get().fetchBills();
+    }
     return savedOrder;
   },
 
-  savePrint: async (orderId, bill) => {
+  savePrint: async (orderId, bill, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     const currentUser = useAuthStore.getState().user;
     if (!currentStoreId || !currentUser) {
       throw new Error('User or store not authenticated');
     }
-    await api.savePrint(orderId, {
+    const completedOrder = await api.savePrint(orderId, {
       ...bill,
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
-    await get().fetchOrders();
-    await get().fetchBills();
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: update the order with completed status
+      if (completedOrder) {
+        set(state => ({
+          orders: state.orders.map(o => o.id === orderId ? completedOrder : o)
+        }));
+      }
+      // Also refresh bills since a bill was created
+      await get().fetchBills();
+    }
   },
 
-  updateOrder: async (id, order) => {
+  updateOrder: async (id, order, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
     console.log('[DataStore] Updating order', { id, order });
-    await api.updateOrder(id, order);
-    console.log('[DataStore] Order updated successfully');
-    await get().fetchOrders();
+    const updatedOrder = await api.updateOrder(id, order);
+    console.log('[DataStore] Order updated successfully', updatedOrder);
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: update the order in the array
+      set(state => ({
+        orders: state.orders.map(o => o.id === id ? updatedOrder : o)
+      }));
+    }
   },
 
-  completeOrder: async (id, paymentMethod) => {
+  completeOrder: async (id, paymentMethod, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
     await api.completeOrder(id, paymentMethod);
-    await get().fetchOrders();
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: remove completed order from active orders
+      set(state => ({
+        orders: state.orders.map(o => o.id === id ? { ...o, status: 'completed', paymentMethod: paymentMethod || o.paymentMethod } : o)
+      }));
+    }
   },
 
-  cancelOrder: async (id, reason) => {
+  cancelOrder: async (id, reason, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.cancelOrder(id, reason);
-    await get().fetchOrders();
+    const cancelledOrder = await api.cancelOrder(id, reason);
+
+    if (!options?.skipRefresh) {
+      // Optimistic update: update the order status to cancelled
+      if (cancelledOrder) {
+        set(state => ({
+          orders: state.orders.map(o => o.id === id ? cancelledOrder : o)
+        }));
+      }
+    }
   },
 
   mergeOrders: async (id, mergeOrderId) => {
@@ -542,7 +580,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     await api.mergeOrders(id, mergeOrderId);
-    await get().fetchOrders();
+    await get().fetchOrders({ limit: 0 }); // Fetch all orders to ensure merged order is included
   },
 
   getActiveOrderByTable: (tableId) => {
@@ -606,7 +644,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     });
     // Mark order as completed and release the table
     await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
-    await get().fetchOrders();
+    await get().fetchOrders({ limit: 0 }); // Fetch all orders to ensure completed order is included
   },
 
   getNextInvoiceNo: async () => {

@@ -121,7 +121,7 @@ const History: React.FC = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchOrders();
+    fetchOrders({ limit: 1000 }); // Fetch more orders for history view (all statuses)
     fetchBills();
   }, [fetchOrders, fetchBills]);
 

@@ -17,7 +17,7 @@ const Reports: React.FC = () => {
   const [customDateTo, setCustomDateTo] = useState<string>('');
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders({ limit: 1000 }); // Fetch more orders for reports/analytics (all statuses)
     fetchBills(true);
   }, [fetchOrders, fetchBills, currentStoreId]);
 

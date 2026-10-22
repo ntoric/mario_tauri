@@ -70,6 +70,10 @@ func parseLimitQuery(r *http.Request, max int) int {
 	return n
 }
 
+// defaultOrderLimit is the default number of orders to fetch when no limit is specified.
+// This prevents fetching all historical orders which can be slow for stores with many orders.
+const defaultOrderLimit = 70
+
 // GetOrders handles GET /api/orders
 func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
@@ -83,6 +87,12 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		From:     parseTimeQuery(r, "from"),
 		To:       parseTimeQuery(r, "to"),
 		Limit:    parseLimitQuery(r, maxListLimit),
+	}
+
+	// Apply default limit only if no limit was specified and client didn't request all orders
+	// Clients can pass limit=0 to fetch all orders (for backward compatibility)
+	if filter.Limit == 0 && r.URL.Query().Get("limit") != "0" {
+		filter.Limit = defaultOrderLimit
 	}
 
 	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
