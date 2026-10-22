@@ -226,7 +226,7 @@ const OrderModal: React.FC = () => {
           }
         }
       }
-      notify.success(existingOrder ? 'Order updated' : `Order placed for ${table.name || `Table ${table.number}}`);
+      notify.success(existingOrder ? 'Order updated' : `Order placed for ${table.name || `Table ${table.number}`}`);
       closeOrderModal();
       setOrderItems([]);
     } catch (error: any) {
