@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { History, Loader2 } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, History, Loader2, RefreshCw } from 'lucide-react';
 import { useUpdater } from '../hooks/useUpdater';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -16,7 +17,7 @@ interface MenuPosition {
 }
 
 const MENU_WIDTH = 250;
-const MENU_HEIGHT_ESTIMATE = 110;
+const MENU_HEIGHT_ESTIMATE = 200;
 
 const AppContextMenu: React.FC = () => {
   const {
@@ -30,6 +31,8 @@ const AppContextMenu: React.FC = () => {
   } = useUpdater(false);
 
   const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const hasCheckedDowngrade = useRef(false);
@@ -92,6 +95,20 @@ const AppContextMenu: React.FC = () => {
     };
   }, [menuPos]);
 
+  // location.key is 'default' only on the router's first history entry, so
+  // Back is disabled when there's nowhere in-app to go back to.
+  const canGoBack = location.key !== 'default';
+
+  const handleBack = () => {
+    setMenuPos(null);
+    if (canGoBack) navigate(-1);
+  };
+
+  const handleReload = () => {
+    setMenuPos(null);
+    window.location.reload();
+  };
+
   const handleDowngradeClick = async () => {
     setMenuPos(null);
     const accepted = await confirm({
@@ -134,6 +151,46 @@ const AppContextMenu: React.FC = () => {
             userSelect: 'none',
           }}
         >
+          <button
+            onClick={handleBack}
+            disabled={!canGoBack}
+            style={{
+              ...itemStyle,
+              opacity: canGoBack ? 1 : 0.5,
+              cursor: canGoBack ? 'pointer' : 'default',
+            }}
+            onMouseEnter={(e) => {
+              if (canGoBack) e.currentTarget.style.background = 'var(--gray-100)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <ArrowLeft size={15} />
+            Back
+          </button>
+          <button
+            onClick={handleReload}
+            style={itemStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--gray-100)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <RefreshCw size={15} />
+            Reload
+          </button>
+
+          <div
+            style={{
+              height: '1px',
+              background: 'var(--gray-200)',
+              margin: '6px 4px',
+            }}
+          />
+
           <div
             style={{
               padding: '6px 10px',
