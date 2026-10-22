@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, TableSection, Order, Bill, Store, BillQueueItem, ExpenseCategory, Expense } from '../types';
+import type { Category, Item, Table, TableSection, Order, Bill, Store, ExpenseCategory, Expense } from '../types';
 
 interface DataState {
   // Data
@@ -13,7 +13,6 @@ interface DataState {
   tableSections: TableSection[];
   orders: Order[];
   bills: Bill[];
-  billQueue: BillQueueItem[];
   users: any[];
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
@@ -77,7 +76,6 @@ interface DataState {
   createBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   enqueueBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   getNextInvoiceNo: () => Promise<string>;
-  fetchBillQueue: () => Promise<void>;
   
   // Users
   fetchUsers: () => Promise<void>;
@@ -108,7 +106,6 @@ export const useDataStore = create<DataState>((set, get) => ({
   tableSections: [],
   orders: [],
   bills: [],
-  billQueue: [],
   users: [],
   expenseCategories: [],
   expenses: [],
@@ -219,7 +216,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       tableSections: [],
       orders: [],
       bills: [],
-      billQueue: [],
       expenseCategories: [],
       expenses: [],
     });
@@ -653,17 +649,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('Store not selected');
     }
     return api.getNextInvoiceNo(currentStoreId);
-  },
-
-  fetchBillQueue: async () => {
-    const currentStoreId = useAuthStore.getState().currentStoreId;
-    if (!currentStoreId) return;
-    try {
-      const billQueue = await api.getBillQueue(currentStoreId);
-      set({ billQueue: billQueue || [] });
-    } catch (error) {
-      console.error('Failed to fetch bill queue:', error);
-    }
   },
 
   // Users

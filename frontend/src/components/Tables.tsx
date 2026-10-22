@@ -6,8 +6,6 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
-import { isQuietHours } from '../utils/quietHours';
-import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
@@ -24,7 +22,7 @@ import type { Table } from '../types';
 const DEFAULT_SECTION = 'Section 1';
 
 const Tables: React.FC = () => {
-  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, mergeOrders, cancelOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, fetchBillQueue, createTableSection, renameTableSection, deleteTableSection, setDefaultTableSection } = useDataStore();
+  const { stores, tables, tableSections, getActiveOrderByTable, createTable, deleteTable, createBill, completeOrder, updateOrder, mergeOrders, cancelOrder, fetchTables, fetchTableSections, fetchOrders, fetchCategories, fetchItems, createTableSection, renameTableSection, deleteTableSection, setDefaultTableSection } = useDataStore();
   const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
@@ -103,115 +101,6 @@ const Tables: React.FC = () => {
       ws?.close();
     };
   }, [currentStoreId, fetchOrders, fetchTables]);
-
-  useEffect(() => {
-    if (!currentStoreId || !currentStore?.remoteBillingEnabled) return;
-
-    const hasPrinterConfig = !!(currentStore.printerName || (currentStore.printerVendorId && currentStore.printerProductId));
-    if (!hasPrinterConfig) return;
-
-    let pollTimer: number | null = null;
-    let isPolling = false;
-
-    const pollQueue = async () => {
-      if (isPolling || isQuietHours()) return;
-      isPolling = true;
-      try {
-        await fetchBillQueue();
-        const queueItems = useDataStore.getState().billQueue;
-        if (!queueItems.length) return;
-
-        await fetchOrders({ limit: 0 }); // Fetch all orders for bill queue processing (needs completed orders)
-        const allOrders = useDataStore.getState().orders;
-
-        for (const queueItem of queueItems) {
-          try {
-            const billPayload = JSON.parse(queueItem.billData || '{}');
-            const order = allOrders.find(o => o.id === queueItem.orderId);
-            if (!order) continue;
-
-            const printItems = order.items.map((oi: any) => {
-              const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
-              const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
-              return {
-                name: oi.item.name,
-                hsn: oi.item.description || '',
-                qty: oi.quantity,
-                unit: 'PCS',
-                rate: orderItemUnitPrice(oi),
-                tax_percent: taxPercent,
-                amount: itemTotal,
-              };
-            });
-
-            const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-            const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
-            const cgst = actualTax / 2;
-            const sgst = actualTax / 2;
-
-            await printerService.printInvoice({
-              type: 'invoice',
-              printer: {
-                type: 'usb',
-                name: currentStore?.printerName || 'Thermal Printer',
-                vendor_id: currentStore?.printerVendorId || '0x0fe6',
-                product_id: currentStore?.printerProductId || '0x811e',
-                paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-              },
-              invoice: {
-                store: {
-                  name: currentStore?.name || 'Cafe',
-                  branch: currentStore?.branch || '',
-                  location: currentStore?.location || '',
-                  ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
-                  ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-                  ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-                  address: currentStore?.location || '',
-                },
-                customer: {
-                  name: billPayload.customerName || 'Walk-in Customer',
-                  mobile: '',
-                },
-                invoice_no: billPayload.invoiceNo || `INV-${Date.now()}`,
-                bill_no: billPayload.invoiceNo || `INV-${Date.now()}`,
-                date: new Date().toLocaleString('en-IN'),
-                items: printItems,
-                summary: {
-                  sub_total: taxable,
-                  discount: Number(billPayload.discount || 0),
-                  taxable,
-                  cgst,
-                  sgst,
-                  grand_total: Number(billPayload.total || order.totalAmount),
-                },
-                payment: {
-                  cash: billPayload.paymentMethod === 'cash' ? Number(billPayload.total || order.totalAmount) : 0,
-                  card: billPayload.paymentMethod === 'card' ? Number(billPayload.total || order.totalAmount) : 0,
-                  upi: billPayload.paymentMethod === 'upi' ? Number(billPayload.total || order.totalAmount) : 0,
-                  balance: 0,
-                },
-                payment_mode: billPayload.paymentMethod || 'cash',
-                footer: ['Thank You Visit Again'],
-              },
-            });
-          } catch {
-            // Ignore malformed payload/print failures for poller stability.
-          }
-        }
-      } finally {
-        isPolling = false;
-      }
-    };
-
-    void pollQueue();
-    pollTimer = window.setInterval(() => {
-      void pollQueue();
-    }, 3000);
-
-    return () => {
-      if (pollTimer) window.clearInterval(pollTimer);
-    };
-  }, [currentStoreId, currentStore?.remoteBillingEnabled, currentStore, fetchBillQueue, fetchOrders]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTable, setNewTable] = useState({ number: '', name: '', seats: 4, section: '' });

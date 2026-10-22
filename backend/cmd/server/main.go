@@ -40,9 +40,6 @@ func main() {
 	defer sqlDB.Close()
 	log.Printf("Successfully connected to Database: %s on host: %s", cfg.DBName, cfg.DBHost)
 
-	// Start Background Bill Queue Processor
-	queue.StartProcessor(sqlDB, cfg)
-
 	// Start Background Periodic Cleanup Worker
 	queue.StartCleanupProcessor(sqlDB, cfg)
 
@@ -56,6 +53,10 @@ func main() {
 	}
 	repo := repository.NewRepository(sqlDB, redisCache)
 	realtimeHub := realtime.NewHub()
+	printHub := realtime.NewPrintHub()
+
+	// Expire remote-bill print jobs that never got acked by the printer.
+	queue.StartBillQueueSweeper(repo, printHub)
 
 	// Server-side session store backed by Redis. Required for auth: if Redis is
 	// unavailable, protected endpoints return 503 rather than trusting tokens.
@@ -65,7 +66,7 @@ func main() {
 	} else {
 		log.Println("WARNING: Redis unavailable — session store disabled; all authenticated requests will fail")
 	}
-	h := handler.NewHandler(repo, cfg, realtimeHub, sessionStore)
+	h := handler.NewHandler(repo, cfg, realtimeHub, printHub, sessionStore)
 
 	// 5. Setup Router & Middlewares
 	r := chi.NewRouter()
@@ -188,7 +189,13 @@ func main() {
 		r.Post("/api/bills", h.CreateBill)
 		r.Post("/api/bills/queue", h.QueueBill)
 		r.Get("/api/bills/queue", h.GetBillQueue)
+		r.Post("/api/bills/queue/{id}/claim", h.ClaimQueuedBill)
+		r.Post("/api/bills/queue/{id}/ack", h.AckQueuedBill)
+		r.Get("/api/bills/queue/{id}/status", h.GetBillQueueStatus)
 		r.Get("/api/bills/next-invoice-no", h.GetNextInvoiceNo)
+
+		// Remote bill printing — designated-printer websocket channel
+		r.Get("/api/ws/bill-print", h.BillPrintWS)
 
 		// System
 		r.Post("/api/system/reset", h.SystemReset)

@@ -448,8 +448,26 @@ class ApiService {
     });
   }
 
-  async getBillQueue(storeId: string) {
-    return this.fetch(`/bills/queue?storeId=${storeId}`);
+  async getBillQueue(storeId: string, deviceId: string) {
+    return this.fetch(`/bills/queue?storeId=${storeId}&deviceId=${encodeURIComponent(deviceId)}`);
+  }
+
+  async claimBillQueueItem(queueId: string, storeId: string, deviceId: string) {
+    return this.fetch(`/bills/queue/${queueId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ storeId, deviceId }),
+    });
+  }
+
+  async ackBillQueueItem(queueId: string, storeId: string, deviceId: string, status: 'printed' | 'failed', error?: string) {
+    return this.fetch(`/bills/queue/${queueId}/ack`, {
+      method: 'POST',
+      body: JSON.stringify({ storeId, deviceId, status, error }),
+    });
+  }
+
+  async getBillQueueStatus(queueId: string, storeId: string) {
+    return this.fetch(`/bills/queue/${queueId}/status?storeId=${storeId}`);
   }
 
   async getNextInvoiceNo(storeId: string) {

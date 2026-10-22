@@ -379,6 +379,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// superadmins can see which release each store is running.
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version VARCHAR(64)`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS app_version_seen_at TIMESTAMP`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS remote_printer_device_id VARCHAR(255)`,
 		// Order combine — the original orders_status_check only allowed
 		// active/completed/cancelled, so the merge endpoint failed on databases
 		// created before the 'merged' status existed. Re-create the constraint
