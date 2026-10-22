@@ -1,6 +1,6 @@
 [package]
 name = "mario-juicy"
-version = "1.14.4"
+version = "1.14.5"
 description = "Mario Juicy POS System"
 authors = ["you"]
 edition = "2021"
