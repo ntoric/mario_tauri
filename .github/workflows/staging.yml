@@ -156,6 +156,15 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
+      - name: Normalize staging API URL
+        shell: bash
+        run: |
+          # Accept either a bare domain or a full /api base and normalize.
+          url="${STAGING_API_URL%/}"
+          [[ "$url" != */api ]] && url="$url/api"
+          echo "STAGING_API_URL=$url" >> "$GITHUB_ENV"
+          echo "Resolved staging API URL: $url"
+
       - name: Point updater endpoint at staging
         shell: bash
         run: |
@@ -209,6 +218,15 @@ jobs:
             echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
             echo "flutter.sdk=$FLUTTER_ROOT"
           } > local.properties
+
+      - name: Normalize staging API URL
+        shell: bash
+        run: |
+          # Accept either a bare domain or a full /api base and normalize.
+          url="${STAGING_API_URL%/}"
+          [[ "$url" != */api ]] && url="$url/api"
+          echo "STAGING_API_URL=$url" >> "$GITHUB_ENV"
+          echo "Resolved staging API URL: $url"
 
       - name: Build staging APK
         working-directory: mario_app
