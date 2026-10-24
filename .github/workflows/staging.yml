@@ -1,0 +1,226 @@
+name: Staging Build
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Full API base including the /api suffix — mirrors the production
+  # VITE_API_URL convention (https://mario-api.ntoric.com/api).
+  # Override without editing this file via the STAGING_API_URL repository
+  # variable (Settings → Secrets and variables → Actions → Variables).
+  STAGING_API_URL: ${{ vars.STAGING_API_URL || 'https://mario-api-stgng.ntoric.com/api' }}
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run Go tests
+        working-directory: backend
+        run: go test ./...
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npx tsc
+
+  test-flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Run Flutter tests
+        working-directory: mario_app
+        run: |
+          flutter pub get
+          flutter test
+
+  docker:
+    needs: [test-backend, test-frontend, test-flutter]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            image: mario_v2_backend
+          - name: frontend
+            context: ./frontend
+            image: mario_v2_frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:staging
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:staging-${{ github.sha }}
+
+  tauri-staging:
+    needs: [test-backend, test-frontend, test-flutter]
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build Go printer binary
+        shell: bash
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          cd frontend/src-tauri/mario-printer
+          GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ../binaries/mario-printer-x86_64-pc-windows-msvc.exe .
+
+      - name: Verify Go binary exists
+        shell: bash
+        run: |
+          ls -la frontend/src-tauri/binaries/
+
+      - name: Check signing secret
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Private key is EMPTY"
+            exit 1
+          else
+            echo "Private key exists, length: ${#TAURI_SIGNING_PRIVATE_KEY}"
+          fi
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      - name: Point updater endpoint at staging
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const p='frontend/src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.plugins.updater.endpoints=[process.env.STAGING_API_URL.replace(/\/$/,'')+'/update/manifest'];fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');console.log('updater endpoints ->',c.plugins.updater.endpoints);"
+        env:
+          STAGING_API_URL: ${{ env.STAGING_API_URL }}
+
+      - name: Build staging desktop app
+        run: cd frontend && npm run tauri build -- --target x86_64-pc-windows-msvc --features go-printer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          VITE_API_URL: ${{ env.STAGING_API_URL }}
+          VITE_BACKEND_URL: ${{ env.STAGING_API_URL }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mario-juicy-staging-windows
+          path: frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/
+          retention-days: 30
+
+  flutter-staging:
+    needs: [test-backend, test-frontend, test-flutter]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Configure SDK paths
+        shell: bash
+        working-directory: mario_app/android
+        run: |
+          # android/local.properties is committed with developer-machine
+          # paths; rewrite it for the CI runner's SDK locations.
+          rm -f local.properties
+          {
+            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+            echo "flutter.sdk=$FLUTTER_ROOT"
+          } > local.properties
+
+      - name: Build staging APK
+        working-directory: mario_app
+        run: |
+          flutter pub get
+          flutter build apk --release \
+            --dart-define=API_URL="$STAGING_API_URL" \
+            --dart-define=API_BASE_URL="${STAGING_API_URL%/api}"
+        env:
+          STAGING_API_URL: ${{ env.STAGING_API_URL }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mario-app-staging-android
+          path: mario_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
