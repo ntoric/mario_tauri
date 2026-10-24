@@ -1,4 +1,4 @@
-.PHONY: up down build logs ps clean set-version release migrate db-migrate
+.PHONY: up down build logs ps clean set-version release migrate db-migrate logs-frontend web-build web-up web-run
 
 # Docker Compose commands
 up:
@@ -24,6 +24,9 @@ logs-backend:
 
 logs-db:
 	docker-compose logs -f db
+
+logs-frontend:
+	docker-compose logs -f frontend
 
 ps:
 	docker-compose ps
@@ -60,6 +63,22 @@ restart: down up
 
 restart-backend:
 	docker-compose restart backend
+
+# ── Web Frontend (Docker) ──────────────────────────────────────────────
+# Build the standalone web image (Vite build + nginx)
+web-build:
+	docker build -t mario-web ./frontend
+
+# Build + run via compose (serves on http://localhost:$${WEB_PORT:-3000})
+web-up:
+	docker-compose up -d --build frontend
+
+# Run the image standalone, pointed at any backend
+# Usage: make web-run BACKEND_URL=http://localhost:8088
+web-run:
+	docker run --rm -d --name mario-web -p $${WEB_PORT:-3000}:80 \
+		-e BACKEND_URL=$${BACKEND_URL:-http://host.docker.internal:8088} \
+		mario-web
 
 # ── Tauri Desktop App ──────────────────────────────────────────────────
 # Build using the native Rust printer (default)

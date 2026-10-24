@@ -88,6 +88,23 @@ services:
     networks:
       - cafe-network
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ntoric/mario_v2_frontend:latest
+    container_name: cafe-frontend
+    restart: unless-stopped
+    environment:
+      # nginx proxies /api (REST + WebSocket) to this upstream
+      BACKEND_URL: http://backend:8088
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - backend
+    networks:
+      - cafe-network
+
 networks:
   cafe-network:
     driver: bridge
