@@ -82,7 +82,7 @@ jobs:
             image: mario_v2_backend
           - name: frontend
             context: ./frontend
-            image: mario_v2_frontend
+            image: mario-web
 
     steps:
       - name: Checkout repository
