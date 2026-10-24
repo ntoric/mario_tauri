@@ -5,6 +5,9 @@ import "sync"
 type Hub struct {
 	mu      sync.RWMutex
 	clients map[string]map[chan string]struct{}
+	// publish, when set, fans each Broadcast out to sibling backend
+	// instances (see PgBridge). It runs outside the client lock.
+	publish func(storeID, message string)
 }
 
 const GlobalChannel = "__all__"
@@ -39,7 +42,18 @@ func (h *Hub) Unregister(storeID string, ch chan string) {
 	}
 }
 
-func (h *Hub) Broadcast(storeID, message string) {
+// SetPublisher registers the fan-out hook invoked by Broadcast after local
+// delivery. It is called once during startup, before requests are served.
+func (h *Hub) SetPublisher(fn func(storeID, message string)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.publish = fn
+}
+
+// BroadcastLocal delivers the message only to clients registered on this
+// instance. Cross-instance relays must call this instead of Broadcast so the
+// event is not re-published back onto the shared channel.
+func (h *Hub) BroadcastLocal(storeID, message string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -48,6 +62,17 @@ func (h *Hub) Broadcast(storeID, message string) {
 		case ch <- message:
 		default:
 		}
+	}
+}
+
+func (h *Hub) Broadcast(storeID, message string) {
+	h.BroadcastLocal(storeID, message)
+
+	h.mu.RLock()
+	publish := h.publish
+	h.mu.RUnlock()
+	if publish != nil {
+		publish(storeID, message)
 	}
 }
 

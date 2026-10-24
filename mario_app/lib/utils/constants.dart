@@ -5,7 +5,7 @@ class AppConstants {
   static const String appName = 'Mario App';
   static const String appVersion = '2.2.0';
 
-  static const String defaultApiUrl = 'https://mario-v2-backend.ntoric.com';
+  static const String defaultApiUrl = 'https://mario-api.ntoric.com';
 }
 
 class AppColors {

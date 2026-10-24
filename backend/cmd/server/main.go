@@ -55,6 +55,16 @@ func main() {
 	realtimeHub := realtime.NewHub()
 	printHub := realtime.NewPrintHub()
 
+	// Cross-instance realtime relay. Clients are spread over multiple backend
+	// processes (mobile and desktop hit different hosts backed by this same
+	// database), so broadcasts are republished through Postgres LISTEN/NOTIFY
+	// and every instance re-delivers them to its own websocket clients.
+	pgBridge := realtime.NewPgBridge(sqlDB, db.ConnString(cfg), realtimeHub)
+	realtimeHub.SetPublisher(pgBridge.Publish)
+	bridgeCtx, stopBridge := context.WithCancel(context.Background())
+	defer stopBridge()
+	go pgBridge.Listen(bridgeCtx)
+
 	// Expire remote-bill print jobs that never got acked by the printer.
 	queue.StartBillQueueSweeper(repo, printHub)
 

@@ -12,9 +12,15 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func InitDB(cfg *config.Config) (*sql.DB, error) {
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable default_query_exec_mode=simple_protocol",
+// ConnString returns the Postgres DSN shared by the connection pool and any
+// dedicated connections (e.g. the realtime LISTEN loop).
+func ConnString(cfg *config.Config) string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+}
+
+func InitDB(cfg *config.Config) (*sql.DB, error) {
+	connStr := ConnString(cfg) + " default_query_exec_mode=simple_protocol"
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
@@ -36,8 +42,7 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 
 // Migrate opens a database connection and applies all pending migrations and seeds.
 func Migrate(cfg *config.Config) error {
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable default_query_exec_mode=simple_protocol",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+	connStr := ConnString(cfg) + " default_query_exec_mode=simple_protocol"
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
