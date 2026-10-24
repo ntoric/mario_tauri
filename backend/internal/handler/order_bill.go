@@ -1031,8 +1031,11 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	printerOnline := h.PrintHub != nil && store.RemotePrinterDeviceID != "" &&
-		h.PrintHub.IsDeviceConnected(targetStoreID, store.RemotePrinterDeviceID)
+	// The printer's websocket may live on a sibling backend instance, so
+	// local hub state and the shared Redis presence flag are combined.
+	printerOnline := store.RemotePrinterDeviceID != "" &&
+		((h.PrintHub != nil && h.PrintHub.IsDeviceConnected(targetStoreID, store.RemotePrinterDeviceID)) ||
+			h.Repo.Bill.IsPrinterOnline(r.Context(), targetStoreID, store.RemotePrinterDeviceID))
 
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"success":       true,

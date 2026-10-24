@@ -28,6 +28,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   WebSocket? _tableStatusSocket;
   StreamSubscription? _tableStatusSubscription;
   Timer? _wsReconnectTimer;
+  Timer? _pollTimer;
   bool _isSocketActive = false;
 
   String? _sectionFilter;
@@ -73,6 +74,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   void _startTableStatusRealtime() {
     _stopTableStatusRealtime();
     _isSocketActive = true;
+    _startPolling();
     _connectTableStatusSocket();
   }
 
@@ -80,10 +82,25 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     _isSocketActive = false;
     _wsReconnectTimer?.cancel();
     _wsReconnectTimer = null;
+    _stopPolling();
     _tableStatusSubscription?.cancel();
     _tableStatusSubscription = null;
     _tableStatusSocket?.close();
     _tableStatusSocket = null;
+  }
+
+  // Polling fallback for when the websocket can't be established (e.g. an
+  // edge proxy stripping Upgrade headers) — keeps table state fresh until
+  // the socket connects, then goes quiet.
+  void _startPolling() {
+    _pollTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      _silentRefreshData();
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
   Future<void> _connectTableStatusSocket() async {
@@ -128,6 +145,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
         onError: (_) => _scheduleWsReconnect(),
         cancelOnError: true,
       );
+      _stopPolling();
     } catch (_) {
       _scheduleWsReconnect();
     }
@@ -135,6 +153,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
 
   void _scheduleWsReconnect() {
     if (!_isSocketActive) return;
+    _startPolling();
     _wsReconnectTimer?.cancel();
     _wsReconnectTimer = Timer(const Duration(seconds: 2), () {
       _connectTableStatusSocket();

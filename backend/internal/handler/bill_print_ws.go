@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -45,6 +46,12 @@ func (h *Handler) BillPrintWS(w http.ResponseWriter, r *http.Request) {
 	h.PrintHub.Register(targetStoreID, deviceID, ch)
 	defer h.PrintHub.Unregister(targetStoreID, deviceID, ch)
 
+	// Cluster-wide printer presence: the enqueue request may be served by a
+	// sibling backend instance, so local hub state alone can't answer "is the
+	// printer online". Refreshed on each ping tick below.
+	h.Repo.Bill.MarkPrinterOnline(r.Context(), targetStoreID, deviceID)
+	defer h.Repo.Bill.ClearPrinterOnline(context.Background(), targetStoreID, deviceID)
+
 	go func() {
 		for {
 			if _, _, readErr := conn.ReadMessage(); readErr != nil {
@@ -73,6 +80,7 @@ func (h *Handler) BillPrintWS(w http.ResponseWriter, r *http.Request) {
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
+			h.Repo.Bill.MarkPrinterOnline(r.Context(), targetStoreID, deviceID)
 		}
 	}
 }

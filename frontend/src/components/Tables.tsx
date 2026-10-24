@@ -45,6 +45,7 @@ const Tables: React.FC = () => {
 
     let ws: WebSocket | null = null;
     let retryTimer: number | null = null;
+    let pollTimer: number | null = null;
     let isClosed = false;
     let isSyncing = false;
 
@@ -61,14 +62,31 @@ const Tables: React.FC = () => {
       }
     };
 
+    // Polling fallback for when the websocket channel can't be established
+    // (e.g. an edge proxy stripping the Upgrade headers) — keeps table state
+    // fresh until the socket connects, then goes quiet.
+    const startPolling = () => {
+      if (pollTimer !== null) return;
+      pollTimer = window.setInterval(() => void syncTablesAndOrders(), 5000);
+    };
+    const stopPolling = () => {
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
     const connect = () => {
       const url = getTableStatusWsUrl(currentStoreId);
-      if (!url) return;
+      if (!url) {
+        startPolling();
+        return;
+      }
 
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        // Connection established
+        stopPolling();
       };
 
       ws.onmessage = (event) => {
@@ -84,6 +102,7 @@ const Tables: React.FC = () => {
 
       ws.onclose = () => {
         if (isClosed) return;
+        startPolling();
         retryTimer = window.setTimeout(connect, 2000);
       };
 
@@ -92,12 +111,14 @@ const Tables: React.FC = () => {
       };
     };
 
+    startPolling();
     connect();
     return () => {
       isClosed = true;
       if (retryTimer) {
         window.clearTimeout(retryTimer);
       }
+      stopPolling();
       ws?.close();
     };
   }, [currentStoreId, fetchOrders, fetchTables]);

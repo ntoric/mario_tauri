@@ -61,9 +61,16 @@ func main() {
 	// and every instance re-delivers them to its own websocket clients.
 	pgBridge := realtime.NewPgBridge(sqlDB, db.ConnString(cfg), realtimeHub)
 	realtimeHub.SetPublisher(pgBridge.Publish)
+	// The bill-print channel needs the same cross-instance relay: the mobile
+	// app's POST /api/bills/queue can land on a different backend host than
+	// the one holding the printer's websocket, and without this the push is
+	// dropped and the printer falls back to its slow catch-up poll.
+	pgPrintBridge := realtime.NewPrintPgBridge(sqlDB, db.ConnString(cfg), printHub)
+	printHub.SetPublisher(pgPrintBridge.Publish)
 	bridgeCtx, stopBridge := context.WithCancel(context.Background())
 	defer stopBridge()
 	go pgBridge.Listen(bridgeCtx)
+	go pgPrintBridge.Listen(bridgeCtx)
 
 	// Expire remote-bill print jobs that never got acked by the printer.
 	queue.StartBillQueueSweeper(repo, printHub)

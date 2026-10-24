@@ -15,6 +15,12 @@ import (
 // between backend instances sharing the same database.
 const pgChannel = "table_status_events"
 
+// printPgChannel relays remote bill-print events between backend instances.
+// It is deliberately separate from pgChannel so bill payloads are only ever
+// re-delivered to designated-printer clients — never to ordinary realtime
+// subscribers — and so table-status traffic doesn't wake the print channel.
+const printPgChannel = "bill_print_events"
+
 // bridgeEvent is the wire payload carried by pg_notify. Src identifies the
 // publishing instance so it can drop its own echo.
 type bridgeEvent struct {
@@ -23,23 +29,42 @@ type bridgeEvent struct {
 	Msg     string `json:"msg"`
 }
 
+// LocalBroadcaster is the subset of hub behavior the bridge needs to
+// re-deliver sibling-instance events to this instance's own websocket
+// clients. Both *Hub and *PrintHub satisfy it.
+type LocalBroadcaster interface {
+	BroadcastLocal(storeID, message string)
+}
+
 // PgBridge relays hub broadcasts across backend instances through Postgres
 // LISTEN/NOTIFY. Clients are spread over several processes (e.g. the mobile
 // app and the desktop app reach different backend hosts backed by one
 // database), so an order created through one instance must still reach
 // websocket clients of the others. Each instance publishes its outgoing
-// events on pgChannel and re-delivers notifications from siblings to its
-// local clients — delivery stays scoped to the event's store.
+// events on its bridge channel and re-delivers notifications from siblings
+// to its local clients — delivery stays scoped to the event's store.
 type PgBridge struct {
-	hub      *Hub
+	hub      LocalBroadcaster
+	channel  string
 	db       *sql.DB
 	connInfo string
 	instance string
 }
 
 func NewPgBridge(db *sql.DB, connInfo string, hub *Hub) *PgBridge {
+	return newPgBridge(db, connInfo, pgChannel, hub)
+}
+
+// NewPrintPgBridge builds the bridge for the remote bill-print channel. It
+// listens and publishes on printPgChannel only.
+func NewPrintPgBridge(db *sql.DB, connInfo string, printHub *PrintHub) *PgBridge {
+	return newPgBridge(db, connInfo, printPgChannel, printHub)
+}
+
+func newPgBridge(db *sql.DB, connInfo, channel string, hub LocalBroadcaster) *PgBridge {
 	return &PgBridge{
 		hub:      hub,
+		channel:  channel,
 		db:       db,
 		connInfo: connInfo,
 		instance: uuid.NewString(),
@@ -55,7 +80,7 @@ func (b *PgBridge) Publish(storeID, message string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", pgChannel, string(payload)); err != nil {
+	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", b.channel, string(payload)); err != nil {
 		log.Printf("[realtime] pg_notify failed: %v", err)
 	}
 }
@@ -85,10 +110,10 @@ func (b *PgBridge) listen(ctx context.Context) error {
 	}
 	defer conn.Close(context.Background())
 
-	if _, err := conn.Exec(ctx, "LISTEN "+pgChannel); err != nil {
+	if _, err := conn.Exec(ctx, "LISTEN "+b.channel); err != nil {
 		return err
 	}
-	log.Println("[realtime] listening for cross-instance events on Postgres")
+	log.Printf("[realtime] listening for cross-instance events on Postgres channel %s", b.channel)
 
 	for {
 		n, err := conn.WaitForNotification(ctx)

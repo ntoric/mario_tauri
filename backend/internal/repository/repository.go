@@ -1938,6 +1938,46 @@ func (r *BillRepository) AckBillQueueItem(ctx context.Context, storeID, queueID,
 	return r.redis.SetEX(ctx, billQueueResultKey(storeID, queueID), result, billQueueResultTTL)
 }
 
+// billPrinterOnlineTTL bounds how long the printer-presence key can outlive a
+// backend that died without clearing it. The bill-print websocket handler
+// refreshes it on every ping tick (~25s), so two missed ticks mean the
+// printer really is gone.
+const billPrinterOnlineTTL = 90 * time.Second
+
+func billPrinterOnlineKey(storeID, deviceID string) string {
+	return fmt.Sprintf("bill_printer_online:%s:%s", storeID, deviceID)
+}
+
+// MarkPrinterOnline records (or refreshes) that the store's designated
+// printer currently holds a bill-print websocket on some backend instance.
+// Presence lives in Redis because the enqueue request may be served by a
+// different instance than the one holding the printer's socket.
+func (r *BillRepository) MarkPrinterOnline(ctx context.Context, storeID, deviceID string) {
+	if r.redis == nil {
+		return
+	}
+	_ = r.redis.SetEX(ctx, billPrinterOnlineKey(storeID, deviceID), []byte("1"), billPrinterOnlineTTL)
+}
+
+// ClearPrinterOnline removes the presence record when the printer's
+// websocket disconnects cleanly.
+func (r *BillRepository) ClearPrinterOnline(ctx context.Context, storeID, deviceID string) {
+	if r.redis == nil {
+		return
+	}
+	_ = r.redis.Del(ctx, billPrinterOnlineKey(storeID, deviceID))
+}
+
+// IsPrinterOnline reports whether any backend instance currently sees the
+// store's designated printer connected.
+func (r *BillRepository) IsPrinterOnline(ctx context.Context, storeID, deviceID string) bool {
+	if r.redis == nil {
+		return false
+	}
+	_, ok := r.redis.Get(ctx, billPrinterOnlineKey(storeID, deviceID))
+	return ok
+}
+
 // GetBillQueueResult returns the recorded ack/expiry result for a queue item,
 // or ("", nil) when no result exists yet.
 func (r *BillRepository) GetBillQueueResult(ctx context.Context, storeID, queueID string) ([]byte, error) {

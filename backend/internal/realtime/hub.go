@@ -129,6 +129,19 @@ func (p *PrintHub) Broadcast(storeID, message string) {
 	p.hub.Broadcast(storeID, message)
 }
 
+// BroadcastLocal delivers the message only to print clients registered on
+// this instance. Cross-instance relays must call this instead of Broadcast
+// so the event is not re-published back onto the shared channel.
+func (p *PrintHub) BroadcastLocal(storeID, message string) {
+	p.hub.BroadcastLocal(storeID, message)
+}
+
+// SetPublisher registers the fan-out hook invoked by Broadcast after local
+// delivery (see Hub.SetPublisher).
+func (p *PrintHub) SetPublisher(fn func(storeID, message string)) {
+	p.hub.SetPublisher(fn)
+}
+
 // IsDeviceConnected reports whether the given device currently holds at least
 // one open print channel for the store. Used to tell enqueue callers whether a
 // printer is actually listening.
