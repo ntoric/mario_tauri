@@ -24,6 +24,7 @@ class RemoteBillPrinterService {
   private store: Store | null = null;
   private stopped = true;
   private retryTimer: number | null = null;
+  private retryDelay = 2000;
   private catchUpTimer: number | null = null;
   private processing = new Set<string>();
   private seen = new Set<string>();
@@ -49,6 +50,7 @@ class RemoteBillPrinterService {
 
     this.store = active;
     this.stopped = false;
+    this.retryDelay = 2000;
     this.connect();
     this.catchUpTimer = window.setInterval(() => void this.catchUp(), 30000);
   }
@@ -96,6 +98,7 @@ class RemoteBillPrinterService {
     this.ws = ws;
 
     ws.onopen = () => {
+      this.retryDelay = 2000;
       // Catch up on anything enqueued while we were disconnected.
       void this.catchUp();
     };
@@ -119,7 +122,10 @@ class RemoteBillPrinterService {
 
     ws.onclose = () => {
       if (this.stopped || this.ws !== ws) return;
-      this.retryTimer = window.setTimeout(() => this.connect(), 2000);
+      // Back off exponentially (2s → 30s cap): a hard failure like a rejected
+      // handshake otherwise retries every 2s forever.
+      this.retryTimer = window.setTimeout(() => this.connect(), this.retryDelay);
+      this.retryDelay = Math.min(this.retryDelay * 2, 30000);
     };
 
     ws.onerror = () => {
@@ -162,7 +168,9 @@ class RemoteBillPrinterService {
 
   private async handleQueueItem(item: { id: string; orderId?: string; billData: unknown }) {
     if (!item?.id || this.seen.has(item.id) || this.processing.has(item.id)) return;
-    if (isQuietHours()) return;
+    // No quiet-hours gate here: pushed print jobs are user-initiated, not
+    // polling, and the backend accepts them around the clock — refusing them
+    // would silently burn the job's 60s TTL.
     const store = this.store;
     if (this.stopped || !store) return;
 

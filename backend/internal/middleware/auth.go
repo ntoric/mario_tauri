@@ -34,7 +34,9 @@ func AuthMiddleware(db *sql.DB, sessions *session.Store) func(http.Handler) http
 					return
 				}
 				tokenString = parts[1]
-			} else if r.URL.Path == "/api/ws/tables-status" {
+			} else if strings.HasPrefix(r.URL.Path, "/api/ws/") {
+				// Browser WebSocket clients can't set headers, so every WS
+				// endpoint carries the session token as a query parameter.
 				tokenString = r.URL.Query().Get("token")
 			}
 			if tokenString == "" {
