@@ -27,6 +27,7 @@ export interface Store {
   invoiceSize?: '2inch' | '3inch';
   kotPrintEnabled?: boolean;
   remoteBillingEnabled?: boolean;
+  remotePrinterDeviceId?: string;
   logoUrl?: string;
   themeColor?: string;
   taxEnabled?: boolean;

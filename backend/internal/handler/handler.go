@@ -18,11 +18,12 @@ type Handler struct {
 	Repo     *repository.Repository
 	Cfg      *config.Config
 	Realtime *realtime.Hub
+	PrintHub *realtime.PrintHub
 	Sessions *session.Store
 }
 
-func NewHandler(repo *repository.Repository, cfg *config.Config, realtimeHub *realtime.Hub, sessions *session.Store) *Handler {
-	return &Handler{Repo: repo, Cfg: cfg, Realtime: realtimeHub, Sessions: sessions}
+func NewHandler(repo *repository.Repository, cfg *config.Config, realtimeHub *realtime.Hub, printHub *realtime.PrintHub, sessions *session.Store) *Handler {
+	return &Handler{Repo: repo, Cfg: cfg, Realtime: realtimeHub, PrintHub: printHub, Sessions: sessions}
 }
 
 // JSON helpers to reduce boilerplate and guarantee standardized casing

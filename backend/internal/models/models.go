@@ -25,6 +25,7 @@ type Store struct {
 	InvoiceSize          string     `json:"invoiceSize"`
 	KOTPrintEnabled      bool       `json:"kotPrintEnabled"`
 	RemoteBillingEnabled bool       `json:"remoteBillingEnabled"`
+	RemotePrinterDeviceID string    `json:"remotePrinterDeviceId"`
 	LogoURL              string     `json:"logoUrl"`
 	ThemeColor           string     `json:"themeColor"`
 	TaxEnabled           bool       `json:"taxEnabled"`

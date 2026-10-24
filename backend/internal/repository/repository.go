@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"github.com/redis/go-redis/v9"
 )
 
 type CacheItem struct {
@@ -184,13 +183,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -204,12 +203,12 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var stores []models.Store
 	for rows.Next() {
 		var s models.Store
-		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor, appVersion sql.NullString
+		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
 		var appVersionSeenAt sql.NullTime
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-			&logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+			&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -222,6 +221,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.PrinterName = printerName.String
 		s.PrinterVendorID = printerVendor.String
 		s.PrinterProductID = printerProduct.String
+		s.RemotePrinterDeviceID = remotePrinterDevice.String
 		s.LogoURL = logoURL.String
 		s.ThemeColor = themeColor.String
 		s.AppVersion = appVersion.String
@@ -234,16 +234,16 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
-	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, logoURL, themeColor, appVersion sql.NullString
+	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
 	var appVersionSeenAt sql.NullTime
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-		&logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+		&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -259,6 +259,7 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	s.PrinterName = printerName.String
 	s.PrinterVendorID = printerVendor.String
 	s.PrinterProductID = printerProduct.String
+	s.RemotePrinterDeviceID = remotePrinterDevice.String
 	s.LogoURL = logoURL.String
 	s.ThemeColor = themeColor.String
 	s.AppVersion = appVersion.String
@@ -1830,30 +1831,169 @@ func (r *BillRepository) QueueBill(ctx context.Context, queueID, storeID, orderI
 	return r.redis.RPush(ctx, key, raw)
 }
 
+// BillQueueItemTTL is how long a queued bill may wait to be printed before the
+// sweeper drops it as expired. Kept intentionally short: remote prints are
+// pushed over the realtime channel and expected to land within seconds.
+const BillQueueItemTTL = time.Minute
+
+const (
+	billQueueClaimTTL  = time.Minute
+	billQueueResultTTL = 5 * time.Minute
+)
+
+func billQueueListKey(storeID string) string   { return fmt.Sprintf("bill_queue:%s", storeID) }
+func billQueueClaimKey(storeID, id string) string {
+	return fmt.Sprintf("bill_queue_claim:%s:%s", storeID, id)
+}
+func billQueueResultKey(storeID, id string) string {
+	return fmt.Sprintf("bill_queue_result:%s:%s", storeID, id)
+}
+
+// GetStoreBillQueue returns the store's pending, unexpired queue items
+// WITHOUT removing them. Items are only ever removed by an explicit ack or by
+// the expiry sweeper, so a failed print can never silently lose a bill.
 func (r *BillRepository) GetStoreBillQueue(ctx context.Context, storeID string) ([]models.BillQueueItem, error) {
 	if r.redis == nil {
 		return nil, errors.New("redis unavailable for remote bill queue")
 	}
 
-	items := make([]models.BillQueueItem, 0)
-	key := fmt.Sprintf("bill_queue:%s", storeID)
-	for i := 0; i < 20; i++ {
-		raw, err := r.redis.LPop(ctx, key)
-		if err != nil {
-			if errors.Is(err, redis.Nil) {
-				break
-			}
-			return nil, err
-		}
+	raws, err := r.redis.LRange(ctx, billQueueListKey(storeID), 0, 49)
+	if err != nil {
+		return nil, err
+	}
 
+	items := make([]models.BillQueueItem, 0, len(raws))
+	for _, raw := range raws {
 		var item models.BillQueueItem
 		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, err
+			continue
+		}
+		if time.Since(item.CreatedAt) >= BillQueueItemTTL {
+			continue
 		}
 		items = append(items, item)
 	}
-
 	return items, nil
+}
+
+// FindBillQueueItem locates a single item inside a specific store's queue.
+// Because lookups are always scoped to bill_queue:{storeID}, a queue item can
+// never be reached through another store's channel.
+func (r *BillRepository) FindBillQueueItem(ctx context.Context, storeID, queueID string) (*models.BillQueueItem, []byte, error) {
+	if r.redis == nil {
+		return nil, nil, errors.New("redis unavailable for remote bill queue")
+	}
+
+	raws, err := r.redis.LRange(ctx, billQueueListKey(storeID), 0, 49)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, raw := range raws {
+		var item models.BillQueueItem
+		if err := json.Unmarshal(raw, &item); err != nil {
+			continue
+		}
+		if item.ID == queueID {
+			return &item, raw, nil
+		}
+	}
+	return nil, nil, nil
+}
+
+// ClaimBillQueueItem atomically claims a queue item for a device. Returns true
+// only for the first claimant; later claims (other devices or retries within
+// the TTL) get false.
+func (r *BillRepository) ClaimBillQueueItem(ctx context.Context, storeID, queueID, deviceID string) (bool, error) {
+	if r.redis == nil {
+		return false, errors.New("redis unavailable for remote bill queue")
+	}
+	return r.redis.SetNX(ctx, billQueueClaimKey(storeID, queueID), deviceID, billQueueClaimTTL)
+}
+
+// AckBillQueueItem removes the item from the store's queue after printing and
+// records a short-lived result (printed/failed) that requesters can poll via
+// the status endpoint.
+func (r *BillRepository) AckBillQueueItem(ctx context.Context, storeID, queueID, status, errMsg string) error {
+	if r.redis == nil {
+		return errors.New("redis unavailable for remote bill queue")
+	}
+
+	_, raw, err := r.FindBillQueueItem(ctx, storeID, queueID)
+	if err != nil {
+		return err
+	}
+	if raw != nil {
+		if err := r.redis.LRem(ctx, billQueueListKey(storeID), raw); err != nil {
+			return err
+		}
+	}
+	_ = r.redis.Del(ctx, billQueueClaimKey(storeID, queueID))
+
+	result, _ := json.Marshal(map[string]interface{}{
+		"queueId":   queueID,
+		"status":    status,
+		"error":     errMsg,
+		"updatedAt": time.Now(),
+	})
+	return r.redis.SetEX(ctx, billQueueResultKey(storeID, queueID), result, billQueueResultTTL)
+}
+
+// GetBillQueueResult returns the recorded ack/expiry result for a queue item,
+// or ("", nil) when no result exists yet.
+func (r *BillRepository) GetBillQueueResult(ctx context.Context, storeID, queueID string) ([]byte, error) {
+	if r.redis == nil {
+		return nil, errors.New("redis unavailable for remote bill queue")
+	}
+	raw, ok := r.redis.Get(ctx, billQueueResultKey(storeID, queueID))
+	if !ok {
+		return nil, nil
+	}
+	return raw, nil
+}
+
+// ExpireBillQueueItems removes queue items older than maxAge from every
+// store's list and returns them so callers can notify interested parties.
+func (r *BillRepository) ExpireBillQueueItems(ctx context.Context, maxAge time.Duration) ([]models.BillQueueItem, error) {
+	if r.redis == nil {
+		return nil, nil
+	}
+
+	keys, err := r.redis.ScanKeys(ctx, "bill_queue:*")
+	if err != nil {
+		return nil, err
+	}
+
+	var expired []models.BillQueueItem
+	for _, key := range keys {
+		raws, err := r.redis.LRange(ctx, key, 0, -1)
+		if err != nil {
+			continue
+		}
+		for _, raw := range raws {
+			var item models.BillQueueItem
+			if err := json.Unmarshal(raw, &item); err != nil {
+				// Unparseable entries can never be printed; drop them too.
+				_ = r.redis.LRem(ctx, key, raw)
+				continue
+			}
+			if time.Since(item.CreatedAt) < maxAge {
+				continue
+			}
+			if err := r.redis.LRem(ctx, key, raw); err != nil {
+				continue
+			}
+			_ = r.redis.Del(ctx, billQueueClaimKey(item.StoreID, item.ID))
+			result, _ := json.Marshal(map[string]interface{}{
+				"queueId":   item.ID,
+				"status":    "expired",
+				"error":     "Bill was not printed within the allowed time",
+				"updatedAt": time.Now(),
+			})
+			_ = r.redis.SetEX(ctx, billQueueResultKey(item.StoreID, item.ID), result, billQueueResultTTL)
+			expired = append(expired, item)
+		}
+	}
+	return expired, nil
 }
 
 // ==========================================

@@ -16,7 +16,7 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  String _baseUrl = 'https://mario-v2-backend.ntoric.com/api';
+  String _baseUrl = 'https://mario-api.ntoric.com/api';
   String? _token;
 
   // Session tokens are Bearer credentials, so they live in the platform

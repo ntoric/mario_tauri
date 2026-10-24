@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 class AppConstants {
   static const String appName = 'Mario Business';
   static const String appVersion = '1.0.0';
-  static const String defaultApiUrl = 'https://mario-v2-backend.ntoric.com';
+  static const String defaultApiUrl = 'https://mario-api.ntoric.com';
 }
 
 class AppColors {

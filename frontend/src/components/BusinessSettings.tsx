@@ -6,6 +6,7 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
+import { getDeviceId } from '../utils/deviceId';
 import SoftwareUpdates from './SoftwareUpdates';
 import StoreSupport from './StoreSupport';
 import notify from '../utils/toast';
@@ -49,6 +50,9 @@ const BusinessSettings: React.FC = () => {
     }
   }, [location.search]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDevice, setIsSavingDevice] = useState(false);
+  const deviceId = getDeviceId();
+  const isThisDeviceDesignated = !!currentStore?.remotePrinterDeviceId && currentStore.remotePrinterDeviceId === deviceId;
 
   // Available printers from printer service
   const [availablePrinters, setAvailablePrinters] = useState<PrinterDevice[]>([]);
@@ -196,6 +200,32 @@ const BusinessSettings: React.FC = () => {
       notify.error('Failed to save printer settings');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSetRemotePrinterDevice = async () => {
+    if (!currentStore) return;
+    setIsSavingDevice(true);
+    try {
+      await updateStore(currentStore.id, { remotePrinterDeviceId: deviceId });
+      notify.success('This device is now the remote bill printer');
+    } catch (error) {
+      notify.error('Failed to set remote bill printer');
+    } finally {
+      setIsSavingDevice(false);
+    }
+  };
+
+  const handleClearRemotePrinterDevice = async () => {
+    if (!currentStore) return;
+    setIsSavingDevice(true);
+    try {
+      await updateStore(currentStore.id, { remotePrinterDeviceId: '' });
+      notify.success('Remote bill printer cleared');
+    } catch (error) {
+      notify.error('Failed to clear remote bill printer');
+    } finally {
+      setIsSavingDevice(false);
     }
   };
 
@@ -1099,6 +1129,47 @@ const BusinessSettings: React.FC = () => {
                       />
                     </div>
                   </label>
+                  {printerSettings.remoteBillingEnabled && (
+                    <div className={`pc-toggle-row ${isThisDeviceDesignated ? 'enabled' : ''}`}>
+                      <div className="pc-icon-tile">
+                        <Printer size={20} />
+                      </div>
+                      <div className="pc-toggle-content">
+                        <div className="pc-toggle-title">Remote Bill Printer</div>
+                        <div className="pc-toggle-desc">
+                          {isThisDeviceDesignated
+                            ? 'This device is the designated bill printer for this store.'
+                            : currentStore?.remotePrinterDeviceId
+                              ? 'Another device is designated. Take over to print remote bills here.'
+                              : 'No device designated — remote bills will not print until one is set.'}
+                          <span style={{ display: 'block', fontFamily: 'monospace', fontSize: '10px', opacity: 0.6, marginTop: '2px' }}>
+                            This device: {deviceId.slice(0, 8)}…
+                          </span>
+                        </div>
+                      </div>
+                      <div className="pc-toggle-action">
+                        {isThisDeviceDesignated ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={handleClearRemotePrinterDevice}
+                            disabled={isSavingDevice}
+                          >
+                            Clear
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={handleSetRemotePrinterDevice}
+                            disabled={isSavingDevice}
+                          >
+                            Use this device
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

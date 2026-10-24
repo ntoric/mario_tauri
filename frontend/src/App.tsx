@@ -32,6 +32,7 @@ import ItemProfitReport from './components/ItemProfitReport';
 import { api } from './services/api';
 import { isQuietHours } from './utils/quietHours';
 import { updaterService } from './services/updater';
+import { remoteBillPrinter } from './services/remoteBillPrinter';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -89,6 +90,14 @@ const AppRoutes: React.FC = () => {
       setIsStoreActive(active);
     }
   }, [isAuthenticated, user, currentStoreId, checkStoreActive]);
+
+  // Remote bill printing: active on every page when this device is the
+  // store's designated bill printer; inert everywhere else. No cleanup
+  // function on purpose — the service dedupes restarts internally so store
+  // refreshes don't churn the websocket, and start(null) handles logout.
+  useEffect(() => {
+    remoteBillPrinter.start(isAuthenticated ? currentStore : null);
+  }, [isAuthenticated, currentStore]);
 
   // Periodic store status check every 5 minutes - logout if store is disabled
   useEffect(() => {

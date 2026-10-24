@@ -892,6 +892,18 @@ func (h *Handler) PrintBill(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]string{"message": "Bill marked as printed"})
 }
 
+// queuePrintItem is the print-ready line-item shape embedded in billData so
+// the designated printer never has to look the order up itself.
+type queuePrintItem struct {
+	Name       string  `json:"name"`
+	HSN        string  `json:"hsn,omitempty"`
+	Qty        int     `json:"qty"`
+	Unit       string  `json:"unit"`
+	Rate       float64 `json:"rate"`
+	TaxPercent float64 `json:"taxPercent"`
+	Amount     float64 `json:"amount"`
+}
+
 // QueueBill handles POST /api/bills/queue
 func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
@@ -899,8 +911,6 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-
-	fmt.Println("Claims : ", claims)
 
 	var req struct {
 		OrderID       string  `json:"orderId"`
@@ -917,12 +927,9 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.readJSON(r, &req); err != nil {
-		fmt.Println("Error : ", err)
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
-
-	fmt.Println("REQ : ", req)
 
 	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
 	if !ok {
@@ -936,19 +943,45 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	// Verify if remote billing is enabled for the store
 	store, err := h.Repo.Store.GetByID(r.Context(), targetStoreID)
 	if err != nil {
-		fmt.Println("Error 2. : ", err)
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if store == nil {
-		fmt.Println("Error 3 : ", err)
 		h.writeError(w, http.StatusNotFound, "Store not found")
 		return
 	}
-	fmt.Println("store.RemoteBillingEnabled : ", store.RemoteBillingEnabled)
 	if !store.RemoteBillingEnabled {
 		h.writeError(w, http.StatusBadRequest, "Remote billing is not enabled for this store")
 		return
+	}
+
+	// Embed print-ready line items server-side so the bill is self-contained:
+	// the printer never depends on fetching the order (which may already be
+	// completed or otherwise filtered out of list endpoints).
+	printItems := make([]queuePrintItem, 0)
+	if req.OrderID != "" {
+		order, err := h.Repo.Order.GetByID(r.Context(), req.OrderID)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if order != nil {
+			for _, oi := range order.Items {
+				rate := oi.UnitPrice
+				if rate == 0 {
+					rate = oi.Item.Price
+				}
+				printItems = append(printItems, queuePrintItem{
+					Name:       oi.Item.Name,
+					HSN:        oi.Item.Description,
+					Qty:        oi.Quantity,
+					Unit:       "PCS",
+					Rate:       rate,
+					TaxPercent: oi.TaxPercent,
+					Amount:     rate * float64(oi.Quantity),
+				})
+			}
+		}
 	}
 
 	queueID := uuid.New().String()
@@ -966,9 +999,8 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		"paymentMethod": req.PaymentMethod,
 		"customerName":  req.CustomerName,
 		"generatedBy":   claims.ID,
+		"items":         printItems,
 	}
-
-	fmt.Println("billDataMap : ", billDataMap)
 
 	billDataBytes, err := json.Marshal(billDataMap)
 	if err != nil {
@@ -976,24 +1008,69 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert into bill_queue table via repository
+	// Persist the job in the store's Redis queue (durable backlog)...
 	err = h.Repo.Bill.QueueBill(r.Context(), queueID, targetStoreID, req.OrderID, billDataBytes)
 	if err != nil {
-		fmt.Println("Error 4 : ", err)
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	// ...then push it to the store's designated printer instantly. The print
+	// channel is only open to the designated device, so the event can never
+	// reach another store or an unauthorized machine.
+	if h.PrintHub != nil {
+		msg, err := json.Marshal(map[string]interface{}{
+			"type":    "bill_print_request",
+			"storeId": targetStoreID,
+			"queueId": queueID,
+			"orderId": req.OrderID,
+			"billData": json.RawMessage(billDataBytes),
+		})
+		if err == nil {
+			h.PrintHub.Broadcast(targetStoreID, string(msg))
+		}
+	}
+
+	printerOnline := h.PrintHub != nil && store.RemotePrinterDeviceID != "" &&
+		h.PrintHub.IsDeviceConnected(targetStoreID, store.RemotePrinterDeviceID)
+
 	h.writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"success": true,
-		"message": "Bill generation request queued successfully",
-		"queueId": queueID,
-		"storeId": targetStoreID,
-		"orderId": req.OrderID,
+		"success":       true,
+		"message":       "Bill generation request queued successfully",
+		"queueId":       queueID,
+		"storeId":       targetStoreID,
+		"orderId":       req.OrderID,
+		"printerOnline": printerOnline,
 	})
 }
 
-// GetBillQueue handles GET /api/bills/queue
+// requirePrintDevice verifies that the caller's device is the store's
+// designated remote bill printer. Every print-facing endpoint (queue read,
+// claim, ack, websocket) gates on this so a queued bill can only ever be
+// touched by its own store's designated machine. Returns the store on success.
+func (h *Handler) requirePrintDevice(w http.ResponseWriter, r *http.Request, storeID, deviceID string) (*models.Store, bool) {
+	if deviceID == "" {
+		h.writeError(w, http.StatusBadRequest, "deviceId is required")
+		return nil, false
+	}
+	store, err := h.Repo.Store.GetByID(r.Context(), storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return nil, false
+	}
+	if store == nil {
+		h.writeError(w, http.StatusNotFound, "Store not found")
+		return nil, false
+	}
+	if store.RemotePrinterDeviceID == "" || store.RemotePrinterDeviceID != deviceID {
+		h.writeError(w, http.StatusForbidden, "This device is not the designated bill printer for this store")
+		return nil, false
+	}
+	return store, true
+}
+
+// GetBillQueue handles GET /api/bills/queue — non-destructive catch-up read
+// for the designated printer (e.g. after a websocket reconnect).
 func (h *Handler) GetBillQueue(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
@@ -1003,6 +1080,10 @@ func (h *Handler) GetBillQueue(w http.ResponseWriter, r *http.Request) {
 
 	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
 	if !ok {
+		return
+	}
+
+	if _, ok := h.requirePrintDevice(w, r, targetStoreID, r.URL.Query().Get("deviceId")); !ok {
 		return
 	}
 
@@ -1017,4 +1098,146 @@ func (h *Handler) GetBillQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.writeJSON(w, http.StatusOK, queueItems)
+}
+
+// ClaimQueuedBill handles POST /api/bills/queue/{id}/claim — atomic first-wins
+// claim so at most one device instance prints a given bill.
+func (h *Handler) ClaimQueuedBill(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	queueID := chi.URLParam(r, "id")
+
+	var req struct {
+		StoreID  string `json:"storeId"`
+		DeviceID string `json:"deviceId"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
+	}
+
+	if _, ok := h.requirePrintDevice(w, r, targetStoreID, req.DeviceID); !ok {
+		return
+	}
+
+	// The item must live inside THIS store's queue — an ID belonging to
+	// another store simply isn't found here.
+	item, _, err := h.Repo.Bill.FindBillQueueItem(r.Context(), targetStoreID, queueID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if item == nil {
+		h.writeError(w, http.StatusNotFound, "Queue item not found")
+		return
+	}
+	if time.Since(item.CreatedAt) >= repository.BillQueueItemTTL {
+		h.writeError(w, http.StatusGone, "Queue item expired")
+		return
+	}
+
+	claimed, err := h.Repo.Bill.ClaimBillQueueItem(r.Context(), targetStoreID, queueID, req.DeviceID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !claimed {
+		h.writeError(w, http.StatusConflict, "Bill is already being printed")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, item)
+}
+
+// AckQueuedBill handles POST /api/bills/queue/{id}/ack — removes the job from
+// the queue after a print attempt and records the outcome.
+func (h *Handler) AckQueuedBill(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	queueID := chi.URLParam(r, "id")
+
+	var req struct {
+		StoreID  string `json:"storeId"`
+		DeviceID string `json:"deviceId"`
+		Status   string `json:"status"`
+		Error    string `json:"error"`
+	}
+	if err := h.readJSON(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if req.Status != "printed" && req.Status != "failed" {
+		h.writeError(w, http.StatusBadRequest, "status must be 'printed' or 'failed'")
+		return
+	}
+
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, req.StoreID)
+	if !ok {
+		return
+	}
+
+	if _, ok := h.requirePrintDevice(w, r, targetStoreID, req.DeviceID); !ok {
+		return
+	}
+
+	if err := h.Repo.Bill.AckBillQueueItem(r.Context(), targetStoreID, queueID, req.Status, req.Error); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// GetBillQueueStatus handles GET /api/bills/queue/{id}/status — lets the
+// requester check whether a queued bill was printed, failed, or expired.
+func (h *Handler) GetBillQueueStatus(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	queueID := chi.URLParam(r, "id")
+
+	targetStoreID, ok := h.requireStoreAccess(w, r, claims, r.URL.Query().Get("storeId"))
+	if !ok {
+		return
+	}
+
+	result, err := h.Repo.Bill.GetBillQueueResult(r.Context(), targetStoreID, queueID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if result == nil {
+		// No terminal result yet: still pending in the queue, or never existed.
+		item, _, err := h.Repo.Bill.FindBillQueueItem(r.Context(), targetStoreID, queueID)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if item == nil {
+			h.writeError(w, http.StatusNotFound, "Queue item not found")
+			return
+		}
+		h.writeJSON(w, http.StatusOK, map[string]string{"queueId": queueID, "status": "pending"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
 }

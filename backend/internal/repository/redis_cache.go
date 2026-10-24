@@ -70,3 +70,51 @@ func (r *RedisCache) RPush(ctx context.Context, key string, value []byte) error 
 func (r *RedisCache) LPop(ctx context.Context, key string) ([]byte, error) {
 	return r.client.LPop(ctx, key).Bytes()
 }
+
+func (r *RedisCache) LRange(ctx context.Context, key string, start, stop int64) ([][]byte, error) {
+	vals, err := r.client.LRange(ctx, key, start, stop).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]byte, 0, len(vals))
+	for _, v := range vals {
+		out = append(out, []byte(v))
+	}
+	return out, nil
+}
+
+// LRem removes every list element equal to value (count = 0).
+func (r *RedisCache) LRem(ctx context.Context, key string, value []byte) error {
+	return r.client.LRem(ctx, key, 0, value).Err()
+}
+
+// SetNX sets key to value with the given TTL only when the key does not exist.
+// Returns true when the key was set (i.e. the caller won the claim).
+func (r *RedisCache) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
+	return r.client.SetNX(ctx, key, value, ttl).Result()
+}
+
+func (r *RedisCache) SetEX(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return r.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (r *RedisCache) Del(ctx context.Context, keys ...string) error {
+	return r.client.Del(ctx, keys...).Err()
+}
+
+func (r *RedisCache) ScanKeys(ctx context.Context, pattern string) ([]string, error) {
+	var keys []string
+	var cursor uint64
+	for {
+		batch, next, err := r.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, batch...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return keys, nil
+}
