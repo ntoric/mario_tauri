@@ -14,7 +14,7 @@ env:
   # VITE_API_URL convention (https://mario-api.ntoric.com/api).
   # Override without editing this file via the STAGING_API_URL repository
   # variable (Settings → Secrets and variables → Actions → Variables).
-  STAGING_API_URL: ${{ vars.STAGING_API_URL || 'https://mario-api-stgng.ntoric.com/api' }}
+  STAGING_API_URL: ${{ vars.STAGING_API_URL || 'https://mario-api-stgng.mohammedshahid.in/api' }}
 
 jobs:
   test-backend:
