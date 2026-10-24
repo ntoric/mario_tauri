@@ -63,6 +63,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.35.x
 
       - name: Run Flutter tests
         working-directory: mario_app
@@ -195,6 +196,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.35.x
 
       - name: Configure SDK paths
         shell: bash
