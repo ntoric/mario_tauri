@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 class AppConstants {
   static const String appName = 'Mario App';
-  static const String appVersion = '2.2.0';
+  static const String appVersion = '2.3.0';
 
   static const String defaultApiUrl = String.fromEnvironment(
     'API_BASE_URL',
