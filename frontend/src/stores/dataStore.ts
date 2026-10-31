@@ -489,6 +489,8 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
+    // A bill was issued — drop the cached list so the next fetch sees it.
+    cache.delete(cacheKeys.bills(currentStoreId));
 
     if (!options?.skipRefresh) {
       // Optimistic update: add new order to the beginning of the array
@@ -511,6 +513,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
+    cache.delete(cacheKeys.bills(currentStoreId));
 
     if (!options?.skipRefresh) {
       // Optimistic update: update the order with completed status
@@ -653,6 +656,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     });
     // Mark order as completed and release the table
     await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
+    cache.delete(cacheKeys.bills(currentStoreId));
     await get().fetchOrders({ limit: 0 }); // Fetch all orders to ensure completed order is included
   },
 

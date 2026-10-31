@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine, FileText, Minus, Plus } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -43,6 +43,17 @@ const History: React.FC = () => {
   const [isIssuingCn, setIsIssuingCn] = useState(false);
   const [issuedCn, setIssuedCn] = useState<CreditNote | null>(null);
 
+  // Orders billed from another screen or device can be missing from the
+  // cached bill list — re-check the server once before treating an order
+  // as having no GST bill.
+  const refetchedFor = useRef<Set<string>>(new Set());
+  const findBillForOrder = async (orderId: string): Promise<Bill | undefined> => {
+    const cached = bills.find(b => b.orderId === orderId);
+    if (cached) return cached;
+    await fetchBills(true);
+    return useDataStore.getState().bills.find(b => b.orderId === orderId);
+  };
+
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
       notify.warning('No printer configured. Set one up in Settings.');
@@ -51,7 +62,7 @@ const History: React.FC = () => {
 
     setIsPrinting(order.id);
     try {
-      let associatedBill = bills.find(b => b.orderId === order.id);
+      let associatedBill = await findBillForOrder(order.id);
       if (associatedBill?.fy && !associatedBill.lines?.length) {
         associatedBill = await api.getBill(associatedBill.id);
       }
@@ -99,7 +110,8 @@ const History: React.FC = () => {
             name: currentStore?.name || 'Cafe',
             branch: currentStore?.branch || '',
             location: currentStore?.location || '',
-            ...(taxEnabled && currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
+            // No GST bill exists for this order, so the receipt must not
+            // carry the GSTIN (it would look like a tax invoice).
             ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
             ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
             address: currentStore?.location || '',
@@ -141,7 +153,7 @@ const History: React.FC = () => {
   // Fetch data on mount
   useEffect(() => {
     fetchOrders({ limit: 1000 }); // Fetch more orders for history view (all statuses)
-    fetchBills();
+    fetchBills(true); // always fresh: bills may have been issued elsewhere
   }, [fetchOrders, fetchBills]);
 
   // When the "View Bill" modal opens on an order with a GST bill, load the full
@@ -151,6 +163,12 @@ const History: React.FC = () => {
     setBillCreditNotes([]);
     if (!viewingBill) return;
     const associated = bills.find(b => b.orderId === viewingBill.id);
+    if (!associated && !refetchedFor.current.has(viewingBill.id)) {
+      // Not in the list yet — refresh once; this effect re-runs on `bills`.
+      refetchedFor.current.add(viewingBill.id);
+      fetchBills(true);
+      return;
+    }
     if (!associated?.fy) return;
     let cancelled = false;
     (async () => {
@@ -167,7 +185,7 @@ const History: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [viewingBill, bills, currentStore?.id]);
+  }, [viewingBill, bills, currentStore?.id, fetchBills]);
 
   const isParcel = (order: Order) => order.orderType === 'parcel' || order.tableNumber === 0;
 
@@ -721,7 +739,7 @@ const History: React.FC = () => {
                   <h2>{currentStore?.name || 'Restaurant'}</h2>
                   {currentStore?.location && <p>{currentStore.location}</p>}
                   {currentStore?.phone && <p>Tel: {currentStore.phone}</p>}
-                  {taxEnabled && currentStore?.gstin && <p>GSTIN: {currentStore.gstin}</p>}
+                  {taxEnabled && viewingGstBill && currentStore?.gstin && <p>GSTIN: {currentStore.gstin}</p>}
                 </div>
 
                 {viewingGstBill ? (
@@ -873,6 +891,11 @@ const History: React.FC = () => {
                       </h3>
                       <p>Order #{viewingBill.id.slice(-6).toUpperCase()}</p>
                       <p>{formatDate(viewingBill.createdAt)}</p>
+                      {taxEnabled && (
+                        <p style={{ fontSize: '0.8rem', color: 'var(--warning-dark, #b7791f)', marginTop: '0.35rem' }}>
+                          Order summary — no GST invoice found for this order
+                        </p>
+                      )}
                     </div>
 
                     <div className="bill-items">
