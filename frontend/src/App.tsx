@@ -29,6 +29,7 @@ import Expenses from './components/Expenses';
 import ExpenseReports from './components/ExpenseReports';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
+import GstReports from './components/GstReports';
 import { api } from './services/api';
 import { isQuietHours } from './utils/quietHours';
 import { updaterService } from './services/updater';
@@ -161,6 +162,7 @@ const AppRoutes: React.FC = () => {
         <Route path="reports/top-categories" element={<TopSellingCategoriesReport />} />
         <Route path="reports/revenue" element={<RevenueReport />} />
         <Route path="reports/item-profit" element={<ItemProfitReport />} />
+        <Route path="reports/gst" element={<GstReports />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="expense-reports" element={<ExpenseReports />} />
       </Route>

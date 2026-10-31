@@ -207,6 +207,11 @@ func (h *Handler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if errMsg := validateItemGSTFields(&req); errMsg != "" {
+		h.writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.IsActive = true
@@ -242,6 +247,16 @@ func (h *Handler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 
 	if req.CategoryID != "" && !h.requireRecordBelongsToStore(w, r, "categories", req.CategoryID, itemStoreID, "Category") {
 		return
+	}
+
+	// Older clients omit taxCategory; keep the stored value for them.
+	keepCategory := req.TaxCategory == ""
+	if errMsg := validateItemGSTFields(&req); errMsg != "" {
+		h.writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+	if keepCategory {
+		req.TaxCategory = ""
 	}
 
 	req.ID = id

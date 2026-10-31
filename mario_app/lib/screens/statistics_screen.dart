@@ -1199,58 +1199,220 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             )
           else
             for (final bill in recent)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.gray200,
-                        borderRadius: BorderRadius.circular(11),
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _showBillDetails(bill),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.gray200,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(Icons.receipt_long,
+                            size: 17, color: AppColors.gray600),
                       ),
-                      child: Icon(Icons.receipt_long,
-                          size: 17, color: AppColors.gray600),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              bill.invoiceNo ?? 'Invoice',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${bill.tableLabel} · ${DateFormat('MMM dd, HH:mm').format(bill.generatedAt)}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '₹${bill.total.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 18, color: AppColors.gray400),
+                    ],
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  // Small detail sheet for a bill — shows the server-computed GST
+  // breakdown (per-rate CGST/SGST/IGST), document type and invoice number
+  // when the bill carries them; legacy bills fall back to the totals row.
+  void _showBillDetails(Bill bill) {
+    final taxOn =
+        context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.gray300,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const SizedBox(width: 12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            bill.invoiceNo ?? 'Invoice',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.dark,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${bill.tableLabel} · ${DateFormat('MMM dd, HH:mm').format(bill.generatedAt)}',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.gray500,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        bill.invoiceNo ?? 'Invoice',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySoft.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        bill.documentTypeLabel,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${bill.tableLabel} · ${DateFormat('MMM dd, yyyy · HH:mm').format(bill.generatedAt)}'
+                  '${taxOn && bill.supplyType != null ? ' · ${bill.supplyType}' : ''}',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.gray500),
+                ),
+                if (taxOn &&
+                    (bill.placeOfSupplyName != null ||
+                        bill.buyerGstin != null)) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      if (bill.placeOfSupplyName != null)
+                        'Place of supply: ${bill.placeOfSupplyName}',
+                      if (bill.buyerGstin != null) 'GSTIN: ${bill.buyerGstin}',
+                    ].join('  ·  '),
+                    style: TextStyle(fontSize: 12.5, color: AppColors.gray500),
+                  ),
+                ],
+                Divider(height: 28, color: AppColors.gray200),
+                if (taxOn && bill.taxSummary.isNotEmpty) ...[
+                  _billAmountRow('Taxable Value', bill.taxableValue),
+                  for (final slab in bill.taxSummary)
+                    if (slab.igst != 0)
+                      _billAmountRow('IGST ${_fmtRate(slab.rate)}%', slab.igst)
+                    else if (slab.cgst != 0 || slab.sgst != 0) ...[
+                      _billAmountRow(
+                          'CGST ${_fmtRate(slab.rate / 2)}%', slab.cgst),
+                      _billAmountRow(
+                          '${bill.isUtgst ? 'UTGST' : 'SGST'} ${_fmtRate(slab.rate / 2)}%',
+                          slab.sgst),
+                    ],
+                  if (bill.cess != 0) _billAmountRow('Cess', bill.cess),
+                  if (bill.roundOff != 0)
+                    _billAmountRow('Round Off', bill.roundOff),
+                ] else ...[
+                  _billAmountRow('Subtotal', bill.subtotal),
+                  if (bill.taxTotal != 0) _billAmountRow('Tax', bill.taxTotal),
+                  if (bill.discount != 0)
+                    _billAmountRow('Discount', -bill.discount),
+                ],
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.dark,
                       ),
                     ),
                     Text(
-                      '₹${bill.total.toStringAsFixed(0)}',
+                      '₹${bill.total.toStringAsFixed(2)}',
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
                         color: AppColors.primary,
                       ),
                     ),
-                    Icon(Icons.chevron_right,
-                        size: 18, color: AppColors.gray400),
                   ],
                 ),
-              ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _fmtRate(double rate) => rate == rate.truncateToDouble()
+      ? rate.toStringAsFixed(0)
+      : rate.toStringAsFixed(1);
+
+  Widget _billAmountRow(String label, double amount) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 13, color: AppColors.gray600),
+          ),
+          Text(
+            '₹${amount.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.dark,
+            ),
+          ),
         ],
       ),
     );

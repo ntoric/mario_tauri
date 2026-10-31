@@ -84,17 +84,50 @@ class _OrderScreenState extends State<OrderScreen> {
         (sum, item) => sum + (item.item.price * item.quantity),
       );
 
+  // GST only applies when the store is tax-enabled and GST-registered as
+  // 'regular'. Composition/unregistered dealers charge no GST.
+  bool get _chargesTax {
+    final store = context.read<AuthProvider>().currentStore;
+    return store?.chargesGst ?? true;
+  }
+
+  bool get _pricesIncludeTax =>
+      _chargesTax &&
+      (context.read<AuthProvider>().currentStore?.pricesIncludeTax ?? false);
+
+  // On-top GST estimate (exclusive pricing). Non-taxable categories never
+  // contribute.
   double get _taxAmount => _orderItems.fold(
         0,
         (sum, item) =>
             sum +
             (item.item.price *
                 item.quantity *
-                (item.item.taxPercent ?? 0) /
+                (item.item.taxCategory == 'taxable'
+                    ? (item.item.taxPercent ?? 0)
+                    : 0) /
                 100),
       );
 
-  double get _total => _subtotal + _taxAmount;
+  // GST already embedded in item prices (inclusive pricing) — info only.
+  double get _includedTax => _orderItems.fold(
+        0,
+        (sum, item) {
+          final rate = item.item.taxCategory == 'taxable'
+              ? (item.item.taxPercent ?? 0)
+              : 0;
+          if (rate <= 0) return sum;
+          return sum + item.item.price * item.quantity * rate / (100 + rate);
+        },
+      );
+
+  // Tax figure recorded on the order. The server recomputes the
+  // authoritative bill — this is a display estimate only.
+  double get _orderTax =>
+      !_chargesTax ? 0 : (_pricesIncludeTax ? _includedTax : _taxAmount);
+
+  double get _total =>
+      _chargesTax && !_pricesIncludeTax ? _subtotal + _taxAmount : _subtotal;
 
   void _addItem(Item item) {
     setState(() {
@@ -234,7 +267,7 @@ class _OrderScreenState extends State<OrderScreen> {
           tableName: widget.table.name,
           items: itemsData,
           totalAmount: _total,
-          taxAmount: _taxAmount,
+          taxAmount: _orderTax,
           storeId: storeId,
         );
         // } catch (e,stack){
@@ -259,7 +292,7 @@ class _OrderScreenState extends State<OrderScreen> {
           orderId: widget.order!.id,
           items: itemsData,
           totalAmount: _total,
-          taxAmount: _taxAmount,
+          taxAmount: _orderTax,
         );
 
         if (order != null) {
@@ -1218,7 +1251,10 @@ class _OrderScreenState extends State<OrderScreen> {
                       'Subtotal ($count ${count == 1 ? 'item' : 'items'})',
                       _subtotal),
                   const SizedBox(height: 8),
-                  _buildTotalRow('Tax', _taxAmount),
+                  if (_chargesTax && _pricesIncludeTax)
+                    _buildTotalRow('Incl. GST', _includedTax)
+                  else if (_chargesTax)
+                    _buildTotalRow('Tax', _taxAmount),
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Divider(height: 1, color: AppColors.gray200),

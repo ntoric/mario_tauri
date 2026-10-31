@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 
@@ -129,6 +130,45 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 		req.TaxEnabled = true
 	}
 
+	// GST field validation/normalization for new stores.
+	rawStore := map[string]interface{}{}
+	_ = json.Unmarshal(bodyBytes, &rawStore)
+	norm, errMsg := validateGSTStoreFields(rawStore, nil)
+	if errMsg != "" {
+		h.writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+	if v, ok := norm["gstin"]; ok {
+		req.GSTIN, _ = v.(string)
+	}
+	if v, ok := norm["state_code"]; ok {
+		req.StateCode, _ = v.(string)
+	}
+	if v, ok := norm["gst_registration_type"]; ok {
+		req.GSTRegistrationType, _ = v.(string)
+	}
+	if v, ok := norm["invoice_prefix"]; ok {
+		req.InvoicePrefix, _ = v.(string)
+	}
+	if v, ok := norm["credit_note_prefix"]; ok {
+		req.CreditNotePrefix, _ = v.(string)
+	}
+	if v, ok := norm["default_sac_code"]; ok {
+		req.DefaultSACCode, _ = v.(string)
+	}
+	if req.GSTRegistrationType == "" {
+		req.GSTRegistrationType = "regular"
+	}
+
+	// Data retention is configured by superadmin only — a store role must
+	// not be able to set (or clear) the period its own history is hidden.
+	if claims.Role != "superadmin" {
+		req.DataRetentionDays = 0
+	} else if req.DataRetentionDays < 0 {
+		h.writeError(w, http.StatusBadRequest, "dataRetentionDays must be a non-negative integer")
+		return
+	}
+
 	req.ID = uuid.New().String()
 	if req.InvoiceSize == "" {
 		req.InvoiceSize = "3inch"
@@ -207,23 +247,87 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 	// Convert camelCase JSON tags to snake_case column names
 	updates := make(map[string]interface{})
 	keyMapping := map[string]string{
-		"name":                 "name",
-		"branch":               "branch",
-		"location":             "location",
-		"gstin":                "gstin",
-		"fssaiNo":              "fssai_no",
-		"phone":                "phone",
-		"printerName":          "printer_name",
-		"printerVendorId":      "printer_vendor_id",
-		"printerProductId":     "printer_product_id",
-		"invoiceSize":          "invoice_size",
-		"kotPrintEnabled":      "kot_print_enabled",
-		"remoteBillingEnabled": "remote_billing_enabled",
+		"name":                  "name",
+		"branch":                "branch",
+		"location":              "location",
+		"gstin":                 "gstin",
+		"fssaiNo":               "fssai_no",
+		"phone":                 "phone",
+		"printerName":           "printer_name",
+		"printerVendorId":       "printer_vendor_id",
+		"printerProductId":      "printer_product_id",
+		"invoiceSize":           "invoice_size",
+		"kotPrintEnabled":       "kot_print_enabled",
+		"remoteBillingEnabled":  "remote_billing_enabled",
 		"remotePrinterDeviceId": "remote_printer_device_id",
-		"isActive":             "is_active",
-		"themeColor":           "theme_color",
-		"taxEnabled":           "tax_enabled",
-		"defaultTaxPercent":    "default_tax_percent",
+		"isActive":              "is_active",
+		"themeColor":            "theme_color",
+		"taxEnabled":            "tax_enabled",
+		"defaultTaxPercent":     "default_tax_percent",
+		"gstRegistrationType":   "gst_registration_type",
+		"stateCode":             "state_code",
+		"pricesIncludeTax":      "prices_include_tax",
+		"invoicePrefix":         "invoice_prefix",
+		"creditNotePrefix":      "credit_note_prefix",
+		"defaultSacCode":        "default_sac_code",
+		"swiggyGstin":           "swiggy_gstin",
+		"zomatoGstin":           "zomato_gstin",
+		"otherEcoGstin":         "other_eco_gstin",
+		"dataRetentionDays":     "data_retention_days",
+	}
+
+	// Data retention is configured by superadmin only. Dropping the key for
+	// other roles both prevents privilege escalation and keeps older clients
+	// that echo the full store object working unchanged.
+	if claims.Role != "superadmin" {
+		delete(raw, "dataRetentionDays")
+	} else if v, exists := raw["dataRetentionDays"]; exists {
+		n, ok := v.(float64)
+		if !ok || n < 0 || n != math.Trunc(n) {
+			h.writeError(w, http.StatusBadRequest, "dataRetentionDays must be a non-negative integer")
+			return
+		}
+	}
+
+	// GST field validation runs against the store as it would look after the
+	// update (resolved values), so e.g. adding a registration type can check
+	// the existing GSTIN.
+	var existing *models.Store
+	if has(raw, "gstin") || has(raw, "gstRegistrationType") || has(raw, "stateCode") ||
+		has(raw, "invoicePrefix") || has(raw, "creditNotePrefix") || has(raw, "defaultSacCode") ||
+		has(raw, "swiggyGstin") || has(raw, "zomatoGstin") || has(raw, "otherEcoGstin") {
+		var err error
+		existing, err = h.Repo.Store.GetByID(r.Context(), id)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if existing == nil {
+			h.writeError(w, http.StatusNotFound, "Store not found")
+			return
+		}
+		norm, errMsg := validateGSTStoreFields(raw, existing)
+		if errMsg != "" {
+			h.writeError(w, http.StatusBadRequest, errMsg)
+			return
+		}
+		// Feed normalized values back under their JSON keys.
+		colToJSON := map[string]string{
+			"gstin":                 "gstin",
+			"state_code":            "stateCode",
+			"gst_registration_type": "gstRegistrationType",
+			"invoice_prefix":        "invoicePrefix",
+			"credit_note_prefix":    "creditNotePrefix",
+			"default_sac_code":      "defaultSacCode",
+			"swiggy_gstin":          "swiggyGstin",
+			"zomato_gstin":          "zomatoGstin",
+			"other_eco_gstin":       "otherEcoGstin",
+		}
+		for col, jsonKey := range colToJSON {
+			if v, ok := norm[col]; ok {
+				raw[jsonKey] = v
+			}
+		}
 	}
 
 	for jsonKey, sqlCol := range keyMapping {

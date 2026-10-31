@@ -84,7 +84,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	stats, err := h.Repo.System.GetStats(r.Context(), storeIDs)
+	stats, err := h.Repo.System.GetStats(r.Context(), storeIDs, claims.Role != "superadmin")
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -424,6 +424,137 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// Bill queue — for polling pending bills
 		`CREATE INDEX IF NOT EXISTS idx_bill_queue_store_status ON bill_queue (store_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_bill_queue_order_id ON bill_queue (order_id)`,
+
+		// GST compliance — store GST profile and document series config
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS gst_registration_type VARCHAR(20) DEFAULT 'regular'`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS state_code VARCHAR(2)`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS prices_include_tax BOOLEAN DEFAULT false`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS invoice_prefix VARCHAR(5) DEFAULT 'INV'`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS credit_note_prefix VARCHAR(5) DEFAULT 'CN'`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS default_sac_code VARCHAR(8) DEFAULT '996331'`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS swiggy_gstin VARCHAR(15)`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS zomato_gstin VARCHAR(15)`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS other_eco_gstin VARCHAR(15)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS eco_gstin VARCHAR(15)`,
+		// Backfill the store state code from an existing GSTIN once.
+		`UPDATE stores SET state_code = SUBSTRING(gstin, 1, 2) WHERE (state_code IS NULL OR state_code = '') AND gstin ~ '^[0-9]{2}'`,
+		// Per-item GST tax category (taxable / nil_rated / exempt / non_gst)
+		`ALTER TABLE items ADD COLUMN IF NOT EXISTS tax_category VARCHAR(20) DEFAULT 'taxable'`,
+		// Order source distinguishes counter sales from e-commerce operator orders
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source VARCHAR(20) DEFAULT 'pos'`,
+		// GST fields on bills — fy IS NOT NULL marks a bill as a GST-issued document
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS fy VARCHAR(4)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS invoice_seq INTEGER`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS document_type VARCHAR(20)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS supply_type VARCHAR(10)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS place_of_supply VARCHAR(2)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS supplier_gstin VARCHAR(15)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS supplier_state_code VARCHAR(2)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS buyer_gstin VARCHAR(15)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(255)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS buyer_address TEXT`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS buyer_state_code VARCHAR(2)`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS order_source VARCHAR(20) DEFAULT 'pos'`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS prices_include_tax BOOLEAN DEFAULT false`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS taxable_value DECIMAL(12,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS cgst DECIMAL(12,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS sgst DECIMAL(12,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS igst DECIMAL(12,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS cess DECIMAL(12,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS round_off DECIMAL(6,2) DEFAULT 0`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS is_utgst BOOLEAN DEFAULT false`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
+		`ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancel_reason TEXT`,
+		// Unique invoice numbers only for GST bills — legacy rows may contain
+		// duplicates and are deliberately left unconstrained.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_bills_store_invoice_no ON bills (store_id, invoice_no) WHERE fy IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_bills_store_generated ON bills (store_id, generated_at)`,
+		// Computed GST line snapshot per bill
+		`CREATE TABLE IF NOT EXISTS bill_lines (
+			id SERIAL PRIMARY KEY,
+			bill_id VARCHAR(255) REFERENCES bills(id) ON DELETE CASCADE,
+			item_id VARCHAR(255),
+			name VARCHAR(255),
+			hsn_code VARCHAR(50),
+			unit VARCHAR(10),
+			tax_category VARCHAR(20) DEFAULT 'taxable',
+			quantity DECIMAL(10,3) NOT NULL,
+			unit_price DECIMAL(12,2) NOT NULL,
+			gross DECIMAL(12,2) DEFAULT 0,
+			discount DECIMAL(12,2) DEFAULT 0,
+			taxable_value DECIMAL(12,2) DEFAULT 0,
+			tax_rate DECIMAL(5,2) DEFAULT 0,
+			cgst_rate DECIMAL(5,2) DEFAULT 0,
+			cgst DECIMAL(12,2) DEFAULT 0,
+			sgst_rate DECIMAL(5,2) DEFAULT 0,
+			sgst DECIMAL(12,2) DEFAULT 0,
+			igst_rate DECIMAL(5,2) DEFAULT 0,
+			igst DECIMAL(12,2) DEFAULT 0,
+			cess DECIMAL(12,2) DEFAULT 0,
+			total DECIMAL(12,2) DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_bill_lines_bill_id ON bill_lines (bill_id)`,
+		// Per-store, per-FY document number series (invoice / credit_note).
+		// The prefix is captured when the series starts and stays fixed for
+		// the whole financial year.
+		`CREATE TABLE IF NOT EXISTS doc_series (
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			doc_type VARCHAR(20) NOT NULL,
+			fy VARCHAR(4) NOT NULL,
+			prefix VARCHAR(5),
+			last_seq INTEGER NOT NULL,
+			PRIMARY KEY (store_id, doc_type, fy)
+		)`,
+		// GST credit notes issued against bills
+		`CREATE TABLE IF NOT EXISTS credit_notes (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			bill_id VARCHAR(255) REFERENCES bills(id),
+			credit_note_no VARCHAR(50),
+			fy VARCHAR(4),
+			seq INTEGER,
+			reason TEXT NOT NULL,
+			supply_type VARCHAR(10),
+			place_of_supply VARCHAR(2),
+			buyer_gstin VARCHAR(15),
+			is_utgst BOOLEAN DEFAULT false,
+			taxable_value DECIMAL(12,2) DEFAULT 0,
+			cgst DECIMAL(12,2) DEFAULT 0,
+			sgst DECIMAL(12,2) DEFAULT 0,
+			igst DECIMAL(12,2) DEFAULT 0,
+			cess DECIMAL(12,2) DEFAULT 0,
+			round_off DECIMAL(6,2) DEFAULT 0,
+			total DECIMAL(12,2) DEFAULT 0,
+			status VARCHAR(20) DEFAULT 'active',
+			issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			issued_by VARCHAR(255) REFERENCES users(id)
+		)`,
+		// Per-store data retention — orders/bills/reports older than this many
+		// days are hidden from non-superadmin roles. Rows are never deleted;
+		// superadmin (and analytics) keep the full history. 0 = unlimited.
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS data_retention_days INTEGER NOT NULL DEFAULT 0`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_notes_store_no ON credit_notes (store_id, credit_note_no)`,
+		`CREATE TABLE IF NOT EXISTS credit_note_lines (
+			id SERIAL PRIMARY KEY,
+			credit_note_id VARCHAR(255) REFERENCES credit_notes(id) ON DELETE CASCADE,
+			bill_line_id INTEGER REFERENCES bill_lines(id),
+			item_id VARCHAR(255),
+			name VARCHAR(255),
+			hsn_code VARCHAR(50),
+			unit VARCHAR(10),
+			quantity DECIMAL(10,3) NOT NULL,
+			taxable_value DECIMAL(12,2) DEFAULT 0,
+			tax_rate DECIMAL(5,2) DEFAULT 0,
+			cgst DECIMAL(12,2) DEFAULT 0,
+			sgst DECIMAL(12,2) DEFAULT 0,
+			igst DECIMAL(12,2) DEFAULT 0,
+			cess DECIMAL(12,2) DEFAULT 0,
+			total DECIMAL(12,2) DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_credit_note_lines_cn ON credit_note_lines (credit_note_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_credit_note_lines_bill_line ON credit_note_lines (bill_line_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_credit_notes_bill ON credit_notes (bill_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_credit_notes_store_issued ON credit_notes (store_id, issued_at)`,
 	}
 
 	for _, q := range alterQueries {
@@ -444,6 +575,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		"orders", "order_items", "bills", "bill_queue", "settings",
 		"global_settings", "app_updates", "expense_categories", "expenses",
 		"item_expenses", "table_sections", "support_tickets", "support_messages",
+		"bill_lines", "doc_series", "credit_notes", "credit_note_lines",
 	}
 	for _, t := range auditTables {
 		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", t)); err != nil {

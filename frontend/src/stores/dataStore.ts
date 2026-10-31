@@ -64,7 +64,7 @@ interface DataState {
   fetchOrders: (options?: { status?: string; limit?: number }) => Promise<void>;
   createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
   saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
-  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>, options?: { skipRefresh?: boolean }) => Promise<void>;
+  savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>, options?: { skipRefresh?: boolean }) => Promise<Bill | undefined>;
   updateOrder: (id: string, order: Partial<Order>, options?: { skipRefresh?: boolean }) => Promise<void>;
   completeOrder: (id: string, paymentMethod?: string, options?: { skipRefresh?: boolean }) => Promise<void>;
   cancelOrder: (id: string, reason?: string, options?: { skipRefresh?: boolean }) => Promise<void>;
@@ -73,9 +73,11 @@ interface DataState {
   
   // Bills
   fetchBills: (bypassCache?: boolean) => Promise<void>;
-  createBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
+  createBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<Bill>;
   enqueueBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   getNextInvoiceNo: () => Promise<string>;
+  gstMeta: import('../types').GstMeta | null;
+  fetchGstMeta: () => Promise<import('../types').GstMeta>;
   
   // Users
   fetchUsers: () => Promise<void>;
@@ -497,6 +499,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     return savedOrder;
   },
 
+
   savePrint: async (orderId, bill, options?: { skipRefresh?: boolean }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     const currentUser = useAuthStore.getState().user;
@@ -519,6 +522,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       // Also refresh bills since a bill was created
       await get().fetchBills();
     }
+    return completedOrder?.bill;
   },
 
   updateOrder: async (id, order, options?: { skipRefresh?: boolean }) => {
@@ -613,13 +617,22 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId || !currentUser) {
       throw new Error('User or store not authenticated');
     }
-    await api.createBill({
+    const created = await api.createBill({
       ...bill,
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
     cache.delete(cacheKeys.bills(currentStoreId));
     await get().fetchBills();
+    return created as Bill;
+  },
+
+  gstMeta: null,
+  fetchGstMeta: async () => {
+    if (get().gstMeta) return get().gstMeta!;
+    const meta = await api.getGstMeta();
+    set({ gstMeta: meta });
+    return meta as import('../types').GstMeta;
   },
 
   enqueueBill: async (bill) => {

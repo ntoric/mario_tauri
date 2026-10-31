@@ -761,6 +761,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ],
+              if (order.orderSource != 'pos') ...[
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.storefront_outlined,
+                            size: 16, color: AppColors.gray500),
+                        SizedBox(width: 6),
+                        Text(
+                          'Order Source',
+                          style: TextStyle(
+                            color: AppColors.gray500,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      _orderSourceLabel(order.orderSource),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -852,6 +882,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ],
       ],
     );
+  }
+
+  String _orderSourceLabel(String source) {
+    switch (source) {
+      case 'swiggy':
+        return 'Swiggy';
+      case 'zomato':
+        return 'Zomato';
+      case 'other_eco':
+        return 'Other e-commerce';
+      default:
+        return source.toUpperCase();
+    }
   }
 
   Widget _buildItemRow(int index, OrderItem orderItem) {

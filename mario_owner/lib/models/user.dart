@@ -69,6 +69,8 @@ class Store {
   final String? logoUrl;
   final bool isActive;
   final bool remoteBillingEnabled;
+  // Defaults to true for stores created before the tax toggle existed.
+  final bool taxEnabled;
 
   Store({
     required this.id,
@@ -81,6 +83,7 @@ class Store {
     this.logoUrl,
     required this.isActive,
     this.remoteBillingEnabled = false,
+    this.taxEnabled = true,
   });
 
   factory Store.fromJson(Map<String, dynamic> json) {
@@ -95,6 +98,7 @@ class Store {
       logoUrl: json['logoUrl'] ?? json['logo_url'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
       remoteBillingEnabled: json['remoteBillingEnabled'] ?? json['remote_billing_enabled'] ?? false,
+      taxEnabled: (json['taxEnabled'] ?? json['tax_enabled']) != false,
     );
   }
 
@@ -110,6 +114,7 @@ class Store {
       'logoUrl': logoUrl,
       'isActive': isActive,
       'remoteBillingEnabled': remoteBillingEnabled,
+      'taxEnabled': taxEnabled,
     };
   }
 

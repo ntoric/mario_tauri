@@ -5,8 +5,9 @@ import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { orderItemUnitPrice } from '../utils/order';
-import { isTaxEnabled } from '../utils/tax';
+import { isTaxEnabled, computeCartTotals } from '../utils/tax';
 import { printerService } from '../services/printer';
+import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import { getTableStatusWsUrl } from '../services/realtime';
 import { Button } from '../components/ui/Button';
 import BillModal from './BillModal';
@@ -373,72 +374,7 @@ const Tables: React.FC = () => {
     }
   };
 
-  const printOrderInvoice = async (activeOrder: any, invoiceNo: string, total: number) => {
-    const printItems = activeOrder.items.map((oi: any) => {
-      const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
-      const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
-      return {
-        name: oi.item.name,
-        hsn: oi.item.description || '',
-        qty: oi.quantity,
-        unit: 'PCS',
-        rate: orderItemUnitPrice(oi),
-        tax_percent: taxPercent,
-        amount: itemTotal,
-      };
-    });
 
-    const taxable = printItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-    const actualTax = printItems.reduce((sum: number, item: any) => sum + (item.amount * item.tax_percent / 100), 0);
-    const cgst = actualTax / 2;
-    const sgst = actualTax / 2;
-
-    await printerService.printInvoice({
-      type: 'invoice',
-      printer: {
-        type: 'usb',
-        name: currentStore?.printerName || 'Thermal Printer',
-        vendor_id: currentStore?.printerVendorId || '0x0fe6',
-        product_id: currentStore?.printerProductId || '0x811e',
-        paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-      },
-      invoice: {
-        store: {
-          name: currentStore?.name || 'Cafe',
-          branch: currentStore?.branch || '',
-          location: currentStore?.location || '',
-          ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
-          ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-          ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-          address: currentStore?.location || '',
-        },
-        customer: {
-          name: 'Walk-in Customer',
-          mobile: '',
-        },
-        invoice_no: invoiceNo,
-        bill_no: invoiceNo,
-        date: new Date().toLocaleString('en-IN'),
-        items: printItems,
-        summary: {
-          sub_total: taxable,
-          discount: 0,
-          taxable: taxable,
-          cgst: cgst,
-          sgst: sgst,
-          grand_total: total,
-        },
-        payment: {
-          cash: paymentMethod === 'cash' ? total : 0,
-          card: paymentMethod === 'card' ? total : 0,
-          upi: paymentMethod === 'upi' ? total : 0,
-          balance: 0,
-        },
-        payment_mode: paymentMethod,
-        footer: ['Thank You Visit Again'],
-      },
-    });
-  };
 
   const handlePrintAndComplete = async (table?: Table) => {
     const targetTable = table || billDialogTable;
@@ -447,13 +383,13 @@ const Tables: React.FC = () => {
     const activeOrder = getActiveOrderByTable(targetTable.id);
     if (!activeOrder) return;
 
-    const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
-    const tax = taxEnabled ? activeOrder.items.reduce((sum: number, oi: any) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
-    }, 0) : 0;
-    const total = subtotal + tax;
-    const invoiceNo = `INV-${Date.now()}`;
+    const ct = computeCartTotals(currentStore, activeOrder.items.map((oi: any) => ({
+      unitPrice: orderItemUnitPrice(oi), quantity: oi.quantity,
+      taxPercent: oi.item.taxPercent, taxCategory: oi.item.taxCategory,
+    })), 0);
+    const subtotal = ct.gross;
+    const tax = ct.totalTax;
+    const total = ct.total;
 
     // Pre-check: no printer configured
     if (!currentStore?.printerName) {
@@ -472,7 +408,14 @@ const Tables: React.FC = () => {
 
     try {
       try {
-        await printOrderInvoice(activeOrder, invoiceNo, total);
+        const bill = await createBill({
+          orderId: activeOrder.id,
+          tableNumber: targetTable.number,
+          tableName: targetTable.name,
+          subtotal, taxTotal: tax, discount: 0, total, paymentMethod,
+          customerName: 'Walk-in Customer',
+        });
+        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!));
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);
@@ -487,19 +430,7 @@ const Tables: React.FC = () => {
         return;
       }
 
-      // Print succeeded - create bill and complete order
-      await createBill({
-        orderId: activeOrder.id,
-        tableNumber: targetTable.number,
-        tableName: targetTable.name,
-        invoiceNo,
-        subtotal,
-        taxTotal: tax,
-        discount: 0,
-        total,
-        paymentMethod,
-        customerName: 'Walk-in Customer',
-      });
+      // Bill issued and printed above
 
       await completeOrder(activeOrder.id, paymentMethod); // Optimistic update frees the table immediately
 
@@ -523,17 +454,24 @@ const Tables: React.FC = () => {
       return;
     }
 
-    const subtotal = activeOrder.items.reduce((sum: number, oi: any) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
-    const tax = taxEnabled ? activeOrder.items.reduce((sum: number, oi: any) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
-    }, 0) : 0;
-    const total = subtotal + tax;
-    const invoiceNo = `INV-${Date.now()}`;
+    const ct = computeCartTotals(currentStore, activeOrder.items.map((oi: any) => ({
+      unitPrice: orderItemUnitPrice(oi), quantity: oi.quantity,
+      taxPercent: oi.item.taxPercent, taxCategory: oi.item.taxCategory,
+    })), 0);
+    const subtotal = ct.gross;
+    const tax = ct.totalTax;
+    const total = ct.total;
 
     setIsPrintingOnly(true);
     try {
-      await printOrderInvoice(activeOrder, invoiceNo, total);
+      const bill = await createBill({
+        orderId: activeOrder.id,
+        tableNumber: activeOrder.tableNumber,
+        tableName: activeOrder.tableName,
+        subtotal, taxTotal: tax, discount: 0, total,
+        customerName: 'Walk-in Customer',
+      });
+      await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore));
       notify.success('Bill printed');
     } catch (printError) {
       console.error('Failed to print bill:', printError);

@@ -13,6 +13,9 @@ import (
 	"cafe-backend/internal/repository"
 
 	"fmt"
+
+	"cafe-backend/internal/gst"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -57,6 +60,24 @@ func parseTimeQuery(r *http.Request, key string) *time.Time {
 	return nil
 }
 
+// parseEndOfDayQuery parses an inclusive end-bound query value. A bare
+// YYYY-MM-DD covers the whole day — parseTimeQuery would return the start
+// of that day and exclude everything after 00:00.
+func parseEndOfDayQuery(r *http.Request, key string) *time.Time {
+	raw := r.URL.Query().Get(key)
+	if raw == "" {
+		return nil
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return &t
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		end := t.AddDate(0, 0, 1).Add(-time.Nanosecond)
+		return &end
+	}
+	return nil
+}
+
 // parseLimitQuery parses a positive integer limit, capped at max (0 = no
 // cap). Invalid or absent values return 0 meaning "no limit".
 func parseLimitQuery(r *http.Request, max int) int {
@@ -85,7 +106,7 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	filter := repository.OrderFilter{
 		Statuses: parseStatuses(r.URL.Query().Get("status")),
 		From:     parseTimeQuery(r, "from"),
-		To:       parseTimeQuery(r, "to"),
+		To:       parseEndOfDayQuery(r, "to"),
 		Limit:    parseLimitQuery(r, maxListLimit),
 	}
 
@@ -99,6 +120,13 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+
+	cutoff, err := h.retentionCutoff(r.Context(), claims, targetStoreID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	filter.From = clampStart(filter.From, cutoff)
 
 	orders, err := h.Repo.Order.GetAll(r.Context(), targetStoreID, filter)
 	if err != nil {
@@ -136,10 +164,17 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	orderSource, valid := validOrderSource(req.OrderSource)
+	if !valid {
+		h.writeError(w, http.StatusBadRequest, "Invalid orderSource")
+		return
+	}
+
 	req.ID = uuid.New().String()
 	req.StoreID = targetStoreID
 	req.CreatedBy = claims.ID
 	req.Status = "active"
+	req.OrderSource = orderSource
 
 	err := h.Repo.Order.Create(r.Context(), req)
 	if err != nil {
@@ -406,7 +441,14 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.Repo.Order.Cancel(r.Context(), id, claims.ID)
+	// GST guard: an invoice from a previous return period must be reversed
+	// with a credit note, not cancelled.
+	if err := h.checkCancelGuard(r, id); err != nil {
+		h.writeIssueError(w, err)
+		return
+	}
+
+	err = h.Repo.Order.Cancel(r.Context(), id, claims.ID, req.Reason)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -518,7 +560,13 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.Order
+	var req struct {
+		models.Order
+		BuyerGSTIN     string `json:"buyerGstin"`
+		BuyerName      string `json:"buyerName"`
+		BuyerAddress   string `json:"buyerAddress"`
+		BuyerStateCode string `json:"buyerStateCode"`
+	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
@@ -534,10 +582,21 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orderID := uuid.New().String()
-	invoiceNo := fmt.Sprintf("INV-%d", time.Now().Unix())
 	paymentMethod := req.PaymentMethod
 	if paymentMethod == "" {
 		paymentMethod = "upi"
+	}
+
+	orderSource, valid := validOrderSource(req.OrderSource)
+	if !valid {
+		h.writeError(w, http.StatusBadRequest, "Invalid orderSource")
+		return
+	}
+	if bg := gst.NormalizeGSTIN(req.BuyerGSTIN); bg != "" {
+		if err := gst.ValidateGSTIN(bg); err != nil {
+			h.writeError(w, http.StatusBadRequest, "Invalid buyerGstin: "+err.Error())
+			return
+		}
 	}
 
 	order := models.Order{
@@ -555,6 +614,7 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		DiscountAmount: req.DiscountAmount,
 		PaymentMethod:  paymentMethod,
 		PaymentStatus:  "paid",
+		OrderSource:    orderSource,
 		CreatedBy:      claims.ID,
 		Items:          req.Items,
 	}
@@ -565,30 +625,22 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Complete order immediately
-	if err := h.Repo.Order.Complete(r.Context(), orderID, paymentMethod, claims.ID); err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// Create bill
-	bill := models.Bill{
-		ID:             uuid.New().String(),
-		StoreID:        targetStoreID,
-		OrderID:        orderID,
-		TableNumber:    req.TableNumber,
-		TableName:      req.TableName,
-		InvoiceNo:      invoiceNo,
-		Subtotal:       req.TotalAmount,
-		TaxTotal:       req.TaxAmount,
-		Discount:       req.DiscountAmount,
-		Total:          req.TotalAmount + req.TaxAmount - req.DiscountAmount,
+	// Issue the GST bill BEFORE completing the order; on failure the order is
+	// cancelled so no completed/active orphan order is left without a bill.
+	bill, ok := h.issueBill(w, r, targetStoreID, orderID, repository.IssueOptions{
 		PaymentMethod:  paymentMethod,
 		CustomerName:   req.CustomerName,
 		CustomerMobile: req.CustomerMobile,
+		Discount:       req.DiscountAmount,
+		Buyer:          gst.Buyer{GSTIN: req.BuyerGSTIN, Name: req.BuyerName, Address: req.BuyerAddress, StateCode: req.BuyerStateCode},
 		GeneratedBy:    claims.ID,
+	})
+	if !ok {
+		_ = h.Repo.Order.Cancel(r.Context(), orderID, claims.ID, "Bill issue failed")
+		return
 	}
-	if err := h.Repo.Bill.Create(r.Context(), bill); err != nil {
+
+	if err := h.Repo.Order.Complete(r.Context(), orderID, paymentMethod, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -596,12 +648,12 @@ func (h *Handler) SaveEBill(w http.ResponseWriter, r *http.Request) {
 	// Fetch fully created order
 	createdOrder, errFetch := h.Repo.Order.GetByID(r.Context(), orderID)
 	if errFetch != nil || createdOrder == nil {
-		h.writeJSON(w, http.StatusCreated, order)
+		h.writeJSON(w, http.StatusCreated, orderWithBill{Order: order, Bill: bill})
 		return
 	}
 
 	h.broadcastTableStatusUpdate(targetStoreID, "order_completed")
-	h.writeJSON(w, http.StatusCreated, createdOrder)
+	h.writeJSON(w, http.StatusCreated, orderWithBill{Order: *createdOrder, Bill: bill})
 }
 
 // SavePrint handles POST /api/orders/:id/save-print
@@ -637,35 +689,26 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invoiceNo := req.InvoiceNo
-	if invoiceNo == "" {
-		invoiceNo = fmt.Sprintf("INV-%d", time.Now().Unix())
-	}
-
 	paymentMethod := req.PaymentMethod
 	if paymentMethod == "" {
 		paymentMethod = "upi"
 	}
 
-	bill := models.Bill{
-		ID:             uuid.New().String(),
-		StoreID:        targetStoreID,
-		OrderID:        id,
-		TableNumber:    req.TableNumber,
-		TableName:      req.TableName,
-		InvoiceNo:      invoiceNo,
-		Subtotal:       req.Subtotal,
-		TaxTotal:       req.TaxTotal,
-		Discount:       req.Discount,
-		Total:          req.Total,
+	// Issue the GST bill (client amounts/invoice number are ignored).
+	bill, ok := h.issueBill(w, r, targetStoreID, id, repository.IssueOptions{
 		PaymentMethod:  paymentMethod,
 		CustomerName:   req.CustomerName,
 		CustomerMobile: req.CustomerMobile,
-		GeneratedBy:    claims.ID,
-	}
-
-	if err := h.Repo.Bill.Create(r.Context(), bill); err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		Discount:       req.Discount,
+		Buyer: gst.Buyer{
+			GSTIN:     req.BuyerGSTIN,
+			Name:      req.BuyerName,
+			Address:   req.BuyerAddress,
+			StateCode: req.BuyerStateCode,
+		},
+		GeneratedBy: claims.ID,
+	})
+	if !ok {
 		return
 	}
 
@@ -681,7 +724,7 @@ func (h *Handler) SavePrint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.broadcastTableStatusUpdate(targetStoreID, "order_completed")
-	h.writeJSON(w, http.StatusOK, completedOrder)
+	h.writeJSON(w, http.StatusOK, orderWithBill{Order: *completedOrder, Bill: bill})
 }
 
 // CreateParcelOrder handles POST /api/orders/parcel
@@ -701,6 +744,11 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		PaymentMethod  string             `json:"paymentMethod"`
 		CustomerName   string             `json:"customerName"`
 		CustomerMobile string             `json:"customerMobile"`
+		OrderSource    string             `json:"orderSource"`
+		BuyerGSTIN     string             `json:"buyerGstin"`
+		BuyerName      string             `json:"buyerName"`
+		BuyerAddress   string             `json:"buyerAddress"`
+		BuyerStateCode string             `json:"buyerStateCode"`
 	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -712,8 +760,19 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	orderSource, valid := validOrderSource(req.OrderSource)
+	if !valid {
+		h.writeError(w, http.StatusBadRequest, "Invalid orderSource")
+		return
+	}
+	if bg := gst.NormalizeGSTIN(req.BuyerGSTIN); bg != "" {
+		if err := gst.ValidateGSTIN(bg); err != nil {
+			h.writeError(w, http.StatusBadRequest, "Invalid buyerGstin: "+err.Error())
+			return
+		}
+	}
+
 	orderID := uuid.New().String()
-	invoiceNo := fmt.Sprintf("INV-%d", time.Now().Unix())
 
 	order := models.Order{
 		ID:             orderID,
@@ -729,6 +788,7 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		DiscountAmount: req.DiscountAmount,
 		PaymentMethod:  req.PaymentMethod,
 		PaymentStatus:  "paid",
+		OrderSource:    orderSource,
 		CreatedBy:      claims.ID,
 		Items:          req.Items,
 	}
@@ -739,29 +799,23 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update status to completed (Create inserts as 'active', so we need to update)
-	if err := h.Repo.Order.Complete(r.Context(), orderID, req.PaymentMethod, claims.ID); err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// Create bill
-	bill := models.Bill{
-		ID:             uuid.New().String(),
-		StoreID:        targetStoreID,
-		OrderID:        orderID,
-		TableNumber:    0,
-		InvoiceNo:      invoiceNo,
-		Subtotal:       req.TotalAmount,
-		TaxTotal:       req.TaxAmount,
-		Discount:       req.DiscountAmount,
-		Total:          req.TotalAmount + req.TaxAmount - req.DiscountAmount,
+	// Issue the GST bill before completing; on failure the order is cancelled
+	// so no orphan order is left without a bill.
+	bill, ok := h.issueBill(w, r, targetStoreID, orderID, repository.IssueOptions{
 		PaymentMethod:  req.PaymentMethod,
 		CustomerName:   req.CustomerName,
 		CustomerMobile: req.CustomerMobile,
+		Discount:       req.DiscountAmount,
+		Buyer:          gst.Buyer{GSTIN: req.BuyerGSTIN, Name: req.BuyerName, Address: req.BuyerAddress, StateCode: req.BuyerStateCode},
 		GeneratedBy:    claims.ID,
+	})
+	if !ok {
+		_ = h.Repo.Order.Cancel(r.Context(), orderID, claims.ID, "Bill issue failed")
+		return
 	}
-	if err := h.Repo.Bill.Create(r.Context(), bill); err != nil {
+
+	// Update status to completed (Create inserts as 'active', so we need to update)
+	if err := h.Repo.Order.Complete(r.Context(), orderID, req.PaymentMethod, claims.ID); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -769,11 +823,11 @@ func (h *Handler) CreateParcelOrder(w http.ResponseWriter, r *http.Request) {
 	// Fetch fully created order
 	createdOrder, errFetch := h.Repo.Order.GetByID(r.Context(), orderID)
 	if errFetch != nil || createdOrder == nil {
-		h.writeJSON(w, http.StatusCreated, order)
+		h.writeJSON(w, http.StatusCreated, orderWithBill{Order: order, Bill: bill})
 		return
 	}
 
-	h.writeJSON(w, http.StatusCreated, createdOrder)
+	h.writeJSON(w, http.StatusCreated, orderWithBill{Order: *createdOrder, Bill: bill})
 }
 
 // ==========================================
@@ -795,9 +849,16 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 
 	filter := repository.BillFilter{
 		From:  parseTimeQuery(r, "from"),
-		To:    parseTimeQuery(r, "to"),
+		To:    parseEndOfDayQuery(r, "to"),
 		Limit: parseLimitQuery(r, maxListLimit),
 	}
+
+	cutoff, err := h.retentionCutoff(r.Context(), claims, targetStoreID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	filter.From = clampStart(filter.From, cutoff)
 
 	bills, err := h.Repo.Bill.GetAll(r.Context(), targetStoreID, filter)
 	if err != nil {
@@ -812,7 +873,8 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, bills)
 }
 
-// CreateBill handles POST /api/bills
+// CreateBill handles POST /api/bills — issues a GST bill through the unified
+// pipeline. Client-supplied amounts and invoice numbers are ignored.
 func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
@@ -820,7 +882,18 @@ func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.Bill
+	var req struct {
+		StoreID        string  `json:"storeId"`
+		OrderID        string  `json:"orderId"`
+		PaymentMethod  string  `json:"paymentMethod"`
+		CustomerName   string  `json:"customerName"`
+		CustomerMobile string  `json:"customerMobile"`
+		Discount       float64 `json:"discount"`
+		BuyerGSTIN     string  `json:"buyerGstin"`
+		BuyerName      string  `json:"buyerName"`
+		BuyerAddress   string  `json:"buyerAddress"`
+		BuyerStateCode string  `json:"buyerStateCode"`
+	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
@@ -831,20 +904,32 @@ func (h *Handler) CreateBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.OrderID != "" && !h.requireRecordBelongsToStore(w, r, "orders", req.OrderID, targetStoreID, "Order") {
+	if req.OrderID == "" {
+		h.writeError(w, http.StatusBadRequest, "orderId is required")
+		return
+	}
+	if !h.requireRecordBelongsToStore(w, r, "orders", req.OrderID, targetStoreID, "Order") {
 		return
 	}
 
-	req.ID = uuid.New().String()
-	req.StoreID = targetStoreID
-	req.GeneratedBy = claims.ID
-
-	if err := h.Repo.Bill.Create(r.Context(), req); err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+	bill, ok := h.issueBill(w, r, targetStoreID, req.OrderID, repository.IssueOptions{
+		PaymentMethod:  req.PaymentMethod,
+		CustomerName:   req.CustomerName,
+		CustomerMobile: req.CustomerMobile,
+		Discount:       req.Discount,
+		Buyer: gst.Buyer{
+			GSTIN:     req.BuyerGSTIN,
+			Name:      req.BuyerName,
+			Address:   req.BuyerAddress,
+			StateCode: req.BuyerStateCode,
+		},
+		GeneratedBy: claims.ID,
+	})
+	if !ok {
 		return
 	}
 
-	h.writeJSON(w, http.StatusCreated, req)
+	h.writeJSON(w, http.StatusCreated, bill)
 }
 
 // GetNextInvoiceNo handles GET /api/bills/next-invoice-no
@@ -860,7 +945,18 @@ func (h *Handler) GetNextInvoiceNo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invoiceNo, err := h.Repo.Bill.GetNextInvoiceNo(r.Context(), targetStoreID)
+	// The returned number is a peek at the series — the real number is
+	// allocated inside IssueBill's transaction.
+	store, err := h.Repo.Store.GetByID(r.Context(), targetStoreID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if store == nil {
+		h.writeError(w, http.StatusNotFound, "Store not found")
+		return
+	}
+	invoiceNo, err := h.Repo.Bill.PeekNextInvoiceNo(r.Context(), store)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -913,17 +1009,10 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		OrderID       string  `json:"orderId"`
-		TableNumber   int     `json:"tableNumber"`
-		TableName     string  `json:"tableName"`
-		InvoiceNo     string  `json:"invoiceNo"`
-		Subtotal      float64 `json:"subtotal"`
-		TaxTotal      float64 `json:"taxTotal"`
-		Discount      float64 `json:"discount"`
-		Total         float64 `json:"total"`
-		PaymentMethod string  `json:"paymentMethod"`
-		CustomerName  string  `json:"customerName"`
-		StoreID       string  `json:"storeId"`
+		OrderID       string `json:"orderId"`
+		PaymentMethod string `json:"paymentMethod"`
+		CustomerName  string `json:"customerName"`
+		StoreID       string `json:"storeId"`
 	}
 
 	if err := h.readJSON(r, &req); err != nil {
@@ -955,33 +1044,35 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Embed print-ready line items server-side so the bill is self-contained:
-	// the printer never depends on fetching the order (which may already be
-	// completed or otherwise filtered out of list endpoints).
-	printItems := make([]queuePrintItem, 0)
-	if req.OrderID != "" {
-		order, err := h.Repo.Order.GetByID(r.Context(), req.OrderID)
-		if err != nil {
-			h.writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if order != nil {
-			for _, oi := range order.Items {
-				rate := oi.UnitPrice
-				if rate == 0 {
-					rate = oi.Item.Price
-				}
-				printItems = append(printItems, queuePrintItem{
-					Name:       oi.Item.Name,
-					HSN:        oi.Item.Description,
-					Qty:        oi.Quantity,
-					Unit:       "PCS",
-					Rate:       rate,
-					TaxPercent: oi.TaxPercent,
-					Amount:     rate * float64(oi.Quantity),
-				})
-			}
-		}
+	// Issue the GST bill first so the remotely printed invoice is a real
+	// recorded document. Items, totals and the invoice number all come from
+	// the issued bill — client-supplied values are ignored.
+	if req.OrderID == "" {
+		h.writeError(w, http.StatusBadRequest, "orderId is required")
+		return
+	}
+	bill, ok := h.issueBill(w, r, targetStoreID, req.OrderID, repository.IssueOptions{
+		PaymentMethod: req.PaymentMethod,
+		CustomerName:  req.CustomerName,
+		GeneratedBy:   claims.ID,
+	})
+	if !ok {
+		return
+	}
+
+	// Legacy print items now come from the computed bill lines so the HSN,
+	// rate and taxable amount match the recorded invoice.
+	printItems := make([]queuePrintItem, 0, len(bill.Lines))
+	for _, l := range bill.Lines {
+		printItems = append(printItems, queuePrintItem{
+			Name:       l.Name,
+			HSN:        l.HSNCode,
+			Qty:        int(l.Quantity),
+			Unit:       l.Unit,
+			Rate:       l.UnitPrice,
+			TaxPercent: l.TaxRate,
+			Amount:     l.TaxableValue,
+		})
 	}
 
 	queueID := uuid.New().String()
@@ -989,17 +1080,18 @@ func (h *Handler) QueueBill(w http.ResponseWriter, r *http.Request) {
 	// Build JSON representation matching database DTO
 	billDataMap := map[string]interface{}{
 		"orderId":       req.OrderID,
-		"tableNumber":   req.TableNumber,
-		"tableName":     req.TableName,
-		"invoiceNo":     req.InvoiceNo,
-		"subtotal":      req.Subtotal,
-		"taxTotal":      req.TaxTotal,
-		"discount":      req.Discount,
-		"total":         req.Total,
-		"paymentMethod": req.PaymentMethod,
-		"customerName":  req.CustomerName,
+		"tableNumber":   bill.TableNumber,
+		"tableName":     bill.TableName,
+		"invoiceNo":     bill.InvoiceNo,
+		"subtotal":      bill.Subtotal,
+		"taxTotal":      bill.TaxTotal,
+		"discount":      bill.Discount,
+		"total":         bill.Total,
+		"paymentMethod": bill.PaymentMethod,
+		"customerName":  bill.CustomerName,
 		"generatedBy":   claims.ID,
 		"items":         printItems,
+		"bill":          bill,
 	}
 
 	billDataBytes, err := json.Marshal(billDataMap)

@@ -21,6 +21,17 @@ class ParcelOrderScreen extends StatefulWidget {
 }
 
 class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
+  static final RegExp _gstinRegex = RegExp(
+    r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$',
+  );
+
+  static const List<Map<String, String>> _orderSources = [
+    {'id': 'pos', 'label': 'Counter / POS'},
+    {'id': 'swiggy', 'label': 'Swiggy'},
+    {'id': 'zomato', 'label': 'Zomato'},
+    {'id': 'other_eco', 'label': 'Other e-commerce'},
+  ];
+
   final List<OrderItem> _orderItems = [];
   String? _selectedCategoryId;
   String _searchQuery = '';
@@ -36,6 +47,12 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   final TextEditingController _customerMobileController =
       TextEditingController();
   String _paymentMethod = 'cash';
+  String _orderSource = 'pos';
+  String? _gstinError;
+
+  // Optional B2B buyer details — only sent for POS orders.
+  final TextEditingController _buyerGstinController = TextEditingController();
+  final TextEditingController _buyerNameController = TextEditingController();
 
   @override
   void initState() {
@@ -52,6 +69,8 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
     _notesController.dispose();
     _customerNameController.dispose();
     _customerMobileController.dispose();
+    _buyerGstinController.dispose();
+    _buyerNameController.dispose();
     super.dispose();
   }
 
@@ -80,17 +99,58 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         (sum, item) => sum + (item.item.price * item.quantity),
       );
 
+  bool get _isPosSource => _orderSource == 'pos';
+
+  // GST fields and notes are hidden when the store has tax switched off.
+  bool get _taxOn =>
+      context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+
+  // GST only applies to counter/POS sales from a regular, tax-enabled
+  // store. Platform orders (Sec 9(5)) and composition/unregistered dealers
+  // never charge GST.
+  bool get _chargesTax {
+    if (!_isPosSource) return false;
+    final store = context.read<AuthProvider>().currentStore;
+    return store?.chargesGst ?? true;
+  }
+
+  bool get _pricesIncludeTax =>
+      _chargesTax &&
+      (context.read<AuthProvider>().currentStore?.pricesIncludeTax ?? false);
+
+  // On-top GST estimate (exclusive pricing). Non-taxable categories never
+  // contribute.
   double get _taxAmount => _orderItems.fold(
         0,
         (sum, item) =>
             sum +
             (item.item.price *
                 item.quantity *
-                (item.item.taxPercent ?? 0) /
+                (item.item.taxCategory == 'taxable'
+                    ? (item.item.taxPercent ?? 0)
+                    : 0) /
                 100),
       );
 
-  double get _total => _subtotal + _taxAmount;
+  // GST already embedded in item prices (inclusive pricing) — info only.
+  double get _includedTax => _orderItems.fold(
+        0,
+        (sum, item) {
+          final rate = item.item.taxCategory == 'taxable'
+              ? (item.item.taxPercent ?? 0)
+              : 0;
+          if (rate <= 0) return sum;
+          return sum + item.item.price * item.quantity * rate / (100 + rate);
+        },
+      );
+
+  // Tax figure recorded on the order. The server recomputes the
+  // authoritative bill — this is a display estimate only.
+  double get _orderTax =>
+      !_chargesTax ? 0 : (_pricesIncludeTax ? _includedTax : _taxAmount);
+
+  double get _total =>
+      _chargesTax && !_pricesIncludeTax ? _subtotal + _taxAmount : _subtotal;
 
   void _addItem(Item item) {
     setState(() {
@@ -195,6 +255,13 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
   Future<void> _submitOrder() async {
     if (_orderItems.isEmpty) return;
 
+    final gstin = _buyerGstinController.text.trim().toUpperCase();
+    final buyerName = _buyerNameController.text.trim();
+    if (_isPosSource && gstin.isNotEmpty && !_gstinRegex.hasMatch(gstin)) {
+      _showFeedback('Please enter a valid buyer GSTIN', isError: true);
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -210,7 +277,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 'itemId': e.value.itemId,
                 'quantity': e.value.quantity,
                 'unitPrice': e.value.item.price,
-                'taxPercent': e.value.item.taxPercent ?? 0,
+                'taxPercent': _chargesTax ? (e.value.item.taxPercent ?? 0) : 0,
                 // No order-level notes column — attach to the first item so it
                 // reaches the kitchen/bill.
                 'notes': e.key == 0 && orderNote.isNotEmpty
@@ -223,7 +290,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
       final order = await data.createParcelOrder(
         items: itemsData,
         totalAmount: _total,
-        taxAmount: _taxAmount,
+        taxAmount: _orderTax,
         storeId: storeId,
         paymentMethod: _paymentMethod,
         customerName: _customerNameController.text.trim().isEmpty
@@ -232,6 +299,9 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
         customerMobile: _customerMobileController.text.trim().isEmpty
             ? null
             : _customerMobileController.text.trim(),
+        orderSource: _orderSource,
+        buyerGstin: _isPosSource && gstin.isNotEmpty ? gstin : null,
+        buyerName: _isPosSource && buyerName.isNotEmpty ? buyerName : null,
       );
 
       if (order != null) {
@@ -243,6 +313,10 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
             _notesController.clear();
             _customerNameController.clear();
             _customerMobileController.clear();
+            _buyerGstinController.clear();
+            _buyerNameController.clear();
+            _gstinError = null;
+            _orderSource = 'pos';
           });
           widget.onOrderSuccess?.call();
         }
@@ -405,6 +479,62 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                // Order Source
+                const Text(
+                  'Order Source',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Column(
+                  children: [
+                    for (final source in _orderSources)
+                      RadioListTile<String>(
+                        title: Text(source['label']!),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: source['id']!,
+                        groupValue: _orderSource,
+                        onChanged: _isSaving
+                            ? null
+                            : (value) {
+                                setDialogState(() => _orderSource = value!);
+                                setState(() => _orderSource = value!);
+                              },
+                        activeColor: AppColors.primary,
+                      ),
+                  ],
+                ),
+                if (_taxOn && !_isPosSource)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GST is paid by the platform (Sec 9(5)); no GST is charged on this bill',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 20),
+
                 // Customer Name
                 TextField(
                   controller: _customerNameController,
@@ -429,6 +559,45 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                   enabled: !_isSaving,
                 ),
                 const SizedBox(height: 20),
+
+                // Optional B2B buyer details — only relevant for counter
+                // sales; platform orders are always B2C under Sec 9(5).
+                if (_taxOn && _isPosSource) ...[
+                  TextField(
+                    controller: _buyerGstinController,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 15,
+                    decoration: InputDecoration(
+                      labelText: 'Buyer GSTIN (optional)',
+                      hintText: 'e.g. 27ABCDE1234F1Z5',
+                      prefixIcon: const Icon(Icons.badge_outlined),
+                      counterText: '',
+                      errorText: _gstinError,
+                    ),
+                    enabled: !_isSaving,
+                    onChanged: (_) {
+                      final gstin =
+                          _buyerGstinController.text.trim().toUpperCase();
+                      setDialogState(() {
+                        _gstinError =
+                            gstin.isEmpty || _gstinRegex.hasMatch(gstin)
+                                ? null
+                                : 'Invalid GSTIN format';
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _buyerNameController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Buyer / Business Name (optional)',
+                      prefixIcon: Icon(Icons.storefront_outlined),
+                    ),
+                    enabled: !_isSaving,
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 // Payment Method
                 const Text(
@@ -919,7 +1088,30 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
                       'Subtotal ($count ${count == 1 ? 'item' : 'items'})',
                       _subtotal),
                   const SizedBox(height: 8),
-                  _summaryRow('Tax', _taxAmount),
+                  if (_chargesTax && _pricesIncludeTax)
+                    _summaryRow('Incl. GST', _includedTax)
+                  else if (_chargesTax)
+                    _summaryRow('Tax', _taxAmount),
+                  if (!_isPosSource) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 13, color: AppColors.gray500),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'GST paid by platform (Sec 9(5)) — no GST charged',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.gray500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Divider(height: 1, color: AppColors.gray200),

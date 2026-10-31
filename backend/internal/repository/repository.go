@@ -183,13 +183,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -204,11 +204,14 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	for rows.Next() {
 		var s models.Store
 		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
+		var gstRegType, stateCode, invoicePrefix, creditNotePrefix, defaultSacCode, swiggyGSTIN, zomatoGSTIN, otherEcoGSTIN sql.NullString
+		var pricesIncludeTax sql.NullBool
 		var appVersionSeenAt sql.NullTime
 		err := rows.Scan(
 			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-			&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+			&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &gstRegType, &stateCode, &pricesIncludeTax, &invoicePrefix, &creditNotePrefix, &defaultSacCode, &swiggyGSTIN, &zomatoGSTIN, &otherEcoGSTIN, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+			&s.DataRetentionDays,
 		)
 		if err != nil {
 			return nil, err
@@ -224,6 +227,27 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.RemotePrinterDeviceID = remotePrinterDevice.String
 		s.LogoURL = logoURL.String
 		s.ThemeColor = themeColor.String
+		s.GSTRegistrationType = gstRegType.String
+		if s.GSTRegistrationType == "" {
+			s.GSTRegistrationType = "regular"
+		}
+		s.StateCode = stateCode.String
+		s.PricesIncludeTax = pricesIncludeTax.Bool
+		s.InvoicePrefix = invoicePrefix.String
+		if s.InvoicePrefix == "" {
+			s.InvoicePrefix = "INV"
+		}
+		s.CreditNotePrefix = creditNotePrefix.String
+		if s.CreditNotePrefix == "" {
+			s.CreditNotePrefix = "CN"
+		}
+		s.DefaultSACCode = defaultSacCode.String
+		if s.DefaultSACCode == "" {
+			s.DefaultSACCode = "996331"
+		}
+		s.SwiggyGSTIN = swiggyGSTIN.String
+		s.ZomatoGSTIN = zomatoGSTIN.String
+		s.OtherEcoGSTIN = otherEcoGSTIN.String
 		s.AppVersion = appVersion.String
 		if appVersionSeenAt.Valid {
 			s.AppVersionSeenAt = &appVersionSeenAt.Time
@@ -234,16 +258,19 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, is_active, app_version, app_version_seen_at, created_at FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
 	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
+	var gstRegType, stateCode, invoicePrefix, creditNotePrefix, defaultSacCode, swiggyGSTIN, zomatoGSTIN, otherEcoGSTIN sql.NullString
+	var pricesIncludeTax sql.NullBool
 	var appVersionSeenAt sql.NullTime
 	err := row.Scan(
 		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
-		&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+		&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &gstRegType, &stateCode, &pricesIncludeTax, &invoicePrefix, &creditNotePrefix, &defaultSacCode, &swiggyGSTIN, &zomatoGSTIN, &otherEcoGSTIN, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
+		&s.DataRetentionDays,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -262,6 +289,27 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	s.RemotePrinterDeviceID = remotePrinterDevice.String
 	s.LogoURL = logoURL.String
 	s.ThemeColor = themeColor.String
+	s.GSTRegistrationType = gstRegType.String
+	if s.GSTRegistrationType == "" {
+		s.GSTRegistrationType = "regular"
+	}
+	s.StateCode = stateCode.String
+	s.PricesIncludeTax = pricesIncludeTax.Bool
+	s.InvoicePrefix = invoicePrefix.String
+	if s.InvoicePrefix == "" {
+		s.InvoicePrefix = "INV"
+	}
+	s.CreditNotePrefix = creditNotePrefix.String
+	if s.CreditNotePrefix == "" {
+		s.CreditNotePrefix = "CN"
+	}
+	s.DefaultSACCode = defaultSacCode.String
+	if s.DefaultSACCode == "" {
+		s.DefaultSACCode = "996331"
+	}
+	s.SwiggyGSTIN = swiggyGSTIN.String
+	s.ZomatoGSTIN = zomatoGSTIN.String
+	s.OtherEcoGSTIN = otherEcoGSTIN.String
 	s.AppVersion = appVersion.String
 	if appVersionSeenAt.Valid {
 		s.AppVersionSeenAt = &appVersionSeenAt.Time
@@ -270,12 +318,14 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 }
 
 func (r *StoreRepository) Create(ctx context.Context, s models.Store) error {
-	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, tax_enabled, default_tax_percent, is_active)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)`
+	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, data_retention_days, is_active)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE(NULLIF($16, ''), 'regular'), NULLIF($17, ''), COALESCE($18, false), COALESCE(NULLIF($19, ''), 'INV'), COALESCE(NULLIF($20, ''), 'CN'), COALESCE(NULLIF($21, ''), '996331'), $22, true)`
 	_, err := r.db.ExecContext(ctx, sqlStr,
 		s.ID, s.Name, s.Branch, s.Location, s.GSTIN, s.FSSAINo, s.Phone,
 		s.PrinterName, s.PrinterVendorID, s.PrinterProductID, s.InvoiceSize, s.KOTPrintEnabled, s.RemoteBillingEnabled,
 		s.TaxEnabled, s.DefaultTaxPercent,
+		s.GSTRegistrationType, s.StateCode, s.PricesIncludeTax, s.InvoicePrefix, s.CreditNotePrefix, s.DefaultSACCode,
+		s.DataRetentionDays,
 	)
 	return err
 }
@@ -742,7 +792,7 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 	var sqlStr string
 	if hasItemExpenses {
 		sqlStr = `
-			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active, i.enabled, i.is_favourite,
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, COALESCE(NULLIF(i.tax_category, ''), 'taxable'), i.is_active, i.enabled, i.is_favourite,
 			       c.name as category_name,
 			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
 			FROM items i
@@ -753,7 +803,7 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 	} else {
 		// Legacy response shape for clients that do not request profit data
 		sqlStr = `
-			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active, i.enabled, i.is_favourite,
+			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, COALESCE(NULLIF(i.tax_category, ''), 'taxable'), i.is_active, i.enabled, i.is_favourite,
 			       c.name as category_name
 			FROM items i
 			LEFT JOIN categories c ON i.category_id = c.id
@@ -774,12 +824,12 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 		var desc, hsn, catName sql.NullString
 		if hasItemExpenses {
 			err = rows.Scan(
-				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive, &i.Enabled, &i.IsFavourite,
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.TaxCategory, &i.IsActive, &i.Enabled, &i.IsFavourite,
 				&catName, &i.TotalCost,
 			)
 		} else {
 			err = rows.Scan(
-				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.IsActive, &i.Enabled, &i.IsFavourite,
+				&i.ID, &i.StoreID, &i.CategoryID, &i.Name, &desc, &i.Price, &hsn, &i.TaxPercent, &i.TaxCategory, &i.IsActive, &i.Enabled, &i.IsFavourite,
 				&catName,
 			)
 		}
@@ -804,8 +854,8 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 }
 
 func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
-	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, enabled, is_favourite) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
-	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite)
+	sqlStr := "INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, enabled, is_favourite, tax_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE(NULLIF($11, ''), 'taxable'))"
+	_, err := r.db.ExecContext(ctx, sqlStr, i.ID, i.StoreID, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite, i.TaxCategory)
 	if err == nil && r.redis != nil {
 		r.invalidateCache(ctx, i.StoreID)
 	}
@@ -813,8 +863,9 @@ func (r *ItemRepository) Create(ctx context.Context, i models.Item) error {
 }
 
 func (r *ItemRepository) Update(ctx context.Context, i models.Item) error {
-	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, enabled = $7, is_favourite = $8, modified_by = $9 WHERE id = $10"
-	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite, i.ModifiedBy, i.ID)
+	// An empty TaxCategory keeps the stored one (older clients don't send it).
+	sqlStr := "UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, enabled = $7, is_favourite = $8, modified_by = $9, tax_category = COALESCE(NULLIF($11, ''), tax_category, 'taxable') WHERE id = $10"
+	_, err := r.db.ExecContext(ctx, sqlStr, i.CategoryID, i.Name, i.Description, i.Price, i.HSNCode, i.TaxPercent, i.Enabled, i.IsFavourite, i.ModifiedBy, i.ID, i.TaxCategory)
 	if err == nil && r.redis != nil {
 		r.redis.DeleteByPrefix(ctx, itemsCacheKeyPrefix)
 		r.redis.DeleteByPrefix(ctx, "items:")
@@ -1243,7 +1294,7 @@ type OrderFilter struct {
 func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFilter) ([]models.Order, error) {
 	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.table_name, o.status, o.order_type, o.customer_name, o.customer_mobile,
-		       o.total_amount, o.tax_amount, o.discount_amount,
+		       o.total_amount, o.tax_amount, o.discount_amount, o.order_source,
 		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
@@ -1307,12 +1358,12 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFil
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+		var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile, orderSource sql.NullString
 		var cancelledAt sql.NullTime
 		var itemsBytes []byte
 		err := rows.Scan(
 			&o.ID, &o.StoreID, &tableID, &o.TableNumber, &tableName, &o.Status, &orderType, &customerName, &customerMobile,
-			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
+			&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount, &orderSource,
 			&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 			&itemsBytes,
 		)
@@ -1327,6 +1378,10 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFil
 		o.OrderType = orderType.String
 		o.CustomerName = customerName.String
 		o.CustomerMobile = customerMobile.String
+		o.OrderSource = orderSource.String
+		if o.OrderSource == "" {
+			o.OrderSource = "pos"
+		}
 		if cancelledAt.Valid {
 			o.CancelledAt = &cancelledAt.Time
 		}
@@ -1349,7 +1404,7 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFil
 func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.Order, error) {
 	sqlStr := `
 		SELECT o.id, o.store_id, o.table_id, o.table_number, o.table_name, o.status, o.order_type, o.customer_name, o.customer_mobile,
-		       o.total_amount, o.tax_amount, o.discount_amount,
+		       o.total_amount, o.tax_amount, o.discount_amount, o.order_source,
 		       o.payment_method, o.payment_status, o.created_by, o.created_at, o.updated_at, o.cancelled_at,
 		       COALESCE(
 		         json_agg(
@@ -1378,12 +1433,12 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	row := r.db.QueryRowContext(ctx, sqlStr, orderID)
 
 	var o models.Order
-	var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile sql.NullString
+	var tableID, tableName, method, statusPay, createdBy, orderType, customerName, customerMobile, orderSource sql.NullString
 	var cancelledAt sql.NullTime
 	var itemsBytes []byte
 	err := row.Scan(
 		&o.ID, &o.StoreID, &tableID, &o.TableNumber, &tableName, &o.Status, &orderType, &customerName, &customerMobile,
-		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount,
+		&o.TotalAmount, &o.TaxAmount, &o.DiscountAmount, &orderSource,
 		&method, &statusPay, &createdBy, &o.CreatedAt, &o.UpdatedAt, &cancelledAt,
 		&itemsBytes,
 	)
@@ -1401,6 +1456,10 @@ func (r *OrderRepository) GetByID(ctx context.Context, orderID string) (*models.
 	o.OrderType = orderType.String
 	o.CustomerName = customerName.String
 	o.CustomerMobile = customerMobile.String
+	o.OrderSource = orderSource.String
+	if o.OrderSource == "" {
+		o.OrderSource = "pos"
+	}
 	if cancelledAt.Valid {
 		o.CancelledAt = &cancelledAt.Time
 	}
@@ -1427,9 +1486,9 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 
 	// table_name falls back to the referenced table's name so clients that
 	// only send tableId still get the alphanumeric label snapshotted.
-	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, table_name, status, order_type, customer_name, customer_mobile, total_amount, tax_amount, discount_amount, payment_method, created_by)
-	           VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT t.name FROM tables t WHERE t.id = $3)), 'active', $6, $7, $8, $9, $10, $11, $12, $13)`
-	var payMethod, orderType, customerName, customerMobile, tableID, tableName interface{}
+	sqlStr := `INSERT INTO orders (id, store_id, table_id, table_number, table_name, status, order_type, customer_name, customer_mobile, total_amount, tax_amount, discount_amount, payment_method, order_source, created_by)
+	           VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT t.name FROM tables t WHERE t.id = $3)), 'active', $6, $7, $8, $9, $10, $11, $12, COALESCE(NULLIF($14, ''), 'pos'), $13)`
+	var payMethod, orderType, customerName, customerMobile, tableID, tableName, orderSource interface{}
 	if o.PaymentMethod != "" {
 		payMethod = o.PaymentMethod
 	}
@@ -1448,9 +1507,12 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 	if o.TableName != "" {
 		tableName = o.TableName
 	}
+	if o.OrderSource != "" {
+		orderSource = o.OrderSource
+	}
 
 	_, err = tx.ExecContext(ctx, sqlStr,
-		o.ID, o.StoreID, tableID, o.TableNumber, tableName, orderType, customerName, customerMobile, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy,
+		o.ID, o.StoreID, tableID, o.TableNumber, tableName, orderType, customerName, customerMobile, o.TotalAmount, o.TaxAmount, o.DiscountAmount, payMethod, o.CreatedBy, orderSource,
 	)
 	if err != nil {
 		return err
@@ -1462,10 +1524,19 @@ func (r *OrderRepository) Create(ctx context.Context, o models.Order) error {
 			notes = item.Notes
 		}
 
+		unitPrice := item.UnitPrice
+		if unitPrice == 0 {
+			unitPrice = item.Item.Price
+		}
+		taxPercent := item.TaxPercent
+		if taxPercent == 0 {
+			taxPercent = item.Item.TaxPercent
+		}
+
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO order_items (order_id, item_id, quantity, unit_price, tax_percent, notes)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, o.ID, item.ItemID, item.Quantity, item.Item.Price, item.Item.TaxPercent, notes)
+		`, o.ID, item.ItemID, item.Quantity, unitPrice, taxPercent, notes)
 		if err != nil {
 			return err
 		}
@@ -1545,7 +1616,7 @@ func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod, modif
 	return err
 }
 
-func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy string) error {
+func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy, reason string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1560,8 +1631,8 @@ func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy string) err
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		UPDATE bills SET status = 'cancelled', modified_by = $2 WHERE order_id = $1 AND (status IS NULL OR status = 'active')
-	`, id, modifiedBy)
+		UPDATE bills SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancel_reason = NULLIF($3, ''), modified_by = $2 WHERE order_id = $1 AND (status IS NULL OR status = 'active')
+	`, id, modifiedBy, reason)
 	if err != nil {
 		return err
 	}
@@ -1673,32 +1744,7 @@ type BillFilter struct {
 }
 
 func (r *BillRepository) GetAll(ctx context.Context, storeID string, f BillFilter) ([]models.Bill, error) {
-	sqlStr := `
-		SELECT b.id, b.store_id, b.order_id, b.table_number, b.table_name, b.invoice_no, b.subtotal, b.tax_total, b.discount, b.total,
-		       b.payment_method, b.customer_name, b.customer_mobile, b.is_printed, b.status, b.generated_at, b.generated_by,
-		       COALESCE(
-		         json_agg(
-		           json_build_object(
-		             'itemId', oi.item_id,
-		             'quantity', oi.quantity,
-		             'unitPrice', oi.unit_price,
-		             'item', json_build_object(
-		               'id', i.id,
-		               'name', i.name,
-		               'price', i.price,
-		               'categoryId', i.category_id,
-		               'categoryName', COALESCE(c.name, 'Uncategorised')
-		             )
-		           )
-		         ) FILTER (WHERE oi.id IS NOT NULL),
-		         '[]'
-		       ) as items
-		FROM bills b
-		LEFT JOIN order_items oi ON b.order_id = oi.order_id
-		LEFT JOIN items i ON oi.item_id = i.id
-		LEFT JOIN categories c ON i.category_id = c.id
-		WHERE b.store_id = $1
-	`
+	sqlStr := "SELECT " + billSelectCols + billSelectJoins + "WHERE b.store_id = $1"
 	var args []interface{}
 	args = append(args, storeID)
 	idx := 2
@@ -1726,76 +1772,7 @@ func (r *BillRepository) GetAll(ctx context.Context, storeID string, f BillFilte
 		return nil, err
 	}
 	defer rows.Close()
-
-	var bills []models.Bill
-	for rows.Next() {
-		var b models.Bill
-		var tableName, method, customer, customerMobile, generatedBy, billStatus sql.NullString
-		var itemsBytes []byte
-		err := rows.Scan(
-			&b.ID, &b.StoreID, &b.OrderID, &b.TableNumber, &tableName, &b.InvoiceNo, &b.Subtotal, &b.TaxTotal, &b.Discount, &b.Total,
-			&method, &customer, &customerMobile, &b.IsPrinted, &billStatus, &b.GeneratedAt, &generatedBy,
-			&itemsBytes,
-		)
-		if err != nil {
-			return nil, err
-		}
-		b.TableName = tableName.String
-		b.PaymentMethod = method.String
-		b.CustomerName = customer.String
-		b.CustomerMobile = customerMobile.String
-		b.GeneratedBy = generatedBy.String
-		b.Status = billStatus.String
-		if b.Status == "" {
-			b.Status = "active"
-		}
-
-		if len(itemsBytes) > 0 {
-			var items []models.OrderItem
-			if err := json.Unmarshal(itemsBytes, &items); err == nil {
-				b.Items = items
-			}
-		}
-		if b.Items == nil {
-			b.Items = []models.OrderItem{}
-		}
-
-		bills = append(bills, b)
-	}
-	return bills, nil
-}
-
-func (r *BillRepository) Create(ctx context.Context, b models.Bill) error {
-	// table_name falls back to the order's snapshot when the client doesn't send it.
-	sqlStr := `
-		INSERT INTO bills (id, store_id, order_id, table_number, table_name, invoice_no, subtotal, tax_total, discount, total, payment_method, customer_name, customer_mobile, generated_by)
-		VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, ''), (SELECT o.table_name FROM orders o WHERE o.id = $3)), $6, $7, $8, $9, $10, $11, $12, $13, $14)
-	`
-	var payMethod, custName, custMobile interface{}
-	if b.PaymentMethod != "" {
-		payMethod = b.PaymentMethod
-	}
-	if b.CustomerName != "" {
-		custName = b.CustomerName
-	}
-	if b.CustomerMobile != "" {
-		custMobile = b.CustomerMobile
-	}
-
-	_, err := r.db.ExecContext(ctx, sqlStr,
-		b.ID, b.StoreID, b.OrderID, b.TableNumber, b.TableName, b.InvoiceNo, b.Subtotal, b.TaxTotal, b.Discount, b.Total, payMethod, custName, custMobile, b.GeneratedBy,
-	)
-	return err
-}
-
-func (r *BillRepository) GetNextInvoiceNo(ctx context.Context, storeID string) (string, error) {
-	var count int
-	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM bills WHERE store_id = $1", storeID).Scan(&count)
-	if err != nil {
-		return "", err
-	}
-	nextNumber := count + 1
-	return fmt.Sprintf("INV-%06d", nextNumber), nil
+	return scanBills(rows)
 }
 
 func (r *BillRepository) MarkAsPrinted(ctx context.Context, id, modifiedBy string) error {
@@ -1841,7 +1818,7 @@ const (
 	billQueueResultTTL = 5 * time.Minute
 )
 
-func billQueueListKey(storeID string) string   { return fmt.Sprintf("bill_queue:%s", storeID) }
+func billQueueListKey(storeID string) string { return fmt.Sprintf("bill_queue:%s", storeID) }
 func billQueueClaimKey(storeID, id string) string {
 	return fmt.Sprintf("bill_queue_claim:%s:%s", storeID, id)
 }
@@ -2190,8 +2167,9 @@ func (r *SystemRepository) Reset(ctx context.Context, p ResetParams) (map[string
 
 // GetStats returns record counts. When storeIDs is nil the counts are global
 // (superadmin); otherwise they are scoped to the given stores so non-superadmin
-// callers never see other stores' figures.
-func (r *SystemRepository) GetStats(ctx context.Context, storeIDs []string) (map[string]int, error) {
+// callers never see other stores' figures. applyRetention hides orders/bills
+// past each store's data_retention_days from the counts (non-superadmin).
+func (r *SystemRepository) GetStats(ctx context.Context, storeIDs []string, applyRetention bool) (map[string]int, error) {
 	stats := make(map[string]int)
 
 	if storeIDs == nil {
@@ -2209,9 +2187,19 @@ func (r *SystemRepository) GetStats(ctx context.Context, storeIDs []string) (map
 
 	for _, t := range []string{"categories", "items", "orders", "tables", "bills"} {
 		var count int
-		err := r.db.QueryRowContext(ctx,
-			fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE store_id = ANY($1)", t),
-			pq.Array(storeIDs)).Scan(&count)
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE store_id = ANY($1)", t)
+		// Retention is per store, so the count joins back to stores and keeps
+		// rows newer than that store's data_retention_days (0 = keep all).
+		if applyRetention && t == "orders" {
+			query = `SELECT COUNT(*) FROM orders o JOIN stores st ON st.id = o.store_id
+				WHERE o.store_id = ANY($1)
+				  AND (st.data_retention_days <= 0 OR o.created_at >= now() - st.data_retention_days * interval '1 day')`
+		} else if applyRetention && t == "bills" {
+			query = `SELECT COUNT(*) FROM bills b JOIN stores st ON st.id = b.store_id
+				WHERE b.store_id = ANY($1)
+				  AND (st.data_retention_days <= 0 OR b.generated_at >= now() - st.data_retention_days * interval '1 day')`
+		}
+		err := r.db.QueryRowContext(ctx, query, pq.Array(storeIDs)).Scan(&count)
 		if err != nil {
 			return nil, err
 		}
@@ -2597,8 +2585,8 @@ func (r *MenuRepository) BulkCreate(ctx context.Context, storeID string, replace
 			}
 			itemID := uuid.New().String()
 			if _, err = tx.ExecContext(ctx,
-				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent,
+				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, tax_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'taxable'))",
+				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent, cleanTaxCategory(item.TaxCategory),
 			); err != nil {
 				return 0, 0, err
 			}
@@ -2721,8 +2709,8 @@ func (r *MenuRepository) BulkMerge(ctx context.Context, storeID string, categori
 				).Scan(&active)
 				if err == nil && active {
 					if _, err = tx.ExecContext(ctx,
-						"UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6 WHERE id = $7",
-						catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent, matchedID,
+						"UPDATE items SET category_id = $1, name = $2, description = $3, price = $4, hsn_code = $5, tax_percent = $6, tax_category = COALESCE(NULLIF($8, ''), tax_category, 'taxable') WHERE id = $7",
+						catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent, matchedID, cleanTaxCategory(item.TaxCategory),
 					); err != nil {
 						return 0, 0, 0, 0, err
 					}
@@ -2733,8 +2721,8 @@ func (r *MenuRepository) BulkMerge(ctx context.Context, storeID string, categori
 			}
 			itemID := uuid.New().String()
 			if _, err = tx.ExecContext(ctx,
-				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent,
+				"INSERT INTO items (id, store_id, category_id, name, description, price, hsn_code, tax_percent, tax_category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'taxable'))",
+				itemID, storeID, catID, itemName, item.Description, item.Price, item.HSNCode, item.TaxPercent, cleanTaxCategory(item.TaxCategory),
 			); err != nil {
 				return 0, 0, 0, 0, err
 			}

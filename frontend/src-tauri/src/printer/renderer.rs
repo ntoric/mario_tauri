@@ -79,9 +79,25 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
     data.push(b'\n');
     data.extend_from_slice(&bold_on);
     data.extend_from_slice(&underline_on);
-    data.extend_from_slice(b"Retail Invoice\n");
+    let title = invoice
+        .document_title
+        .clone()
+        .unwrap_or_else(|| "Retail Invoice".to_string());
+    let title_lines = wrap_text(&title, line_width);
+    for l in title_lines {
+        data.extend_from_slice(l.as_bytes());
+        data.push(b'\n');
+    }
     data.extend_from_slice(&underline_off);
     data.extend_from_slice(&bold_off);
+    if let Some(decl) = &invoice.declaration {
+        if !decl.is_empty() {
+            for l in wrap_text(decl, line_width) {
+                data.extend_from_slice(l.as_bytes());
+                data.push(b'\n');
+            }
+        }
+    }
     data.push(b'\n');
 
     // INFO SECTION
@@ -94,6 +110,34 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
         data.extend_from_slice(format!("Mob  : {}\n", mobile).as_bytes());
     }
     data.extend_from_slice(format!("Bill No: {}\n", invoice.bill_no).as_bytes());
+    if let Some(o) = &invoice.original_invoice_no {
+        if !o.is_empty() {
+            let d = invoice.original_invoice_date.clone().unwrap_or_default();
+            data.extend_from_slice(format!("Against Invoice: {} dt {}\n", o, d).as_bytes());
+        }
+    }
+    if let Some(buyer) = &invoice.buyer {
+        if !buyer.name.is_empty() {
+            data.extend_from_slice(format!("Buyer: {}\n", buyer.name).as_bytes());
+        }
+        if !buyer.gstin.is_empty() {
+            data.extend_from_slice(format!("Buyer GSTIN: {}\n", buyer.gstin).as_bytes());
+        }
+        if !buyer.address.is_empty() {
+            for l in wrap_text(&format!("Addr: {}", buyer.address), line_width) {
+                data.extend_from_slice(l.as_bytes());
+                data.push(b'\n');
+            }
+        }
+        if !buyer.state.is_empty() {
+            data.extend_from_slice(format!("State: {}\n", buyer.state).as_bytes());
+        }
+    }
+    if let Some(pos) = &invoice.place_of_supply {
+        if !pos.is_empty() {
+            data.extend_from_slice(format!("Place of Supply: {}\n", pos).as_bytes());
+        }
+    }
     data.extend_from_slice(format!("Payment Mode: {}\n", invoice.payment_mode).as_bytes());
     if let Some(dr_ref) = &invoice.dr_ref {
         if !dr_ref.is_empty() {
@@ -136,7 +180,25 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
                 pad_left(&format!("{}", item.qty as i32), 12), 
                 pad_left(&format_amount(item.amount), 12))
         };
-        data.extend_from_slice(format!("{}\n\n", qty_amt_row).as_bytes());
+        data.extend_from_slice(format!("{}\n", qty_amt_row).as_bytes());
+        let hsn = item.hsn.clone().unwrap_or_default();
+        if !hsn.is_empty() || item.tax_percent > 0.0 {
+            let mut detail = String::new();
+            if !hsn.is_empty() {
+                detail.push_str(&format!("HSN {}", hsn));
+            }
+            if item.tax_percent > 0.0 {
+                if !detail.is_empty() {
+                    detail.push_str("  ");
+                }
+                detail.push_str(&format!("GST {}%", trim_zero(item.tax_percent)));
+            }
+            for l in wrap_text(&detail, line_width) {
+                data.extend_from_slice(l.as_bytes());
+                data.push(b'\n');
+            }
+        }
+        data.push(b'\n');
     }
 
     data.extend_from_slice(format!("{}\n", "-".repeat(line_width)).as_bytes());
@@ -152,6 +214,65 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
         data.extend_from_slice(format!("{}{}\n", 
             pad_right("(-) Discount", summary_label_width), 
             pad_left(&format_amount(invoice.summary.discount), 15)).as_bytes());
+    }
+    if !invoice.tax_summary.is_empty() {
+        data.extend_from_slice(format!("{}{}\n",
+            pad_right("Taxable Value", summary_label_width),
+            pad_left(&format_amount(invoice.summary.taxable), 15)).as_bytes());
+        let sgst_label = invoice
+            .tax_label_state
+            .clone()
+            .unwrap_or_else(|| "SGST".to_string());
+        for row in &invoice.tax_summary {
+            let half = trim_zero(row.rate / 2.0);
+            if row.cgst > 0.0 || row.sgst > 0.0 {
+                data.extend_from_slice(format!("{}{}\n",
+                    pad_right(&format!("CGST @{}%", half), summary_label_width),
+                    pad_left(&format_amount(row.cgst), 15)).as_bytes());
+                data.extend_from_slice(format!("{}{}\n",
+                    pad_right(&format!("{} @{}%", sgst_label, half), summary_label_width),
+                    pad_left(&format_amount(row.sgst), 15)).as_bytes());
+            }
+            if row.igst > 0.0 {
+                data.extend_from_slice(format!("{}{}\n",
+                    pad_right(&format!("IGST @{}%", trim_zero(row.rate)), summary_label_width),
+                    pad_left(&format_amount(row.igst), 15)).as_bytes());
+            }
+        }
+        if invoice.summary.cess > 0.0 {
+            data.extend_from_slice(format!("{}{}\n",
+                pad_right("Cess", summary_label_width),
+                pad_left(&format_amount(invoice.summary.cess), 15)).as_bytes());
+        }
+    } else {
+        if invoice.summary.cgst > 0.0 {
+            data.extend_from_slice(format!("{}{}\n",
+                pad_right("CGST", summary_label_width),
+                pad_left(&format_amount(invoice.summary.cgst), 15)).as_bytes());
+        }
+        if invoice.summary.sgst > 0.0 {
+            data.extend_from_slice(format!("{}{}\n",
+                pad_right(&invoice
+                    .tax_label_state
+                    .clone()
+                    .unwrap_or_else(|| "SGST".to_string()), summary_label_width),
+                pad_left(&format_amount(invoice.summary.sgst), 15)).as_bytes());
+        }
+        if invoice.summary.igst > 0.0 {
+            data.extend_from_slice(format!("{}{}\n",
+                pad_right("IGST", summary_label_width),
+                pad_left(&format_amount(invoice.summary.igst), 15)).as_bytes());
+        }
+        if invoice.summary.cess > 0.0 {
+            data.extend_from_slice(format!("{}{}\n",
+                pad_right("Cess", summary_label_width),
+                pad_left(&format_amount(invoice.summary.cess), 15)).as_bytes());
+        }
+    }
+    if invoice.round_off != 0.0 {
+        data.extend_from_slice(format!("{}{}\n",
+            pad_right("Round Off", summary_label_width),
+            pad_left(&format_amount(invoice.round_off), 15)).as_bytes());
     }
     data.extend_from_slice(format!("{}\n", "-".repeat(line_width)).as_bytes());
 
@@ -194,6 +315,18 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
         }
     }
 
+    // FOOTER NOTES
+    if !invoice.footer_notes.is_empty() {
+        data.extend_from_slice(format!("{}\n", "-".repeat(line_width)).as_bytes());
+        data.extend_from_slice(&align_center);
+        for line in &invoice.footer_notes {
+            for l in wrap_text(line, line_width) {
+                data.extend_from_slice(l.as_bytes());
+                data.push(b'\n');
+            }
+        }
+    }
+
     // FOOTER
     if let Some(footer) = &invoice.footer {
         if !footer.is_empty() {
@@ -217,6 +350,12 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
     data.extend_from_slice(&cut_paper);
 
     data
+}
+
+/// "2.50" -> "2.5", "18.00" -> "18"
+fn trim_zero(v: f64) -> String {
+    let s = format!("{:.2}", v);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 fn render_kot(kot: &KOT, width: &str) -> Vec<u8> {
@@ -310,4 +449,152 @@ fn generate_qr_code(value: &str, size: i32) -> Vec<u8> {
     out.extend_from_slice(b"\n\n");
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::printer::utils::get_line_width;
+
+    fn base_invoice() -> Invoice {
+        Invoice {
+            store: Store {
+                name: "GST Cafe".into(),
+                branch: Some("Main".into()),
+                location: Some("City".into()),
+                gst_number: Some("27ABCDE1234F1Z0".into()),
+                fssai_lic_no: None,
+                phone: None,
+                address: None,
+            },
+            customer: Customer { name: "Walk-in".into(), mobile: None },
+            invoice_no: "INV/2627/00001".into(),
+            bill_no: "INV/2627/00001".into(),
+            date: "31-10-2026 12:00 PM".into(),
+            payment_mode: "cash".into(),
+            dr_ref: None,
+            items: vec![Item {
+                name: "Masala Dosa".into(),
+                hsn: Some("9963".into()),
+                qty: 2.0,
+                unit: "NOS".into(),
+                rate: 100.0,
+                tax_percent: 5.0,
+                amount: 200.0,
+            }],
+            summary: Summary {
+                sub_total: 200.0, discount: 0.0, taxable: 200.0,
+                cgst: 5.0, sgst: 5.0, igst: 0.0, cess: 0.0, grand_total: 210.0,
+            },
+            payment: Payment { cash: 210.0, card: 0.0, balance: 0.0, upi: 0.0 },
+            qr: None,
+            footer: Some(vec!["Thank You".into()]),
+            document_title: Some("TAX INVOICE".into()),
+            declaration: None,
+            place_of_supply: Some("27-Maharashtra".into()),
+            buyer: Some(Buyer {
+                name: "Big Corp".into(), gstin: "29PQRSX5678K2ZT".into(),
+                address: "".into(), state: "29".into(),
+            }),
+            tax_summary: vec![TaxSummaryRow { rate: 5.0, taxable: 200.0, cgst: 5.0, sgst: 5.0, igst: 0.0 }],
+            tax_label_state: Some("SGST".into()),
+            round_off: -0.4,
+            footer_notes: vec![],
+            original_invoice_no: None,
+            original_invoice_date: None,
+        }
+    }
+
+    /// Emulates the printer's text stream by skipping ESC/POS command
+    /// sequences: ESC x <args>, GS x <args> (with the variable-length
+    /// 'GS ( k' QR form handled by its length field).
+    fn text_lines(data: &[u8]) -> Vec<String> {
+        let mut printable = Vec::new();
+        let mut i = 0;
+        while i < data.len() {
+            match data[i] {
+                0x1B => {
+                    let arg_bytes = match data.get(i + 1).copied().unwrap_or(0) {
+                        b'@' => 1, // cmd byte only
+                        _ => 2,    // cmd byte + 1 arg byte
+                    };
+                    i += 1 + arg_bytes;
+                }
+                0x1D => {
+                    let cmd = data.get(i + 1).copied().unwrap_or(0);
+                    if cmd == b'(' {
+                        // GS ( k pL pH <payload>: pL/pH give remaining length
+                        let p_l = data.get(i + 4).copied().unwrap_or(0) as usize;
+                        let p_h = data.get(i + 5).copied().unwrap_or(0) as usize;
+                        i += 4 + p_l + p_h * 256 + 2;
+                    } else {
+                        i += 3; // cmd byte + 1 arg byte (GS !, GS V, GS 2)
+                    }
+                }
+                b => {
+                    if b == b'\n' || (0x20..0x7F).contains(&b) {
+                        printable.push(b);
+                    }
+                    i += 1;
+                }
+            }
+        }
+        String::from_utf8_lossy(&printable)
+            .split('\n')
+            .map(|l| l.to_string())
+            .collect()
+    }
+
+    fn check_width(data: &[u8], width: &str) {
+        let max = get_line_width(width);
+        for l in text_lines(data) {
+            assert!(l.len() <= max, "line too wide ({}>{}): {:?}", l.len(), max, l);
+        }
+    }
+
+    #[test]
+    fn gst_invoice_both_widths() {
+        for w in ["2inch", "3inch"] {
+            let data = render_invoice(&base_invoice(), w);
+            let text = text_lines(&data).join("\n");
+            assert!(text.contains("TAX INVOICE"), "title missing for {}", w);
+            assert!(text.contains("CGST @2.5%"), "cgst line missing for {}", w);
+            assert!(text.contains("SGST @2.5%"), "sgst line missing for {}", w);
+            assert!(text.contains("HSN 9963"), "hsn missing for {}", w);
+            assert!(text.contains("Round Off"), "round off missing for {}", w);
+            assert!(text.contains("Buyer GSTIN"), "buyer missing for {}", w);
+            assert!(text.contains("Place of Supply"), "pos missing for {}", w);
+            assert!(text.contains("Taxable Value"), "taxable missing for {}", w);
+            check_width(&data, w);
+        }
+    }
+
+    #[test]
+    fn legacy_invoice_both_widths() {
+        let mut inv = base_invoice();
+        inv.document_title = None;
+        inv.buyer = None;
+        inv.place_of_supply = None;
+        inv.tax_summary = vec![];
+        inv.round_off = 0.0;
+        for w in ["2inch", "3inch"] {
+            let data = render_invoice(&inv, w);
+            let text = text_lines(&data).join("\n");
+            assert!(text.contains("Retail Invoice"), "legacy title missing for {}", w);
+            assert!(text.contains("CGST"), "legacy cgst missing for {}", w);
+            check_width(&data, w);
+        }
+    }
+
+    #[test]
+    fn credit_note_lines() {
+        let mut inv = base_invoice();
+        inv.document_title = Some("CREDIT NOTE".into());
+        inv.original_invoice_no = Some("INV/2627/00001".into());
+        inv.original_invoice_date = Some("2026-10-31".into());
+        let data = render_invoice(&inv, "3inch");
+        let text = text_lines(&data).join("\n");
+        assert!(text.contains("CREDIT NOTE"));
+        assert!(text.contains("Against Invoice: INV/2627/00001"));
+    }
 }

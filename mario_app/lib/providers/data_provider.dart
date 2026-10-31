@@ -214,8 +214,8 @@ class DataProvider extends ChangeNotifier {
     int? limit,
   }) async {
     try {
-      final data =
-          await _backend.api.getBills(storeId, from: from, to: to, limit: limit);
+      final data = await _backend.api
+          .getBills(storeId, from: from, to: to, limit: limit);
       _bills = data;
       notifyListeners();
     } catch (e) {
@@ -259,8 +259,7 @@ class DataProvider extends ChangeNotifier {
       final orderData = {
         'tableId': tableId,
         'tableNumber': tableNumber,
-        if (tableName != null && tableName.isNotEmpty)
-          'tableName': tableName,
+        if (tableName != null && tableName.isNotEmpty) 'tableName': tableName,
         'items': items,
         'totalAmount': totalAmount,
         'taxAmount': taxAmount,
@@ -286,6 +285,11 @@ class DataProvider extends ChangeNotifier {
     required String paymentMethod,
     String? customerName,
     String? customerMobile,
+    String orderSource = 'pos',
+    String? buyerGstin,
+    String? buyerName,
+    String? buyerAddress,
+    String? buyerStateCode,
   }) async {
     try {
       final orderData = {
@@ -297,6 +301,14 @@ class DataProvider extends ChangeNotifier {
         'paymentMethod': paymentMethod,
         'customerName': customerName ?? 'Walk-in Customer',
         'customerMobile': customerMobile,
+        'orderSource': orderSource,
+        if (buyerGstin != null && buyerGstin.isNotEmpty)
+          'buyerGstin': buyerGstin,
+        if (buyerName != null && buyerName.isNotEmpty) 'buyerName': buyerName,
+        if (buyerAddress != null && buyerAddress.isNotEmpty)
+          'buyerAddress': buyerAddress,
+        if (buyerStateCode != null && buyerStateCode.isNotEmpty)
+          'buyerStateCode': buyerStateCode,
       };
       final order = await _backend.api.createParcelOrder(orderData);
       _orders.insert(0, order);
@@ -370,6 +382,7 @@ class DataProvider extends ChangeNotifier {
           paymentStatus: 'paid',
           customerName: _orders[index].customerName,
           customerMobile: _orders[index].customerMobile,
+          orderSource: _orders[index].orderSource,
           createdAt: _orders[index].createdAt,
           updatedAt: DateTime.now(),
           createdBy: _orders[index].createdBy,
@@ -460,6 +473,35 @@ class DataProvider extends ChangeNotifier {
     return await _backend.api.getNextInvoiceNo(storeId);
   }
 
+  // Server-side bill computation preview — returns the same tax/invoice
+  // structure the backend will issue, without writing anything.
+  Future<Map<String, dynamic>?> previewBill(Map<String, dynamic> body) async {
+    try {
+      return await _backend.api.previewBill(body);
+    } catch (e) {
+      _error = e.toString();
+      return null;
+    }
+  }
+
+  Future<Bill?> fetchBill(String id) async {
+    try {
+      return await _backend.api.getBill(id);
+    } catch (e) {
+      _error = e.toString();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchGstMeta() async {
+    try {
+      return await _backend.api.getGstMeta();
+    } catch (e) {
+      _error = e.toString();
+      return null;
+    }
+  }
+
   Future<Bill?> createBill(Map<String, dynamic> billData) async {
     try {
       final bill = await _backend.api.createBill(billData);
@@ -503,8 +545,7 @@ class DataProvider extends ChangeNotifier {
     try {
       final newTables = await _backend.api.getTables(storeId);
       final newSections = await _backend.api.getTableSections(storeId);
-      final newOrders =
-          await _backend.api.getOrders(storeId, status: 'active');
+      final newOrders = await _backend.api.getOrders(storeId, status: 'active');
 
       bool tablesChanged = false;
       if (newTables.length != _tables.length) {
@@ -581,6 +622,7 @@ class DataProvider extends ChangeNotifier {
         a.paymentMethod != b.paymentMethod ||
         a.paymentStatus != b.paymentStatus ||
         a.createdBy != b.createdBy ||
+        a.orderSource != b.orderSource ||
         a.items.length != b.items.length ||
         a.customerName != b.customerName ||
         a.customerMobile != b.customerMobile) {

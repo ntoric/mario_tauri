@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, ShoppingBag, Tag, TrendingUp, DollarSign, ArrowRight, PieChart } from 'lucide-react';
 import { usePageHeader } from '../contexts/PageHeaderContext';
+import { useTaxEnabled } from '../hooks/useTaxEnabled';
 
 interface ReportCard {
   title: string;
@@ -14,6 +15,7 @@ interface ReportCard {
 const ReportsIndex: React.FC = () => {
   const navigate = useNavigate();
   const { setHeaderContent } = usePageHeader();
+  const taxEnabled = useTaxEnabled();
 
   useEffect(() => {
     setHeaderContent({
@@ -66,12 +68,19 @@ const ReportsIndex: React.FC = () => {
       path: '/expense-reports',
       color: '#2ba54a',
     },
+    {
+      title: 'GST Reports',
+      description: 'GSTR-1, GSTR-3B summary, HSN summary, sales register',
+      icon: <DollarSign size={24} />,
+      path: '/reports/gst',
+      color: '#34c98e',
+    },
   ];
 
   return (
     <div className="reports-index-page">
       <div className="reports-index-grid">
-        {reportCards.map((card) => (
+        {reportCards.filter(card => taxEnabled || card.path !== '/reports/gst').map((card) => (
           <div
             key={card.path}
             className="card report-nav-card"

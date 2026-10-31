@@ -9,6 +9,7 @@ import '../utils/constants.dart';
 import '../widgets/animations.dart';
 import '../widgets/period_filter.dart';
 import '../widgets/store_picker_button.dart';
+import 'gst_report_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -88,6 +89,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (context.watch<AuthProvider>().currentStore?.taxEnabled ?? true) ...[
+                    FadeSlideIn(child: _buildGstCard(context)),
+                    const SizedBox(height: 24),
+                  ],
                   FadeSlideIn(child: _sectionTitle('Revenue Trend')),
                   const SizedBox(height: 14),
                   if (sales.isEmpty)
@@ -395,6 +400,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGstCard(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppColors.darkGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const GstReportScreen()),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.account_balance_rounded,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'GST Reports',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Summary \u2022 GSTR-1 \u2022 Sales Register',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.65),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

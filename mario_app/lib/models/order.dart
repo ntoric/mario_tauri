@@ -16,6 +16,8 @@ class Order {
   final String? paymentStatus;
   final String? customerName;
   final String? customerMobile;
+  // 'pos' | 'swiggy' | 'zomato' | 'other_eco' — defaults to counter sales.
+  final String orderSource;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String createdBy;
@@ -37,6 +39,7 @@ class Order {
     this.paymentStatus,
     this.customerName,
     this.customerMobile,
+    this.orderSource = 'pos',
     required this.createdAt,
     required this.updatedAt,
     required this.createdBy,
@@ -83,50 +86,41 @@ class Order {
   //     createdBy: json['createdBy'] ?? json['created_by'],
   //   );
   // }
-    factory Order.fromJson(Map<String, dynamic> json) {
-      return Order(
-        id: json['id']?.toString() ?? '',
-        storeId: json['storeId']?.toString() ??
-            json['store_id']?.toString() ??
-            '',
-        tableId: json['tableId']?.toString() ??
-            json['table_id']?.toString() ??
-            '',
-        tableNumber: _parseInt(json['tableNumber'] ?? json['table_number']),
-        tableName: (json['tableName'] ?? json['table_name'])?.toString(),
-        items: (json['items'] as List?)
-                ?.map((i) => OrderItem.fromJson(i))
-                .toList() ??
-            [],
-        status: json['status']?.toString() ?? 'active',
-        orderType:
-            (json['orderType'] ?? json['order_type'] ?? 'dine_in').toString(),
-        totalAmount:
-            _parseDouble(json['totalAmount'] ?? json['total_amount']),
-        taxAmount:
-            _parseDouble(json['taxAmount'] ?? json['tax_amount']),
-        discountAmount:
-            _parseDouble(json['discountAmount'] ?? json['discount_amount']),
-        paymentMethod:
-            json['paymentMethod'] ?? json['payment_method'],
-        paymentStatus:
-            json['paymentStatus'] ?? json['payment_status'],
-        customerName:
-            json['customerName'] ?? json['customer_name'],
-        customerMobile:
-            json['customerMobile'] ?? json['customer_mobile'],
-        createdAt:
-            _parseDateTime(json['createdAt'] ?? json['created_at']),
-        updatedAt:
-            _parseDateTime(json['updatedAt'] ?? json['updated_at']),
-        createdBy: json['createdBy']?.toString() ??
-            json['created_by']?.toString() ??
-            '',
-        cancelledAt: json['cancelledAt'] != null
-            ? _parseDateTime(json['cancelledAt'])
-            : null,
-      );
-    }
+  factory Order.fromJson(Map<String, dynamic> json) {
+    return Order(
+      id: json['id']?.toString() ?? '',
+      storeId:
+          json['storeId']?.toString() ?? json['store_id']?.toString() ?? '',
+      tableId:
+          json['tableId']?.toString() ?? json['table_id']?.toString() ?? '',
+      tableNumber: _parseInt(json['tableNumber'] ?? json['table_number']),
+      tableName: (json['tableName'] ?? json['table_name'])?.toString(),
+      items: (json['items'] as List?)
+              ?.map((i) => OrderItem.fromJson(i))
+              .toList() ??
+          [],
+      status: json['status']?.toString() ?? 'active',
+      orderType:
+          (json['orderType'] ?? json['order_type'] ?? 'dine_in').toString(),
+      totalAmount: _parseDouble(json['totalAmount'] ?? json['total_amount']),
+      taxAmount: _parseDouble(json['taxAmount'] ?? json['tax_amount']),
+      discountAmount:
+          _parseDouble(json['discountAmount'] ?? json['discount_amount']),
+      paymentMethod: json['paymentMethod'] ?? json['payment_method'],
+      paymentStatus: json['paymentStatus'] ?? json['payment_status'],
+      customerName: json['customerName'] ?? json['customer_name'],
+      customerMobile: json['customerMobile'] ?? json['customer_mobile'],
+      orderSource:
+          (json['orderSource'] ?? json['order_source'] ?? 'pos').toString(),
+      createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
+      updatedAt: _parseDateTime(json['updatedAt'] ?? json['updated_at']),
+      createdBy:
+          json['createdBy']?.toString() ?? json['created_by']?.toString() ?? '',
+      cancelledAt: json['cancelledAt'] != null
+          ? _parseDateTime(json['cancelledAt'])
+          : null,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -145,6 +139,7 @@ class Order {
       'paymentStatus': paymentStatus,
       'customerName': customerName,
       'customerMobile': customerMobile,
+      'orderSource': orderSource,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'createdBy': createdBy,
@@ -173,8 +168,9 @@ class Order {
   }
 
   // Display label: alphanumeric table name when set, else "T<tableNumber>".
-  String get tableLabel =>
-      (tableName != null && tableName!.isNotEmpty) ? tableName! : 'T$tableNumber';
+  String get tableLabel => (tableName != null && tableName!.isNotEmpty)
+      ? tableName!
+      : 'T$tableNumber';
 
   double get subtotal => totalAmount - taxAmount + discountAmount;
 }

@@ -201,9 +201,21 @@ func main() {
 		r.Patch("/api/orders/{id}/cancel", h.CancelOrder)
 		r.Post("/api/orders/{id}/merge", h.MergeOrders)
 
+		// GST
+		r.Get("/api/gst/meta", h.GetGSTMeta)
+		r.Post("/api/bills/preview", h.PreviewBill)
+		r.Get("/api/credit-notes", h.GetCreditNotes)
+		r.Get("/api/credit-notes/{id}", h.GetCreditNoteByID)
+		r.Get("/api/reports/gst/summary", h.GetGSTSummary)
+		r.Get("/api/reports/gst/gstr1", h.GetGSTR1)
+		r.Get("/api/reports/gst/gstr1/portal-json", h.GetGSTR1PortalJSON)
+		r.Get("/api/reports/gst/sales-register", h.GetGSTSalesRegister)
+
 		// Bills
 		r.Get("/api/bills", h.GetBills)
 		r.Post("/api/bills", h.CreateBill)
+		r.Get("/api/bills/{id}", h.GetBillByID)
+		r.Post("/api/bills/{id}/credit-notes", h.CreateCreditNote)
 		r.Post("/api/bills/queue", h.QueueBill)
 		r.Get("/api/bills/queue", h.GetBillQueue)
 		r.Post("/api/bills/queue/{id}/claim", h.ClaimQueuedBill)

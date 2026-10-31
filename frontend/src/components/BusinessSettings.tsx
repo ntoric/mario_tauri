@@ -64,10 +64,12 @@ const BusinessSettings: React.FC = () => {
     name: '',
     branch: '',
     location: '',
-    gstin: '',
     fssaiNo: '',
     phone: '',
   });
+
+  // Superadmin-only: days after which a store's sales history is hidden.
+  const [dataRetentionDays, setDataRetentionDays] = useState(0);
 
   // Logo upload state
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -91,6 +93,24 @@ const BusinessSettings: React.FC = () => {
     taxEnabled: true,
     defaultTaxPercent: 0,
   });
+  const [gstSettings, setGstSettings] = useState({
+    gstRegistrationType: 'regular',
+    gstin: '',
+    stateCode: '',
+    pricesIncludeTax: false,
+    invoicePrefix: 'INV',
+    creditNotePrefix: 'CN',
+    defaultSacCode: '996331',
+    swiggyGstin: '',
+    zomatoGstin: '',
+    otherEcoGstin: '',
+  });
+  const [nextInvoiceNo, setNextInvoiceNo] = useState('');
+  const { gstMeta, fetchGstMeta } = useDataStore();
+  const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+  const PREFIX_RE = /^[A-Z0-9-]{1,5}$/;
+  // Operators may quote their TCS registration ("C" in place of "Z").
+  const ECO_GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z][ZC][0-9A-Z]$/;
 
   useEffect(() => {
     if (currentStore) {
@@ -98,10 +118,10 @@ const BusinessSettings: React.FC = () => {
         name: currentStore.name || '',
         branch: currentStore.branch || '',
         location: currentStore.location || '',
-        gstin: currentStore.gstin || '',
         fssaiNo: currentStore.fssaiNo || '',
         phone: currentStore.phone || '',
       });
+      setDataRetentionDays(currentStore.dataRetentionDays ?? 0);
       setPrinterSettings({
         printerName: currentStore.printerName || '',
         printerVendorId: currentStore.printerVendorId || '0x0fe6',
@@ -119,6 +139,20 @@ const BusinessSettings: React.FC = () => {
         taxEnabled: currentStore.taxEnabled !== false,
         defaultTaxPercent: currentStore.defaultTaxPercent ?? 0,
       });
+      setGstSettings({
+        gstRegistrationType: currentStore.gstRegistrationType || 'regular',
+        gstin: currentStore.gstin || '',
+        stateCode: currentStore.stateCode || '',
+        pricesIncludeTax: currentStore.pricesIncludeTax === true,
+        invoicePrefix: currentStore.invoicePrefix || 'INV',
+        creditNotePrefix: currentStore.creditNotePrefix || 'CN',
+        defaultSacCode: currentStore.defaultSacCode || '996331',
+        swiggyGstin: currentStore.swiggyGstin || '',
+        zomatoGstin: currentStore.zomatoGstin || '',
+        otherEcoGstin: currentStore.otherEcoGstin || '',
+      });
+      fetchGstMeta().catch(() => {});
+      api.getNextInvoiceNo(currentStore.id).then(setNextInvoiceNo).catch(() => setNextInvoiceNo(''));
     }
   }, [currentStore]);
 
@@ -172,7 +206,12 @@ const BusinessSettings: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await updateStore(currentStore.id, generalSettings);
+      await updateStore(currentStore.id, {
+        ...generalSettings,
+        // Only superadmin may change retention; the backend ignores the
+        // field for other roles, but don't send it for clarity.
+        ...(user?.role === 'superadmin' ? { dataRetentionDays } : {}),
+      });
       notify.success('Settings saved successfully');
     } catch (error) {
       notify.error('Failed to save settings');
@@ -252,13 +291,14 @@ const BusinessSettings: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await updateStore(currentStore.id, {
-        taxEnabled: taxSettings.taxEnabled,
-        defaultTaxPercent: taxSettings.defaultTaxPercent,
-      });
+      // With tax off the GST fields are hidden, so only the toggle is saved
+      // (the stored GST profile is kept for when tax is turned back on).
+      await updateStore(currentStore.id, taxSettings.taxEnabled
+        ? { taxEnabled: true, defaultTaxPercent: taxSettings.defaultTaxPercent, ...gstSettings }
+        : { taxEnabled: false });
       notify.success('Tax settings saved');
-    } catch (error) {
-      notify.error('Failed to save tax settings');
+    } catch (error: any) {
+      notify.error(error?.message || 'Failed to save tax settings');
     } finally {
       setIsSaving(false);
     }
@@ -514,15 +554,6 @@ const BusinessSettings: React.FC = () => {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>GSTIN</label>
-                  <input
-                    type="text"
-                    value={generalSettings.gstin}
-                    onChange={e => setGeneralSettings({ ...generalSettings, gstin: e.target.value.toUpperCase() })}
-                    placeholder="e.g., 32AAIFJ6501F1ZS"
-                  />
-                </div>
-                <div className="form-group">
                   <label>FSSAI Number</label>
                   <input
                     type="text"
@@ -542,6 +573,34 @@ const BusinessSettings: React.FC = () => {
                   placeholder="Contact number"
                 />
               </div>
+
+              {user?.role === 'superadmin' && (
+                <div className="form-group" style={{ marginTop: '0.5rem', padding: '1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
+                  <label>Data Retention — hide sales history after (days)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={dataRetentionDays}
+                    onChange={e => setDataRetentionDays(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="0 = keep all history"
+                    style={{ maxWidth: '160px' }}
+                  />
+                  <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginTop: '0.5rem', marginBottom: 0 }}>
+                    Orders, bills, sales/profit reports and expenses older than this many days are
+                    hidden from store users. Nothing is deleted — the data stays in the database and
+                    remains visible to superadmin for analytics. 0 = unlimited.
+                  </p>
+                </div>
+              )}
+
+              {user?.role !== 'superadmin' && (currentStore.dataRetentionDays ?? 0) > 0 && (
+                <div className="form-group" style={{ marginTop: '0.5rem', padding: '0.75rem 1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', margin: 0 }}>
+                    Sales, order, report and expense history older than {currentStore.dataRetentionDays} days
+                    is hidden for this store. Contact your administrator for older records.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
               <button type="submit" className="btn btn-primary" disabled={isSaving}>
@@ -578,23 +637,147 @@ const BusinessSettings: React.FC = () => {
                 </p>
               </div>
 
+              {taxSettings.taxEnabled && (<>
               <div className="form-group" style={{ marginTop: '1.5rem' }}>
                 <label>Default Tax %</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
+                <select
                   value={taxSettings.defaultTaxPercent}
-                  onChange={e => setTaxSettings({ ...taxSettings, defaultTaxPercent: parseFloat(e.target.value) || 0 })}
-                  placeholder="0"
-                  disabled={!taxSettings.taxEnabled}
-                  style={!taxSettings.taxEnabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-                />
+                  onChange={e => setTaxSettings({ ...taxSettings, defaultTaxPercent: parseFloat(e.target.value) })}
+                >
+                  {(gstMeta?.rates || [0, 5]).map(r => <option key={r} value={r}>{r}%</option>)}
+                </select>
                 <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
-                  This percentage will be used as the default tax rate when creating new items.
+                  This rate will be used as the default tax rate when creating new items.
                 </small>
               </div>
+
+              <h4 style={{ margin: '1.5rem 0 0.75rem', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem' }}>GST</h4>
+
+              <div className="form-group">
+                <label>Registration type</label>
+                <select
+                  value={gstSettings.gstRegistrationType}
+                  onChange={e => setGstSettings({ ...gstSettings, gstRegistrationType: e.target.value })}
+                >
+                  <option value="regular">Regular</option>
+                  <option value="composition">Composition</option>
+                  <option value="unregistered">Unregistered</option>
+                </select>
+                {gstSettings.gstRegistrationType === 'composition' && (
+                  <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>
+                    Bills will be issued as Bill of Supply without GST
+                  </small>
+                )}
+                {gstSettings.gstRegistrationType === 'regular' && !gstSettings.gstin && (
+                  <small style={{ color: 'var(--warning, #e6a23c)', display: 'block', marginTop: '0.25rem' }}>
+                    A regular GST registration requires a valid GSTIN.
+                  </small>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>GSTIN</label>
+                <input
+                  value={gstSettings.gstin}
+                  onChange={e => {
+                    const g = e.target.value.toUpperCase().slice(0, 15);
+                    setGstSettings({
+                      ...gstSettings,
+                      gstin: g,
+                      ...(g.length >= 2 && gstMeta?.states.some(st => st.code === g.slice(0, 2))
+                        ? { stateCode: g.slice(0, 2) } : {}),
+                    });
+                  }}
+                  placeholder="27ABCDE1234F1Z0"
+                />
+                {gstSettings.gstin && !GSTIN_RE.test(gstSettings.gstin) && (
+                  <small style={{ color: 'var(--danger, #f66)', display: 'block', marginTop: '0.25rem' }}>Invalid GSTIN format</small>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>State</label>
+                <select
+                  value={gstSettings.stateCode}
+                  onChange={e => setGstSettings({ ...gstSettings, stateCode: e.target.value })}
+                  disabled={!!gstSettings.gstin}
+                >
+                  <option value="">Select state</option>
+                  {(gstMeta?.states || []).map(st => (
+                    <option key={st.code} value={st.code}>{st.code} — {st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={gstSettings.pricesIncludeTax}
+                    onChange={e => setGstSettings({ ...gstSettings, pricesIncludeTax: e.target.checked })}
+                  />
+                  Menu prices include GST
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label>Invoice prefix</label>
+                <input
+                  value={gstSettings.invoicePrefix}
+                  onChange={e => setGstSettings({ ...gstSettings, invoicePrefix: e.target.value.toUpperCase() })}
+                  maxLength={5}
+                />
+                {gstSettings.invoicePrefix && !PREFIX_RE.test(gstSettings.invoicePrefix) && (
+                  <small style={{ color: 'var(--danger, #f66)' }}>1–5 chars of A–Z, 0–9, '-'</small>
+                )}
+                {nextInvoiceNo && (
+                  <small style={{ color: 'var(--gray-500)', display: 'block', marginTop: '0.25rem' }}>Next invoice: {nextInvoiceNo}</small>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Credit note prefix</label>
+                <input
+                  value={gstSettings.creditNotePrefix}
+                  onChange={e => setGstSettings({ ...gstSettings, creditNotePrefix: e.target.value.toUpperCase() })}
+                  maxLength={5}
+                />
+                {gstSettings.creditNotePrefix && !PREFIX_RE.test(gstSettings.creditNotePrefix) && (
+                  <small style={{ color: 'var(--danger, #f66)' }}>1–5 chars of A–Z, 0–9, '-'</small>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Default SAC</label>
+                <input
+                  value={gstSettings.defaultSacCode}
+                  onChange={e => setGstSettings({ ...gstSettings, defaultSacCode: e.target.value })}
+                  placeholder="996331"
+                />
+              </div>
+
+              <h4 style={{ margin: '1.5rem 0 0.5rem', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem' }}>Delivery platforms</h4>
+              <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: '0.75rem' }}>
+                Swiggy/Zomato pay GST on orders placed through them (Sec 9(5)). Their GSTIN for your state is needed to report these sales in GSTR-1 Table 14 — it is on the platform's monthly tax statement.
+              </p>
+              {([['swiggyGstin', 'Swiggy GSTIN'], ['zomatoGstin', 'Zomato GSTIN'], ['otherEcoGstin', 'Other platform GSTIN']] as const).map(([key, label]) => (
+                <div className="form-group" key={key}>
+                  <label>{label}</label>
+                  <input
+                    value={gstSettings[key]}
+                    onChange={e => setGstSettings({ ...gstSettings, [key]: e.target.value.toUpperCase().slice(0, 15) })}
+                    placeholder="Optional"
+                  />
+                  {gstSettings[key] && !ECO_GSTIN_RE.test(gstSettings[key]) && (
+                    <small style={{ color: 'var(--danger, #f66)' }}>Invalid GSTIN format</small>
+                  )}
+                </div>
+              ))}
+
+              <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: '0.5rem' }}>
+                Standalone restaurants charge 5% GST without ITC; 18% applies only to restaurants in hotels with room tariff above ₹7,500.
+              </p>
+              </>)}
             </div>
             <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
               <button type="submit" className="btn btn-primary" disabled={isSaving}>

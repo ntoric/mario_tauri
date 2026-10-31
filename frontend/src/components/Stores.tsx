@@ -4,6 +4,7 @@ import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { Button } from '../components/ui/Button';
 import notify from '../utils/toast';
+import { isTaxEnabled } from '../utils/tax';
 
 const Stores: React.FC = () => {
   const { stores, createStore, updateStore, deleteStore, switchStore, fetchStores } = useDataStore();
@@ -24,6 +25,7 @@ const Stores: React.FC = () => {
     phone: '',
     gstin: '',
     fssaiNo: '',
+    dataRetentionDays: 0,
   });
 
   // Loading states
@@ -40,10 +42,11 @@ const Stores: React.FC = () => {
         phone: store.phone || '',
         gstin: store.gstin || '',
         fssaiNo: store.fssaiNo || '',
+        dataRetentionDays: store.dataRetentionDays || 0,
       });
     } else {
       setEditingStore(null);
-      setForm({ name: '', branch: '', location: '', phone: '', gstin: '', fssaiNo: '' });
+      setForm({ name: '', branch: '', location: '', phone: '', gstin: '', fssaiNo: '', dataRetentionDays: 0 });
     }
     setShowModal(true);
   };
@@ -54,7 +57,9 @@ const Stores: React.FC = () => {
 
     try {
       if (editingStore) {
-        await updateStore(editingStore.id, form);
+        // GSTIN is hidden for stores with tax off — leave the stored value alone.
+        const { gstin, ...rest } = form;
+        await updateStore(editingStore.id, isTaxEnabled(editingStore) ? form : rest);
         notify.success(`Store "${form.name}" updated`);
       } else {
         const newStore = await createStore(form);
@@ -205,7 +210,7 @@ const Stores: React.FC = () => {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--gray-200)' }}>
-                  {store.gstin && (
+                  {isTaxEnabled(store) && store.gstin && (
                     <div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)', display: 'block' }}>GSTIN</span>
                       <span style={{ fontSize: '0.85rem', fontWeight: 500, fontFamily: 'monospace' }}>{store.gstin}</span>
@@ -307,15 +312,17 @@ const Stores: React.FC = () => {
                       placeholder="Contact number"
                     />
                   </div>
-                  <div className="form-group">
-                    <label>GSTIN</label>
-                    <input
-                      type="text"
-                      value={form.gstin}
-                      onChange={e => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
-                      placeholder="e.g., 32AAIFJ6501F1ZS"
-                    />
-                  </div>
+                  {(!editingStore || isTaxEnabled(editingStore)) && (
+                    <div className="form-group">
+                      <label>GSTIN</label>
+                      <input
+                        type="text"
+                        value={form.gstin}
+                        onChange={e => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
+                        placeholder="e.g., 32AAIFJ6501F1ZS"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -327,6 +334,24 @@ const Stores: React.FC = () => {
                     placeholder="FSSAI License Number"
                   />
                 </div>
+
+                {user?.role === 'superadmin' && (
+                  <div className="form-group">
+                    <label>Hide sales history after (days)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.dataRetentionDays}
+                      onChange={e => setForm({ ...form, dataRetentionDays: Math.max(0, parseInt(e.target.value) || 0) })}
+                      placeholder="0 = keep all history"
+                    />
+                    <small style={{ color: 'var(--gray-500)', fontSize: '0.8rem' }}>
+                      Orders, bills, sales/profit reports and expenses older than this many days are
+                      hidden from store users. Nothing is deleted — the data stays visible to
+                      superadmin for analytics. 0 = unlimited.
+                    </small>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <Button

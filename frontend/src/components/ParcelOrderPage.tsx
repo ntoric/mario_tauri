@@ -7,6 +7,9 @@ import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
+import { computeCartTotals } from '../utils/tax';
+import GstBillSummary from './GstBillSummary';
+import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import { isTaxEnabled } from '../utils/tax';
 import { orderItemUnitPrice } from '../utils/order';
 import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
@@ -31,6 +34,11 @@ const ParcelOrderPage: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('upi');
+  const [orderSource, setOrderSource] = useState('pos');
+
+  const { gstMeta, fetchGstMeta } = useDataStore();
+  React.useEffect(() => { fetchGstMeta().catch(() => {}); }, []);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionType, setActionType] = useState('');
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -132,19 +140,12 @@ const ParcelOrderPage: React.FC = () => {
     setOrderItems(orderItems.filter(oi => oi.itemId !== itemId));
   };
 
-  const calculateTotal = () => {
-    return orderItems.reduce((sum, oi) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
-  };
+  const cartTotals = () => computeCartTotals(currentStore, orderItems.map(oi => ({ unitPrice: orderItemUnitPrice(oi), quantity: oi.quantity, taxPercent: oi.item.taxPercent, taxCategory: (oi.item as any).taxCategory })), 0, orderSource);
+  const calculateTotal = () => cartTotals().gross;
 
-  const calculateTax = () => {
-    if (!taxEnabled) return 0;
-    return orderItems.reduce((sum, oi) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
-    }, 0);
-  };
+  const calculateTax = () => cartTotals().totalTax;
 
-  const total = calculateTotal() + calculateTax();
+  const total = cartTotals().total;
 
   const buildPayload = () => {
     const totalAmount = calculateTotal();
@@ -224,7 +225,6 @@ const ParcelOrderPage: React.FC = () => {
     try {
       const totalAmount = calculateTotal();
       const taxAmount = calculateTax();
-      const invoiceNo = `INV-${Date.now()}`;
 
       const createdOrder = await api.createParcelOrder(buildPayload());
 
@@ -265,72 +265,11 @@ const ParcelOrderPage: React.FC = () => {
         }
       }
 
-      // Print invoice
+      // Print invoice — the issued bill is authoritative
       try {
-        const printItems = orderItems.map(oi => {
-          const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
-          const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
-          return {
-            name: oi.item.name,
-            hsn: oi.item.description || '',
-            qty: oi.quantity,
-            unit: 'PCS',
-            rate: orderItemUnitPrice(oi),
-            tax_percent: taxPercent,
-            amount: itemTotal,
-          };
-        });
-
-        const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-        const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
-        const cgst = actualTax / 2;
-        const sgst = actualTax / 2;
-
-        await printerService.printInvoice({
-          type: 'invoice',
-          printer: {
-            type: 'usb',
-            name: currentStore?.printerName || 'Thermal Printer',
-            vendor_id: currentStore?.printerVendorId || '0x0fe6',
-            product_id: currentStore?.printerProductId || '0x811e',
-            paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-          },
-          invoice: {
-            store: {
-              name: currentStore?.name || 'Cafe',
-              branch: currentStore?.branch || '',
-              location: currentStore?.location || '',
-              ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
-              ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-              ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-              address: currentStore?.location || '',
-            },
-            customer: {
-              name: customerName.trim() || 'Walk-in Customer',
-              mobile: customerMobile.trim(),
-            },
-            invoice_no: invoiceNo,
-            bill_no: invoiceNo,
-            date: new Date().toLocaleString('en-IN'),
-            items: printItems,
-            summary: {
-              sub_total: taxable,
-              discount: 0,
-              taxable: taxable,
-              cgst: cgst,
-              sgst: sgst,
-              grand_total: total,
-            },
-            payment: {
-              cash: paymentMethod === 'cash' ? total : 0,
-              card: paymentMethod === 'card' ? total : 0,
-              upi: paymentMethod === 'upi' ? total : 0,
-              balance: 0,
-            },
-            payment_mode: paymentMethod,
-            footer: ['Thank You Visit Again'],
-          },
-        });
+        if (createdOrder?.bill) {
+          await printerService.printInvoice(buildInvoicePrintJob(createdOrder.bill, currentStore!));
+        }
       } catch (error) {
         console.error('Failed to print invoice:', error);
         notify.warning('Invoice printing failed');
@@ -523,6 +462,14 @@ const ParcelOrderPage: React.FC = () => {
             </button>
             {showBreakdown && orderItems.length > 0 && (
               <div className="bottom-bar-breakdown">
+                <div style={{ margin: '8px 0' }}>
+                  <label style={{ fontSize: '0.8rem' }}>Order source</label>
+                  <select value={orderSource} onChange={e => setOrderSource(e.target.value)}>
+                    {(gstMeta?.orderSources || [{id:'pos',label:'Counter / POS'},{id:'swiggy',label:'Swiggy'},{id:'zomato',label:'Zomato'},{id:'other_eco',label:'Other e-commerce'}]).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                  {taxEnabled && orderSource !== 'pos' && <p style={{ fontSize: '0.75rem', opacity: 0.7 }}>GST is paid by the platform (Sec 9(5)); no GST is charged on this bill</p>}
+                </div>
+                <GstBillSummary storeId={currentStoreId!} items={orderItems.map(oi => ({ itemId: oi.itemId, quantity: oi.quantity, unitPrice: orderItemUnitPrice(oi) }))} orderSource={orderSource} />
                 <div className="breakdown-row">
                   <span>Subtotal</span>
                   <span>{formatCurrency(calculateTotal())}</span>

@@ -173,6 +173,87 @@ class ApiService {
     return (data as List).map((b) => Bill.fromJson(b)).toList();
   }
 
+  Future<Bill> getBill(String id) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/bills/$id'),
+      headers: _headers,
+    );
+    final data = await _handleResponse(response);
+    return Bill.fromJson(data);
+  }
+
+  // Credit Notes
+  Future<List<Map<String, dynamic>>> getCreditNotes(String storeId,
+      [String? billId]) async {
+    var url = '$_baseUrl/credit-notes?storeId=$storeId';
+    if (billId != null) {
+      url += '&billId=$billId';
+    }
+    final response = await http.get(
+      Uri.parse(url),
+      headers: _headers,
+    );
+    final data = await _handleResponse(response);
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  // GST Reports
+  static String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _gstQuery(String storeId, DateTime? startDate, DateTime? endDate) {
+    var q = 'storeId=$storeId';
+    if (startDate != null) q += '&startDate=${_fmtDate(startDate)}';
+    if (endDate != null) q += '&endDate=${_fmtDate(endDate)}';
+    return q;
+  }
+
+  Future<Map<String, dynamic>> getGstSummary(String storeId,
+      {DateTime? startDate, DateTime? endDate}) async {
+    final response = await http.get(
+      Uri.parse(
+          '$_baseUrl/reports/gst/summary?${_gstQuery(storeId, startDate, endDate)}'),
+      headers: _headers,
+    );
+    final data = await _handleResponse(response);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> getGstr1(String storeId,
+      {DateTime? startDate, DateTime? endDate}) async {
+    final response = await http.get(
+      Uri.parse(
+          '$_baseUrl/reports/gst/gstr1?${_gstQuery(storeId, startDate, endDate)}'),
+      headers: _headers,
+    );
+    final data = await _handleResponse(response);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> getGstSalesRegister(
+    String storeId, {
+    DateTime? startDate,
+    DateTime? endDate,
+    int page = 1,
+    int pageSize = 50,
+    String? search,
+  }) async {
+    var url =
+        '$_baseUrl/reports/gst/sales-register?${_gstQuery(storeId, startDate, endDate)}&page=$page&pageSize=$pageSize';
+    if (search != null && search.isNotEmpty) {
+      url += '&search=${Uri.encodeQueryComponent(search)}';
+    }
+    final response = await http.get(
+      Uri.parse(url),
+      headers: _headers,
+    );
+    final data = await _handleResponse(response);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   // Users
   Future<void> changePassword(
       String currentPassword, String newPassword) async {

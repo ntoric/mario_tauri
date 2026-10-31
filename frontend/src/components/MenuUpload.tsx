@@ -8,7 +8,10 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { cache, cacheKeys } from '../utils/cache';
 import notify from '../utils/toast';
+
+const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40];
 import type { Store, Category, Item } from '../types';
+import { isTaxEnabled } from '../utils/tax';
 
 // ---- Types matching the backend standardized menu format ----
 
@@ -18,10 +21,11 @@ interface ParsedMenuItem {
   price: number;
   hsnCode: string;
   taxPercent: number;
+  taxCategory?: string;
   // frontend-only fields for diffing/editing
   _status?: 'new' | 'price-change' | 'match';
   _currentPrice?: number;
-  _matchedItemId?: string;   // id of the existing item matched by name (for merge mode)
+  _matchedItemId?: string;   // id of the existing item matched by name (for merge mode)  taxCategory?: string;
 }
 
 interface ParsedMenuCategory {
@@ -51,11 +55,12 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 const MenuUpload: React.FC = () => {
   const { user } = useAuthStore();
-  const { stores, fetchCategories, fetchItems } = useDataStore();
+  const { stores, fetchCategories, fetchItems, gstMeta, fetchGstMeta } = useDataStore();
   const { setHeaderContent } = usePageHeader();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedStoreId, setSelectedStoreId] = useState('');
+  const targetTaxEnabled = isTaxEnabled(stores.find(s => s.id === selectedStoreId));
   const [files, setFiles] = useState<MenuFile[]>([]);
 
   const [isParsing, setIsParsing] = useState(false);
@@ -78,6 +83,7 @@ const MenuUpload: React.FC = () => {
   const [isLoadingCurrent, setIsLoadingCurrent] = useState(false);
 
   useEffect(() => {
+    fetchGstMeta().catch(() => {});
     setHeaderContent({
       title: 'AI Menu Upload',
       subtitle: 'Parse a menu image/PDF with Gemini and import it into a store - Superadmin only',
@@ -360,6 +366,7 @@ const MenuUpload: React.FC = () => {
             price: i.price,
             hsnCode: i.hsnCode,
             taxPercent: i.taxPercent,
+            taxCategory: i.taxCategory || 'taxable',
             matchedItemId: importMode === 'merge' ? i._matchedItemId : undefined,
           })),
       }));
@@ -716,6 +723,7 @@ const MenuUpload: React.FC = () => {
                         </div>
                       ) : viewMode === 'split' ? (
                         <SplitDiffView
+                          taxEnabled={targetTaxEnabled}
                           catIdx={catIdx}
                           currentCatItems={currentCatItems}
                           onlyInCurrent={onlyInCurrent}
@@ -734,7 +742,8 @@ const MenuUpload: React.FC = () => {
                                 <th style={thStyle}>Item Name</th>
                                 <th style={thStyle}>Description</th>
                                 <th style={{ ...thStyle, width: '110px' }}>Price (₹)</th>
-                                <th style={{ ...thStyle, width: '110px' }}>Tax %</th>
+                                {targetTaxEnabled && <th style={{ ...thStyle, width: '110px' }}>Tax %</th>}
+                                {targetTaxEnabled && <th style={{ ...thStyle, width: '110px' }}>Category</th>}
                                 <th style={{ ...thStyle, width: '60px' }}></th>
                               </tr>
                             </thead>
@@ -779,15 +788,33 @@ const MenuUpload: React.FC = () => {
                                         step="0.01"
                                       />
                                     </td>
+                                    {targetTaxEnabled && (<>
                                     <td style={tdStyle}>
-                                      <input
-                                        type="number"
+                                      <select
                                         value={item.taxPercent}
                                         onChange={(e) => handleEditItem(catIdx, actualIdx, 'taxPercent', e.target.value)}
-                                        style={{ ...inputStyle, width: '90px' }}
-                                        step="0.01"
-                                      />
+                                        style={{ ...inputStyle, width: '110px' }}
+                                      >
+                                        {!(gstMeta?.rates || GST_RATES).map(String).includes(String(item.taxPercent)) && (
+                                          <option value={item.taxPercent}>{item.taxPercent}% (invalid)</option>
+                                        )}
+                                        {(gstMeta?.rates || GST_RATES).map(r => <option key={r} value={r}>{r}%</option>)}
+                                      </select>
                                     </td>
+                                    <td style={tdStyle}>
+                                      <select
+                                        value={item.taxCategory || 'taxable'}
+                                        onChange={(e) => handleEditItem(catIdx, actualIdx, 'taxCategory', e.target.value)}
+                                        style={{ ...inputStyle, width: '110px' }}
+                                        title="Tax category"
+                                      >
+                                        <option value="taxable">Taxable</option>
+                                        <option value="nil_rated">Nil</option>
+                                        <option value="exempt">Exempt</option>
+                                        <option value="non_gst">Non-GST</option>
+                                      </select>
+                                    </td>
+                                    </>)}
                                     <td style={tdStyle}>
                                       <button
                                         className="btn btn-outline"
@@ -979,10 +1006,11 @@ interface SplitDiffViewProps {
   statusBadge: (status?: ItemStatus, currentPrice?: number) => React.ReactNode;
   onEditItem: (catIdx: number, itemIdx: number, field: keyof ParsedMenuItem, value: string) => void;
   onRemoveItem: (catIdx: number, itemIdx: number) => void;
+  taxEnabled: boolean;
 }
 
 const SplitDiffView: React.FC<SplitDiffViewProps> = ({
-  catIdx, currentCatItems, onlyInCurrent, visibleItems, cat, statusBadge, onEditItem, onRemoveItem,
+  catIdx, currentCatItems, onlyInCurrent, visibleItems, cat, statusBadge, onEditItem, onRemoveItem, taxEnabled,
 }) => {
   // Build paired rows: for each parsed item, find the matching current item by name.
   const usedCurrent = new Set<string>();
@@ -1062,14 +1090,17 @@ const SplitDiffView: React.FC<SplitDiffViewProps> = ({
                         style={{ ...inputStyle, width: '80px' }}
                         step="0.01"
                       />
-                      <input
-                        type="number"
+                      {taxEnabled && <select
                         value={row.parsed.taxPercent}
                         onChange={(e) => onEditItem(catIdx, row.parsedActualIdx!, 'taxPercent', e.target.value)}
-                        style={{ ...inputStyle, width: '70px' }}
-                        step="0.01"
+                        style={{ ...inputStyle, width: '80px' }}
                         title="Tax %"
-                      />
+                      >
+                        {!GST_RATES.map(String).includes(String(row.parsed.taxPercent)) && (
+                          <option value={row.parsed.taxPercent}>{row.parsed.taxPercent}%</option>
+                        )}
+                        {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
+                      </select>}
                       <button
                         className="btn btn-outline"
                         onClick={() => onRemoveItem(catIdx, row.parsedActualIdx!)}

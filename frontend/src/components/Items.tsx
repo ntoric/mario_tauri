@@ -27,7 +27,7 @@ const newDraftId = () => `draft-${Date.now()}-${Math.random().toString(36).slice
 const emptyExpenseForm = () => ({ name: '', description: '', amount: '' });
 
 const Items: React.FC = () => {
-  const { categories, items, stores, createCategory, updateCategory, deleteCategory, reorderCategories, createItem, updateItem, deleteItem, fetchCategories, fetchItems } = useDataStore();
+  const { categories, items, stores, createCategory, updateCategory, deleteCategory, reorderCategories, createItem, updateItem, deleteItem, fetchCategories, fetchItems, gstMeta, fetchGstMeta } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const taxEnabled = isTaxEnabled(currentStore);
@@ -53,6 +53,7 @@ const Items: React.FC = () => {
 
   useEffect(() => {
     fetchCategories();
+    fetchGstMeta().catch(() => {});
     fetchItems({ includeProfit: true });
   }, [fetchCategories, fetchItems]);
 
@@ -64,6 +65,7 @@ const Items: React.FC = () => {
     hsnCode: '',
     taxPercent: '0',
     isFavourite: false,
+    taxCategory: 'taxable',
   });
 
   const [categoryForm, setCategoryForm] = useState({
@@ -123,7 +125,7 @@ const Items: React.FC = () => {
 
   const resetItemModal = () => {
     setItemModalTab('details');
-    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false });
+    setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false, taxCategory: 'taxable' });
     resetExpenseForm();
     setItemExpenses([]);
     setDraftExpenses([]);
@@ -140,10 +142,11 @@ const Items: React.FC = () => {
         hsnCode: item.hsnCode || '',
         taxPercent: (item.taxPercent || 0).toString(),
         isFavourite: !!item.isFavourite,
+        taxCategory: item.taxCategory || 'taxable',
       });
       loadItemExpenses(item.id);
     } else {
-      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false });
+      setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false, taxCategory: 'taxable' });
     }
     openItemModal(item);
   };
@@ -183,7 +186,9 @@ const Items: React.FC = () => {
       price: parseFloat(itemForm.price),
       categoryId: itemForm.categoryId,
       hsnCode: itemForm.hsnCode,
-      taxPercent: taxEnabled ? (parseFloat(itemForm.taxPercent) || 0) : 0,
+      taxCategory: itemForm.taxCategory,
+      // Keep the saved rate while tax is off so turning it back on restores it.
+      taxPercent: parseFloat(itemForm.taxPercent) || 0,
       isFavourite: itemForm.isFavourite,
       enabled: editingItem ? editingItem.enabled !== false : true,
     };
@@ -766,29 +771,50 @@ const Items: React.FC = () => {
               required
             />
           </div>
-          <div className="form-group" style={!taxEnabled ? { opacity: 0.5 } : undefined}>
-            <label>Tax % {!taxEnabled && <span style={{ color: 'var(--gray-400)', fontWeight: 400, fontSize: '0.8rem' }}>(disabled in settings)</span>}</label>
+          {taxEnabled && (
+            <>
+              <div className="form-group">
+                <label>Tax %</label>
+                <select
+                  value={itemForm.taxPercent}
+                  onChange={e => setItemForm({ ...itemForm, taxPercent: e.target.value })}
+                >
+                  {!(gstMeta?.rates || [0,5]).map(String).includes(itemForm.taxPercent) && (
+                    <option value={itemForm.taxPercent}>{itemForm.taxPercent}% (invalid – choose a GST slab)</option>
+                  )}
+                  {(gstMeta?.rates || [0,5]).map(r => <option key={r} value={String(r)}>{r}%</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Tax Category</label>
+                <select
+                  value={itemForm.taxCategory || 'taxable'}
+                  onChange={e => setItemForm({ ...itemForm, taxCategory: e.target.value })}
+                >
+                  <option value="taxable">Taxable</option>
+                  <option value="nil_rated">Nil-rated</option>
+                  <option value="exempt">Exempt</option>
+                  <option value="non_gst">Non-GST (e.g. alcohol)</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+        {taxEnabled && (
+          <div className="form-group">
+            <label>HSN/SAC Code <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
             <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={taxEnabled ? itemForm.taxPercent : '0'}
-              onChange={e => setItemForm({ ...itemForm, taxPercent: e.target.value })}
-              placeholder="0"
-              disabled={!taxEnabled}
+              type="text"
+              value={itemForm.hsnCode}
+              onChange={e => setItemForm({ ...itemForm, hsnCode: e.target.value.replace(/\D/g, '').slice(0, 8) })}
+              placeholder="996331"
             />
+            {itemForm.hsnCode && ![4,6,8].includes(itemForm.hsnCode.length) && (
+              <small style={{ color: 'var(--danger, #f66)' }}>HSN must be 4, 6 or 8 digits</small>
+            )}
+            <small style={{ color: 'var(--gray-500)', display: 'block' }}>Leave empty to use the store SAC (996331 – restaurant service)</small>
           </div>
-        </div>
-        <div className="form-group">
-          <label>HSN Code <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
-          <input
-            type="text"
-            value={itemForm.hsnCode}
-            onChange={e => setItemForm({ ...itemForm, hsnCode: e.target.value })}
-            placeholder="HSN Code"
-          />
-        </div>
+        )}
         <div className="form-group">
           <label>Description <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
           <textarea

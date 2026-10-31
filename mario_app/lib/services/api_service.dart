@@ -169,8 +169,7 @@ class ApiService {
 
   // Table sections — the store's catalog of named table groupings.
   Future<List<TableSection>> getTableSections(String storeId) async {
-    final response =
-        await _get('$_baseUrl/tables/sections?storeId=$storeId');
+    final response = await _get('$_baseUrl/tables/sections?storeId=$storeId');
     final data = await _handleResponse(response);
     return (data as List).map((s) => TableSection.fromJson(s)).toList();
   }
@@ -333,6 +332,28 @@ class ApiService {
     final response = await _post('$_baseUrl/bills', billData);
     final data = await _handleResponse(response);
     return Bill.fromJson(data);
+  }
+
+  Future<Bill> getBill(String id) async {
+    final response = await _get('$_baseUrl/bills/$id');
+    final data = await _handleResponse(response);
+    return Bill.fromJson(data);
+  }
+
+  // Server-computed bill preview: same tax/invoice math as issuing a bill,
+  // but writes nothing and allocates no invoice number.
+  Future<Map<String, dynamic>> previewBill(Map<String, dynamic> body) async {
+    final response = await _post('$_baseUrl/bills/preview', body);
+    final data = await _handleResponse(response);
+    return Map<String, dynamic>.from(data);
+  }
+
+  // GST reference data: state codes (with UTGST flag), tax rates, order
+  // source labels.
+  Future<Map<String, dynamic>> getGstMeta() async {
+    final response = await _get('$_baseUrl/gst/meta');
+    final data = await _handleResponse(response);
+    return Map<String, dynamic>.from(data);
   }
 
   Future<void> enqueueBill(Map<String, dynamic> billData) async {

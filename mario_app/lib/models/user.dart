@@ -69,6 +69,14 @@ class Store {
   final String? logoUrl;
   final bool isActive;
   final bool remoteBillingEnabled;
+  final bool taxEnabled;
+  final double defaultTaxPercent;
+  // 'regular' | 'composition' | 'unregistered' — null on legacy backends.
+  final String? gstRegistrationType;
+  final String? stateCode;
+  final bool pricesIncludeTax;
+  final String? invoicePrefix;
+  final String? defaultSacCode;
 
   Store({
     required this.id,
@@ -81,7 +89,20 @@ class Store {
     this.logoUrl,
     required this.isActive,
     this.remoteBillingEnabled = false,
+    this.taxEnabled = true,
+    this.defaultTaxPercent = 0,
+    this.gstRegistrationType,
+    this.stateCode,
+    this.pricesIncludeTax = false,
+    this.invoicePrefix,
+    this.defaultSacCode,
   });
+
+  static double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
 
   factory Store.fromJson(Map<String, dynamic> json) {
     return Store(
@@ -94,7 +115,22 @@ class Store {
       phone: json['phone'],
       logoUrl: json['logoUrl'] ?? json['logo_url'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
-      remoteBillingEnabled: json['remoteBillingEnabled'] ?? json['remote_billing_enabled'] ?? false,
+      remoteBillingEnabled: json['remoteBillingEnabled'] ??
+          json['remote_billing_enabled'] ??
+          false,
+      taxEnabled: json['taxEnabled'] ?? json['tax_enabled'] ?? true,
+      defaultTaxPercent: _parseDouble(
+          json['defaultTaxPercent'] ?? json['default_tax_percent']),
+      gstRegistrationType:
+          (json['gstRegistrationType'] ?? json['gst_registration_type'])
+              ?.toString(),
+      stateCode: (json['stateCode'] ?? json['state_code'])?.toString(),
+      pricesIncludeTax:
+          json['pricesIncludeTax'] ?? json['prices_include_tax'] ?? false,
+      invoicePrefix:
+          (json['invoicePrefix'] ?? json['invoice_prefix'])?.toString(),
+      defaultSacCode:
+          (json['defaultSacCode'] ?? json['default_sac_code'])?.toString(),
     );
   }
 
@@ -110,8 +146,24 @@ class Store {
       'logoUrl': logoUrl,
       'isActive': isActive,
       'remoteBillingEnabled': remoteBillingEnabled,
+      'taxEnabled': taxEnabled,
+      'defaultTaxPercent': defaultTaxPercent,
+      'gstRegistrationType': gstRegistrationType,
+      'stateCode': stateCode,
+      'pricesIncludeTax': pricesIncludeTax,
+      'invoicePrefix': invoicePrefix,
+      'defaultSacCode': defaultSacCode,
     };
   }
 
   String get displayName => branch != null ? '$name - $branch' : name;
+
+  // Legacy backends don't send gstRegistrationType — treat them as regular
+  // so tax keeps showing exactly as before.
+  String get effectiveGstRegistrationType => gstRegistrationType ?? 'regular';
+
+  // Whether this store charges GST on its own bills (composition/unregistered
+  // dealers issue a bill of supply with no tax).
+  bool get chargesGst =>
+      taxEnabled && effectiveGstRegistrationType == 'regular';
 }

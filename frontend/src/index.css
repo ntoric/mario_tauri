@@ -5162,6 +5162,447 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* GST bill preview (collapsible) */
+.gst-summary {
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--gray-50);
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.gst-summary-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--gray-600);
+}
+
+.gst-summary-toggle:hover {
+  background: var(--gray-100);
+}
+
+.gst-summary-chevron {
+  color: var(--gray-400);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.gst-summary-chevron.open {
+  transform: rotate(90deg);
+}
+
+.gst-summary-title {
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.gst-summary-badge {
+  margin-left: auto;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  color: var(--primary-dark);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.gst-summary-body {
+  border-top: 1px dashed rgba(var(--ink-rgb), 0.12);
+  padding: 0.4rem 0.6rem 0.55rem;
+  font-size: 0.76rem;
+}
+
+.gst-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.14rem 0;
+  color: var(--gray-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.gst-summary-row.indent {
+  padding-left: 0.9rem;
+}
+
+.gst-summary-rate {
+  margin-top: 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--gray-400);
+}
+
+.gst-summary-row.total {
+  border-top: 1px solid var(--gray-200);
+  margin-top: 0.3rem;
+  padding-top: 0.4rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.gst-summary-error {
+  color: var(--danger, #dc2626);
+  font-size: 0.78rem;
+  margin: 0.4rem 0;
+}
+
+/* Issue Credit Note modal */
+.cn-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.cn-section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.cn-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.cn-link-btn:hover {
+  text-decoration: underline;
+}
+
+.cn-link-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
+.cn-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--surface);
+  margin-bottom: 0.45rem;
+}
+
+.cn-line.exhausted {
+  background: var(--gray-50);
+  opacity: 0.7;
+}
+
+.cn-line-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cn-line-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--dark);
+}
+
+.cn-line-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--gray-500);
+  margin-top: 0.1rem;
+}
+
+.cn-line-tag {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--gray-200);
+  color: var(--gray-600);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.cn-qty-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cn-qty-stepper .quantity-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.cn-qty-input {
+  width: 3.4rem;
+  text-align: center;
+  padding: 0.3rem 0.25rem;
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  background: rgba(var(--surface-rgb), 0.65);
+  transition: border-color 0.15s ease;
+}
+
+.cn-qty-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.cn-qty-input:disabled {
+  background: var(--gray-100);
+  color: var(--gray-400);
+}
+
+.cn-qty-input::-webkit-outer-spin-button,
+.cn-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cn-qty-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cn-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed rgba(var(--ink-rgb), 0.14);
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--dark);
+}
+
+.cn-total-amount {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* GST Reports page */
+.gstr-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.gstr-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gstr-dates .form-input {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.gstr-dates-sep {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+}
+
+.gstr-note {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin: 0.4rem 0 0.75rem;
+}
+
+.gstr-legacy {
+  padding: 0.5rem 0.75rem;
+  background: var(--warning-light);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--gray-700);
+  margin-bottom: 0.75rem;
+}
+
+.gstr-seg {
+  display: inline-flex;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.gstr-seg-btn {
+  border: none;
+  background: none;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.gstr-seg-btn.sm {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+
+.gstr-seg-btn:hover {
+  color: var(--dark);
+}
+
+.gstr-seg-btn.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(18, 24, 34, 0.1);
+}
+
+.gstr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.gstr-kpi {
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+}
+
+.gstr-kpi-label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+}
+
+.gstr-kpi-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dark);
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.15rem;
+}
+
+.gstr-section {
+  margin-bottom: 1rem;
+}
+
+.gstr-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gstr-section-head h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.gstr-table-wrap {
+  overflow-x: auto;
+}
+
+.gstr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.gstr-table th {
+  text-align: left;
+  padding: 0.55rem 0.85rem;
+  color: var(--gray-500);
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-50);
+  white-space: nowrap;
+}
+
+.gstr-table td {
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.gstr-table tbody tr:hover td {
+  background: var(--gray-50);
+}
+
+.gstr-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.gstr-table th.num,
+.gstr-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.gstr-empty {
+  text-align: center;
+  color: var(--gray-400);
+  padding: 1.5rem !important;
+}
+
+.gstr-search {
+  position: relative;
+  min-width: 220px;
+}
+
+.gstr-search-icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray-400);
+  pointer-events: none;
+}
+
+.gstr-search .form-input {
+  padding-left: 2rem;
+  font-size: 0.8rem;
+}
+
+.gstr-register-totals {
+  padding: 0.6rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  border-top: 1px solid var(--gray-200);
+  background: var(--gray-50);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1024px) {
   .order-page-layout {
     grid-template-columns: 140px 320px 1fr;

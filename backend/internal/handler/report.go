@@ -27,7 +27,7 @@ func parseReportFilter(r *http.Request) repository.ReportFilter {
 
 	return repository.ReportFilter{
 		From:     parseTimeQuery(r, "startDate"),
-		To:       parseTimeQuery(r, "endDate"),
+		To:       parseEndOfDayQuery(r, "endDate"),
 		Search:   strings.TrimSpace(q.Get("search")),
 		Sort:     q.Get("sort"),
 		Dir:      q.Get("dir"),
@@ -52,6 +52,11 @@ func (h *Handler) GetTopSellingItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := parseReportFilter(r)
+
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	report, err := h.Repo.Report.GetTopSellingItems(r.Context(), storeID, filter)
 	if err != nil {
@@ -83,6 +88,11 @@ func (h *Handler) GetTopSellingCategories(w http.ResponseWriter, r *http.Request
 
 	filter := parseReportFilter(r)
 
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	report, err := h.Repo.Report.GetTopSellingCategories(r.Context(), storeID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -112,6 +122,11 @@ func (h *Handler) GetSalesProfitReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := parseReportFilter(r)
+
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	report, err := h.Repo.Report.GetSalesProfit(r.Context(), storeID, filter)
 	if err != nil {
@@ -143,6 +158,11 @@ func (h *Handler) GetMenuProfitReport(w http.ResponseWriter, r *http.Request) {
 
 	filter := parseReportFilter(r)
 
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	report, err := h.Repo.Report.GetMenuProfit(r.Context(), storeID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -173,6 +193,11 @@ func (h *Handler) GetExpenseCategoryReport(w http.ResponseWriter, r *http.Reques
 
 	filter := parseReportFilter(r)
 
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	report, err := h.Repo.Report.GetExpensesByCategory(r.Context(), storeID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -202,6 +227,11 @@ func (h *Handler) GetExpenseDateReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := parseReportFilter(r)
+
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	report, err := h.Repo.Report.GetExpensesByDate(r.Context(), storeID, filter)
 	if err != nil {
@@ -234,6 +264,11 @@ func (h *Handler) GetRevenueEntries(w http.ResponseWriter, r *http.Request) {
 
 	filter := parseReportFilter(r)
 
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	report, err := h.Repo.Report.GetRevenueEntries(r.Context(), storeID, filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -264,6 +299,11 @@ func (h *Handler) GetExpenseEntries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := parseReportFilter(r)
+
+	if err := h.reportRetention(r.Context(), claims, storeID, &filter); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	report, err := h.Repo.Report.GetExpenseEntries(r.Context(), storeID, filter)
 	if err != nil {

@@ -143,7 +143,12 @@ func (h *Handler) GetExpenses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startDate := r.URL.Query().Get("startDate")
+	cutoff, err := h.retentionCutoff(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	startDate := clampDateStr(r.URL.Query().Get("startDate"), cutoff)
 	endDate := r.URL.Query().Get("endDate")
 
 	expenses, err := h.Repo.Expense.GetAll(r.Context(), storeID, startDate, endDate)
@@ -180,6 +185,16 @@ func (h *Handler) GetExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if expense == nil {
+		h.writeError(w, http.StatusNotFound, "Expense not found")
+		return
+	}
+
+	visible, err := h.visibleAt(r.Context(), claims, expense.StoreID, expense.ExpenseDate)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !visible {
 		h.writeError(w, http.StatusNotFound, "Expense not found")
 		return
 	}
@@ -312,7 +327,12 @@ func (h *Handler) GetExpenseReportByCategory(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	startDate := r.URL.Query().Get("startDate")
+	cutoff, err := h.retentionCutoff(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	startDate := clampDateStr(r.URL.Query().Get("startDate"), cutoff)
 	endDate := r.URL.Query().Get("endDate")
 
 	reports, err := h.Repo.Expense.GetReportByCategory(r.Context(), storeID, startDate, endDate)
@@ -341,7 +361,12 @@ func (h *Handler) GetExpenseSummaryByDate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	startDate := r.URL.Query().Get("startDate")
+	cutoff, err := h.retentionCutoff(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	startDate := clampDateStr(r.URL.Query().Get("startDate"), cutoff)
 	endDate := r.URL.Query().Get("endDate")
 
 	summaries, err := h.Repo.Expense.GetSummaryByDate(r.Context(), storeID, startDate, endDate)
@@ -372,7 +397,12 @@ func (h *Handler) GetRevenueReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startDate := r.URL.Query().Get("startDate")
+	cutoff, err := h.retentionCutoff(r.Context(), claims, storeID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	startDate := clampDateStr(r.URL.Query().Get("startDate"), cutoff)
 	endDate := r.URL.Query().Get("endDate")
 	summaryOnly := r.URL.Query().Get("summaryOnly") == "true"
 

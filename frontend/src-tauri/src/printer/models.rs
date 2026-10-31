@@ -65,6 +65,10 @@ pub struct Summary {
     pub taxable: f64,
     pub cgst: f64,
     pub sgst: f64,
+    #[serde(default)]
+    pub igst: f64,
+    #[serde(default)]
+    pub cess: f64,
     #[serde(rename = "grand_total")]
     pub grand_total: f64,
 }
@@ -106,6 +110,53 @@ pub struct Invoice {
     pub qr: Option<QR>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub footer: Option<Vec<String>>,
+    // GST extensions — all optional so legacy payloads still deserialize.
+    #[serde(default)]
+    pub document_title: Option<String>,
+    #[serde(default)]
+    pub declaration: Option<String>,
+    #[serde(default)]
+    pub place_of_supply: Option<String>,
+    #[serde(default)]
+    pub buyer: Option<Buyer>,
+    #[serde(default)]
+    pub tax_summary: Vec<TaxSummaryRow>,
+    #[serde(default)]
+    pub tax_label_state: Option<String>,
+    #[serde(default)]
+    pub round_off: f64,
+    #[serde(default)]
+    pub footer_notes: Vec<String>,
+    #[serde(default)]
+    pub original_invoice_no: Option<String>,
+    #[serde(default)]
+    pub original_invoice_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Buyer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub gstin: String,
+    #[serde(default)]
+    pub address: String,
+    #[serde(default)]
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaxSummaryRow {
+    #[serde(default)]
+    pub rate: f64,
+    #[serde(default)]
+    pub taxable: f64,
+    #[serde(default)]
+    pub cgst: f64,
+    #[serde(default)]
+    pub sgst: f64,
+    #[serde(default)]
+    pub igst: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

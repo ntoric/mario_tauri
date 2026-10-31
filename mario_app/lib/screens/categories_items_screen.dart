@@ -23,6 +23,10 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
   String _sortMode = 'name';
   bool _gridView = false;
 
+  // Tax % and HSN fields are hidden when the store has tax switched off.
+  bool get _taxOn =>
+      context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+
   @override
   void initState() {
     super.initState();
@@ -226,41 +230,45 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                               },
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: taxController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                      decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Tax (%)',
-                                hintText: '5.0',
-                                prefixIcon: Icon(Icons.percent),
+                          if (_taxOn) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: taxController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Tax (%)',
+                                  hintText: '5.0',
+                                  prefixIcon: Icon(Icons.percent),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Enter tax';
+                                  }
+                                  final t = double.tryParse(value);
+                                  if (t == null || t < 0) {
+                                    return 'Invalid tax';
+                                  }
+                                  return null;
+                                },
                               ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Enter tax';
-                                }
-                                final t = double.tryParse(value);
-                                if (t == null || t < 0) {
-                                  return 'Invalid tax';
-                                }
-                                return null;
-                              },
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: hsnController,
-                        decoration: const InputDecoration(
-                          labelText: 'HSN / SAC Code',
-                          hintText: 'e.g., 9963',
-                          prefixIcon: Icon(Icons.pin_outlined),
+                      if (_taxOn) ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: hsnController,
+                          decoration: const InputDecoration(
+                            labelText: 'HSN / SAC Code',
+                            hintText: 'e.g., 9963',
+                            prefixIcon: Icon(Icons.pin_outlined),
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: descriptionController,
@@ -680,10 +688,12 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
               Divider(height: 1, color: AppColors.gray200),
               row('Price', '₹${item.price.toStringAsFixed(2)}'),
               Divider(height: 1, color: AppColors.gray200),
-              row('Tax', '${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%'),
-              Divider(height: 1, color: AppColors.gray200),
-              row('HSN', item.hsnCode ?? '-'),
-              Divider(height: 1, color: AppColors.gray200),
+              if (_taxOn) ...[
+                row('Tax', '${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%'),
+                Divider(height: 1, color: AppColors.gray200),
+                row('HSN', item.hsnCode ?? '-'),
+                Divider(height: 1, color: AppColors.gray200),
+              ],
               row('Status', item.enabled ? 'Enabled' : 'Disabled'),
             ],
           ),
@@ -1253,14 +1263,15 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
                       ),
                     ),
                   ],
-                  const SizedBox(height: 5),
-                  Text(
-                    'Tax: ${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%   HSN: ${item.hsnCode ?? '-'}',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.gray500,
+                  if (_taxOn) const SizedBox(height: 5),
+                  if (_taxOn)
+                    Text(
+                      'Tax: ${item.taxPercent?.toStringAsFixed(1) ?? '0.0'}%   HSN: ${item.hsnCode ?? '-'}',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.gray500,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -12,28 +12,43 @@ type Position struct {
 
 // Store represents store table schema and json dto
 type Store struct {
-	ID                   string     `json:"id"`
-	Name                 string     `json:"name"`
-	Branch               string     `json:"branch"`
-	Location             string     `json:"location"`
-	GSTIN                string     `json:"gstin"`
-	FSSAINo              string     `json:"fssaiNo"`
-	Phone                string     `json:"phone"`
-	PrinterName          string     `json:"printerName"`
-	PrinterVendorID      string     `json:"printerVendorId"`
-	PrinterProductID     string     `json:"printerProductId"`
-	InvoiceSize          string     `json:"invoiceSize"`
-	KOTPrintEnabled      bool       `json:"kotPrintEnabled"`
-	RemoteBillingEnabled bool       `json:"remoteBillingEnabled"`
-	RemotePrinterDeviceID string    `json:"remotePrinterDeviceId"`
-	LogoURL              string     `json:"logoUrl"`
-	ThemeColor           string     `json:"themeColor"`
-	TaxEnabled           bool       `json:"taxEnabled"`
-	DefaultTaxPercent    float64    `json:"defaultTaxPercent"`
-	IsActive             bool       `json:"isActive"`
-	AppVersion           string     `json:"appVersion,omitempty"`
-	AppVersionSeenAt     *time.Time `json:"appVersionSeenAt,omitempty"`
-	CreatedAt            time.Time  `json:"createdAt"`
+	ID                    string  `json:"id"`
+	Name                  string  `json:"name"`
+	Branch                string  `json:"branch"`
+	Location              string  `json:"location"`
+	GSTIN                 string  `json:"gstin"`
+	FSSAINo               string  `json:"fssaiNo"`
+	Phone                 string  `json:"phone"`
+	PrinterName           string  `json:"printerName"`
+	PrinterVendorID       string  `json:"printerVendorId"`
+	PrinterProductID      string  `json:"printerProductId"`
+	InvoiceSize           string  `json:"invoiceSize"`
+	KOTPrintEnabled       bool    `json:"kotPrintEnabled"`
+	RemoteBillingEnabled  bool    `json:"remoteBillingEnabled"`
+	RemotePrinterDeviceID string  `json:"remotePrinterDeviceId"`
+	LogoURL               string  `json:"logoUrl"`
+	ThemeColor            string  `json:"themeColor"`
+	TaxEnabled            bool    `json:"taxEnabled"`
+	DefaultTaxPercent     float64 `json:"defaultTaxPercent"`
+	GSTRegistrationType   string  `json:"gstRegistrationType"`
+	StateCode             string  `json:"stateCode"`
+	PricesIncludeTax      bool    `json:"pricesIncludeTax"`
+	InvoicePrefix         string  `json:"invoicePrefix"`
+	CreditNotePrefix      string  `json:"creditNotePrefix"`
+	DefaultSACCode        string  `json:"defaultSacCode"`
+	// GSTINs of the e-commerce operators that pay GST u/s 9(5) on orders
+	// placed through them (reported in GSTR-1 Table 14).
+	SwiggyGSTIN   string `json:"swiggyGstin"`
+	ZomatoGSTIN   string `json:"zomatoGstin"`
+	OtherEcoGSTIN string `json:"otherEcoGstin"`
+	// DataRetentionDays hides orders, bills, sales/profit reports and
+	// expenses older than N days from non-superadmin roles. The rows are
+	// kept in the database and remain visible to superadmin. 0 = unlimited.
+	DataRetentionDays int        `json:"dataRetentionDays"`
+	IsActive          bool       `json:"isActive"`
+	AppVersion        string     `json:"appVersion,omitempty"`
+	AppVersionSeenAt  *time.Time `json:"appVersionSeenAt,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
 }
 
 // User represents user table schema and json dto
@@ -76,6 +91,7 @@ type Item struct {
 	Price         float64   `json:"price"`
 	HSNCode       string    `json:"hsnCode"`
 	TaxPercent    float64   `json:"taxPercent"`
+	TaxCategory   string    `json:"taxCategory"`
 	IsActive      bool      `json:"isActive"`
 	Enabled       bool      `json:"enabled"`
 	IsFavourite   bool      `json:"isFavourite"`
@@ -178,6 +194,7 @@ type Order struct {
 	DiscountAmount float64     `json:"discountAmount"`
 	PaymentMethod  string      `json:"paymentMethod"`
 	PaymentStatus  string      `json:"paymentStatus"`
+	OrderSource    string      `json:"orderSource"`
 	CreatedBy      string      `json:"createdBy"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
@@ -205,6 +222,120 @@ type Bill struct {
 	GeneratedAt    time.Time   `json:"generatedAt"`
 	GeneratedBy    string      `json:"generatedBy"`
 	Items          []OrderItem `json:"items"`
+
+	// GST fields — populated for bills issued through the unified GST
+	// pipeline (fy IS NOT NULL). Legacy bills leave these empty.
+	FY                string          `json:"fy,omitempty"`
+	InvoiceSeq        int             `json:"invoiceSeq,omitempty"`
+	DocumentType      string          `json:"documentType,omitempty"`
+	SupplyType        string          `json:"supplyType,omitempty"`
+	PlaceOfSupply     string          `json:"placeOfSupply,omitempty"`
+	PlaceOfSupplyName string          `json:"placeOfSupplyName,omitempty"`
+	SupplierGSTIN     string          `json:"supplierGstin,omitempty"`
+	SupplierStateCode string          `json:"supplierStateCode,omitempty"`
+	BuyerGSTIN        string          `json:"buyerGstin,omitempty"`
+	BuyerName         string          `json:"buyerName,omitempty"`
+	BuyerAddress      string          `json:"buyerAddress,omitempty"`
+	BuyerStateCode    string          `json:"buyerStateCode,omitempty"`
+	OrderSource       string          `json:"orderSource,omitempty"`
+	EcoGSTIN          string          `json:"ecoGstin,omitempty"`
+	PricesIncludeTax  bool            `json:"pricesIncludeTax"`
+	TaxableValue      float64         `json:"taxableValue"`
+	CGST              float64         `json:"cgst"`
+	SGST              float64         `json:"sgst"`
+	IGST              float64         `json:"igst"`
+	Cess              float64         `json:"cess"`
+	RoundOff          float64         `json:"roundOff"`
+	IsUTGST           bool            `json:"isUtgst"`
+	CancelledAt       *time.Time      `json:"cancelledAt,omitempty"`
+	CancelReason      string          `json:"cancelReason,omitempty"`
+	CreditedTotal     float64         `json:"creditedTotal"`
+	Lines             []BillLine      `json:"lines"`
+	TaxSummary        []TaxSummaryRow `json:"taxSummary"`
+}
+
+// BillLine is a computed GST line stored in bill_lines.
+type BillLine struct {
+	ID           int64   `json:"id"`
+	BillID       string  `json:"billId"`
+	ItemID       string  `json:"itemId"`
+	Name         string  `json:"name"`
+	HSNCode      string  `json:"hsnCode"`
+	Unit         string  `json:"unit"`
+	TaxCategory  string  `json:"taxCategory"`
+	Quantity     float64 `json:"quantity"`
+	UnitPrice    float64 `json:"unitPrice"`
+	Gross        float64 `json:"gross"`
+	Discount     float64 `json:"discount"`
+	TaxableValue float64 `json:"taxableValue"`
+	TaxRate      float64 `json:"taxRate"`
+	CGSTRate     float64 `json:"cgstRate"`
+	CGST         float64 `json:"cgst"`
+	SGSTRate     float64 `json:"sgstRate"`
+	SGST         float64 `json:"sgst"`
+	IGSTRate     float64 `json:"igstRate"`
+	IGST         float64 `json:"igst"`
+	Cess         float64 `json:"cess"`
+	Total        float64 `json:"total"`
+	// CreditedQuantity is the quantity already reversed by active credit notes.
+	CreditedQuantity float64 `json:"creditedQuantity"`
+}
+
+// TaxSummaryRow aggregates bill line amounts per GST rate.
+type TaxSummaryRow struct {
+	Rate         float64 `json:"rate"`
+	TaxableValue float64 `json:"taxableValue"`
+	CGST         float64 `json:"cgst"`
+	SGST         float64 `json:"sgst"`
+	IGST         float64 `json:"igst"`
+	Cess         float64 `json:"cess"`
+}
+
+// CreditNote is a GST credit note issued against a bill.
+type CreditNote struct {
+	ID             string           `json:"id"`
+	StoreID        string           `json:"storeId"`
+	BillID         string           `json:"billId"`
+	CreditNoteNo   string           `json:"creditNoteNo"`
+	FY             string           `json:"fy"`
+	Seq            int              `json:"seq"`
+	Reason         string           `json:"reason"`
+	SupplyType     string           `json:"supplyType"`
+	PlaceOfSupply  string           `json:"placeOfSupply"`
+	BuyerGSTIN     string           `json:"buyerGstin,omitempty"`
+	IsUTGST        bool             `json:"isUtgst"`
+	TaxableValue   float64          `json:"taxableValue"`
+	CGST           float64          `json:"cgst"`
+	SGST           float64          `json:"sgst"`
+	IGST           float64          `json:"igst"`
+	Cess           float64          `json:"cess"`
+	RoundOff       float64          `json:"roundOff"`
+	Total          float64          `json:"total"`
+	Status         string           `json:"status"`
+	IssuedAt       time.Time        `json:"issuedAt"`
+	IssuedBy       string           `json:"issuedBy"`
+	OriginalBillNo string           `json:"originalInvoiceNo,omitempty"`
+	OriginalBillAt *time.Time       `json:"originalInvoiceDate,omitempty"`
+	Lines          []CreditNoteLine `json:"lines"`
+}
+
+// CreditNoteLine is one credited quantity line of a credit note.
+type CreditNoteLine struct {
+	ID           int64   `json:"id"`
+	CreditNoteID string  `json:"creditNoteId"`
+	BillLineID   int64   `json:"billLineId"`
+	ItemID       string  `json:"itemId"`
+	Name         string  `json:"name"`
+	HSNCode      string  `json:"hsnCode"`
+	Unit         string  `json:"unit"`
+	Quantity     float64 `json:"quantity"`
+	TaxableValue float64 `json:"taxableValue"`
+	TaxRate      float64 `json:"taxRate"`
+	CGST         float64 `json:"cgst"`
+	SGST         float64 `json:"sgst"`
+	IGST         float64 `json:"igst"`
+	Cess         float64 `json:"cess"`
+	Total        float64 `json:"total"`
 }
 
 type BillQueueItem struct {
@@ -377,6 +508,7 @@ type ParsedMenuItem struct {
 	Price       float64 `json:"price"`
 	HSNCode     string  `json:"hsnCode"`
 	TaxPercent  float64 `json:"taxPercent"`
+	TaxCategory string  `json:"taxCategory,omitempty"`
 	// MatchedItemID is set by the frontend when an existing item is matched
 	// by name. Used only for "merge" imports to update the existing item
 	// instead of creating a duplicate.

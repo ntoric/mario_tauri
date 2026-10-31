@@ -32,6 +32,18 @@ export interface Store {
   themeColor?: string;
   taxEnabled?: boolean;
   defaultTaxPercent?: number;
+  gstRegistrationType?: 'regular' | 'composition' | 'unregistered';
+  stateCode?: string;
+  pricesIncludeTax?: boolean;
+  invoicePrefix?: string;
+  creditNotePrefix?: string;
+  defaultSacCode?: string;
+  swiggyGstin?: string;
+  zomatoGstin?: string;
+  otherEcoGstin?: string;
+  /** Hide orders/bills/reports/expenses older than this many days from
+   *  store users (superadmin keeps full history). 0 = unlimited. */
+  dataRetentionDays?: number;
   isActive: boolean;
   appVersion?: string;
   appVersionSeenAt?: string;
@@ -59,6 +71,7 @@ export interface Item {
   price: number;
   hsnCode?: string;
   taxPercent: number;
+  taxCategory?: string;
   isActive: boolean;
   enabled?: boolean;
   isFavourite?: boolean;
@@ -147,6 +160,9 @@ export interface Order {
   updatedAt: string;
   cancelledAt?: string;
   createdBy: string;
+  orderSource?: string;
+  /** Present on responses that also issue a bill (save-ebill, parcel). */
+  bill?: Bill;
 }
 
 export interface Bill {
@@ -168,6 +184,190 @@ export interface Bill {
   status?: string;
   generatedAt: string;
   generatedBy: string;
+  fy?: string;
+  invoiceSeq?: number;
+  documentType?: string;
+  supplyType?: string;
+  placeOfSupply?: string;
+  placeOfSupplyName?: string;
+  supplierGstin?: string;
+  supplierStateCode?: string;
+  buyerGstin?: string;
+  buyerName?: string;
+  buyerAddress?: string;
+  buyerStateCode?: string;
+  orderSource?: string;
+  pricesIncludeTax?: boolean;
+  taxableValue?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  cess?: number;
+  roundOff?: number;
+  isUtgst?: boolean;
+  cancelledAt?: string;
+  cancelReason?: string;
+  creditedTotal?: number;
+  lines?: BillLine[];
+  taxSummary?: TaxSummaryRow[];
+}
+
+export interface BillLine {
+  id: number;
+  billId: string;
+  itemId?: string;
+  name: string;
+  hsnCode?: string;
+  unit?: string;
+  taxCategory?: string;
+  quantity: number;
+  unitPrice: number;
+  gross: number;
+  discount: number;
+  taxableValue: number;
+  taxRate: number;
+  cgstRate: number;
+  cgst: number;
+  sgstRate: number;
+  sgst: number;
+  igstRate: number;
+  igst: number;
+  cess: number;
+  total: number;
+  creditedQuantity?: number;
+}
+
+export interface TaxSummaryRow {
+  rate: number;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+}
+
+export interface CreditNoteLine {
+  id: number;
+  creditNoteId: string;
+  billLineId: number;
+  itemId?: string;
+  name: string;
+  hsnCode?: string;
+  unit?: string;
+  quantity: number;
+  taxableValue: number;
+  taxRate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  total: number;
+}
+
+export interface CreditNote {
+  id: string;
+  storeId: string;
+  billId: string;
+  creditNoteNo: string;
+  fy?: string;
+  seq?: number;
+  reason: string;
+  supplyType?: string;
+  placeOfSupply?: string;
+  buyerGstin?: string;
+  isUtgst?: boolean;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  roundOff: number;
+  total: number;
+  status: string;
+  issuedAt: string;
+  issuedBy?: string;
+  originalInvoiceNo?: string;
+  originalInvoiceDate?: string;
+  lines: CreditNoteLine[];
+}
+
+export interface GstMeta {
+  states: { code: string; name: string; utgst: boolean }[];
+  rates: number[];
+  taxCategories: string[];
+  registrationTypes: string[];
+  orderSources: { id: string; label: string }[];
+}
+
+export interface GstPreview {
+  lines: BillLine[];
+  taxSummary: TaxSummaryRow[];
+  gross: number;
+  discount: number;
+  taxableValue: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  totalTax: number;
+  roundOff: number;
+  total: number;
+  chargesTax: boolean;
+  interState: boolean;
+  utgst: boolean;
+  placeOfSupply: string;
+  supplyType: string;
+  documentType: string;
+}
+
+export interface GstSummaryReport {
+  registrationType: string;
+  legacyBillsExcluded: number;
+  invoices: {
+    count: number; cancelledCount: number; taxableValue: number;
+    cgst: number; sgst: number; igst: number; cess: number;
+    totalTax: number; invoiceValue: number;
+  };
+  creditNotes: {
+    count: number; taxableValue: number; cgst: number; sgst: number;
+    igst: number; cess: number; total: number;
+  };
+  net: { taxableValue: number; cgst: number; sgst: number; igst: number; cess: number; totalTax: number };
+  rateWise: { rate: number; b2bTaxable?: number; b2cTaxable?: number; taxableValue: number; igst: number; cgst: number; sgst: number; cess: number }[];
+  gstr3b: {
+    outwardTaxable: { taxableValue: number; igst: number; cgst: number; sgst: number; cess: number };
+    nilExempt: { taxableValue: number };
+    nonGst: { taxableValue: number };
+    ecoSupplies: { taxableValue: number };
+  };
+  composition?: { turnover: number; cgst: number; sgst: number; total: number };
+}
+
+export interface Gstr1Report {
+  gstin: string;
+  period: { from?: string; to?: string };
+  legacyBillsExcluded: number;
+  b2b: any[] | null;
+  b2cl: any[] | null;
+  b2cs: any[] | null;
+  cdnr: any[] | null;
+  cdnur: any[] | null;
+  hsnB2b: any[] | null;
+  hsnB2c: any[] | null;
+  docs: any[] | null;
+  eco: any[] | null;
+}
+
+export interface GstSalesRegisterResult {
+  rows: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  legacyBillsExcluded: number;
+  totals: {
+    taxableValue: number; cgst: number; sgst: number; igst: number;
+    cess: number; roundOff: number; total: number; totalTax: number;
+  };
 }
 
 export interface BillQueueItem {

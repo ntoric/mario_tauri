@@ -4,6 +4,7 @@ import { getBillPrintWsUrl } from './realtime';
 import { getDeviceId } from '../utils/deviceId';
 import { isQuietHours } from '../utils/quietHours';
 import { buildInvoiceFromBillData, parseBillData } from '../utils/billPrint';
+import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import notify from '../utils/toast';
 import type { Order, Store } from '../types';
 
@@ -189,7 +190,15 @@ class RemoteBillPrinterService {
         return;
       }
 
-      let payload = buildInvoiceFromBillData(billData, undefined, store);
+      // New queue payloads embed the issued GST bill verbatim — prefer it.
+      let payload: any = null;
+      const embeddedBill = (billData as any).bill;
+      if (embeddedBill && embeddedBill.invoiceNo) {
+        payload = buildInvoicePrintJob(embeddedBill, store);
+      }
+      if (!payload) {
+        payload = buildInvoiceFromBillData(billData, undefined, store);
+      }
       if (!payload) {
         // Legacy payload without embedded items — resolve the order.
         const order = await this.findOrder(store.id, billData.orderId || item.orderId);

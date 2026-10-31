@@ -9,7 +9,10 @@ import OrderTimer from './OrderTimer';
 import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
 import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import { printerService } from '../services/printer';
-import { isTaxEnabled } from '../utils/tax';
+import { buildInvoicePrintJob } from '../utils/gstInvoice';
+import GstBillSummary from './GstBillSummary';
+import type { Bill } from '../types';
+import { isTaxEnabled, computeCartTotals } from '../utils/tax';
 import { orderItemUnitPrice } from '../utils/order';
 import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
 import notify from '../utils/toast';
@@ -41,6 +44,7 @@ const OrderPage: React.FC = () => {
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [isPrinting, setIsPrinting] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionType, setActionType] = useState<string>('');
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -182,17 +186,13 @@ const OrderPage: React.FC = () => {
     setOrderItems(orderItems.filter(oi => oi.itemId !== itemId));
   };
 
-  const calculateTotal = () => {
-    return orderItems.reduce((sum, oi) => sum + (orderItemUnitPrice(oi) * oi.quantity), 0);
-  };
+  const cartTotals = () => computeCartTotals(currentStore, orderItems.map(oi => ({
+    unitPrice: orderItemUnitPrice(oi), quantity: oi.quantity,
+    taxPercent: oi.item.taxPercent, taxCategory: (oi.item as any).taxCategory,
+  })), 0);
+  const calculateTotal = () => cartTotals().gross;
 
-  const calculateTax = () => {
-    if (!taxEnabled) return 0;
-    return orderItems.reduce((sum, oi) => {
-      const taxPercent = oi.item.taxPercent || 0;
-      return sum + (orderItemUnitPrice(oi) * oi.quantity * taxPercent / 100);
-    }, 0);
-  };
+  const calculateTax = () => cartTotals().totalTax;
 
   const buildPrintItems = () => {
     return orderItems.map(oi => {
@@ -247,58 +247,9 @@ const OrderPage: React.FC = () => {
     }
   };
 
-  const printInvoiceBill = async (invoiceNo: string, total: number) => {
-    const printItems = buildPrintItems();
-    const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-    const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
-    const cgst = actualTax / 2;
-    const sgst = actualTax / 2;
-
-    await printerService.printInvoice({
-      type: 'invoice',
-      printer: {
-        type: 'usb',
-        name: currentStore?.printerName || 'Thermal Printer',
-        vendor_id: currentStore?.printerVendorId || '0x0fe6',
-        product_id: currentStore?.printerProductId || '0x811e',
-        paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-      },
-      invoice: {
-        store: {
-          name: currentStore?.name || 'Cafe',
-          branch: currentStore?.branch || '',
-          location: currentStore?.location || '',
-          ...(currentStore?.gstin ? { gst_number: currentStore.gstin } : {}),
-          ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-          ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-          address: currentStore?.location || '',
-        },
-        customer: {
-          name: 'Walk-in Customer',
-          mobile: '',
-        },
-        invoice_no: invoiceNo,
-        bill_no: invoiceNo,
-        date: new Date().toLocaleString('en-IN'),
-        items: printItems,
-        summary: {
-          sub_total: taxable,
-          discount: 0,
-          taxable: taxable,
-          cgst: cgst,
-          sgst: sgst,
-          grand_total: total,
-        },
-        payment: {
-          cash: paymentMethod === 'cash' ? total : 0,
-          card: paymentMethod === 'card' ? total : 0,
-          upi: paymentMethod === 'upi' ? total : 0,
-          balance: 0,
-        },
-        payment_mode: paymentMethod,
-        footer: ['Thank You Visit Again'],
-      },
-    });
+  const printIssuedBill = async (bill: Bill) => {
+    if (!currentStore) throw new Error('Store not selected');
+    await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore));
   };
 
   const handleSave = async () => {
@@ -449,14 +400,13 @@ const OrderPage: React.FC = () => {
           orderId: existingOrder.id,
           tableNumber: table.number,
           tableName: table.name,
-          invoiceNo: `INV-${Date.now()}`,
           subtotal: totalAmount,
           taxTotal: taxAmount,
           discount: 0,
           total: totalAmount + taxAmount,
           paymentMethod,
           customerName: 'Walk-in Customer',
-        }, { skipRefresh: true }); // Skip refresh since we navigate away
+        } as any, { skipRefresh: true }); // Skip refresh since we navigate away
       } else {
         await saveEBill({
           tableId: table.id,
@@ -467,7 +417,7 @@ const OrderPage: React.FC = () => {
           taxAmount,
           discountAmount: 0,
           paymentMethod,
-        }, { skipRefresh: true }); // Skip refresh since we navigate away
+        } as any, { skipRefresh: true }); // Skip refresh since we navigate away
       }
       notify.success('E-bill saved');
       navigate('/');
@@ -493,7 +443,6 @@ const OrderPage: React.FC = () => {
     const totalAmount = calculateTotal();
     const taxAmount = calculateTax();
     const total = totalAmount + taxAmount;
-    const invoiceNo = `INV-${Date.now()}`;
 
     // Pre-check: no printer configured
     if (!currentStore?.printerName) {
@@ -535,9 +484,20 @@ const OrderPage: React.FC = () => {
 
       if (!orderId) throw new Error('Failed to create or update order');
 
-      // Try to print invoice before completing the order
+      // Issue the GST bill, then print it
+      const bill = await savePrint(orderId, {
+        orderId,
+        tableNumber: table.number,
+        tableName: table.name,
+        subtotal: totalAmount,
+        taxTotal: taxAmount,
+        discount: 0,
+        total,
+        paymentMethod,
+        customerName: 'Walk-in Customer',
+      } as any, { skipRefresh: true });
       try {
-        await printInvoiceBill(invoiceNo, total);
+        await printIssuedBill(bill!);
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         // Printer not working - ask to save order only (order stays on table, not completed)
@@ -547,26 +507,13 @@ const OrderPage: React.FC = () => {
           message: 'Failed to print the bill. Save order only?',
           onConfirm: async () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
+            notify.info(`Bill ${bill?.invoiceNo} saved — reprint from History`);
             navigate('/');
             setOrderItems([]);
           },
         });
         return;
       }
-
-      // Print succeeded - create bill and complete via backend
-      await savePrint(orderId, {
-        orderId,
-        tableNumber: table.number,
-        tableName: table.name,
-        invoiceNo,
-        subtotal: totalAmount,
-        taxTotal: taxAmount,
-        discount: 0,
-        total,
-        paymentMethod,
-        customerName: 'Walk-in Customer',
-      }, { skipRefresh: true });
 
       notify.success('Order billed and printed');
       navigate('/');
@@ -862,7 +809,8 @@ const OrderPage: React.FC = () => {
                   <span>{formatCurrency(calculateTax())}</span>
                 </div>
               )}
-              <div className="cart-summary-row total">
+                <GstBillSummary storeId={currentStoreId!} orderId={existingOrder?.id} items={existingOrder ? undefined : orderItems.map(oi => ({ itemId: oi.itemId, quantity: oi.quantity, unitPrice: orderItemUnitPrice(oi) }))} />
+                <div className="cart-summary-row total">
                 <span>Total</span>
                 <span className="cart-amount">{formatCurrency(total)}</span>
               </div>

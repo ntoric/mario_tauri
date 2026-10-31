@@ -76,7 +76,10 @@ class ApiService {
         console.error('Non-JSON response:', text);
         error = { error: `Server returned non-JSON response (${response.status}): ${text.substring(0, 100)}` };
       }
-      throw new Error(error.error || 'Request failed');
+      const err = new Error(error.error || 'Request failed');
+      // Carry the HTTP status so callers can special-case e.g. 409 conflicts.
+      (err as Error & { status?: number }).status = response.status;
+      throw err;
     }
 
     const text = await response.text();
@@ -473,6 +476,71 @@ class ApiService {
   async getNextInvoiceNo(storeId: string) {
     const result = await this.fetch(`/bills/next-invoice-no?storeId=${storeId}`);
     return result.invoiceNo;
+  }
+
+  // GST
+  async getGstMeta() {
+    return this.fetch('/gst/meta');
+  }
+
+  async previewBill(req: {
+    storeId: string; orderId?: string;
+    items?: { itemId: string; quantity: number; unitPrice?: number }[];
+    discount?: number; buyerGstin?: string; buyerStateCode?: string; orderSource?: string;
+  }) {
+    return this.fetch('/bills/preview', { method: 'POST', body: JSON.stringify(req) });
+  }
+
+  async getBill(id: string) {
+    return this.fetch(`/bills/${id}`);
+  }
+
+  async createCreditNote(billId: string, req: { reason: string; lines?: { billLineId: number; quantity: number }[] }) {
+    return this.fetch(`/bills/${billId}/credit-notes`, { method: 'POST', body: JSON.stringify(req) });
+  }
+
+  async getCreditNotes(storeId: string, opts?: { startDate?: string; endDate?: string; billId?: string }) {
+    let url = `/credit-notes?storeId=${storeId}`;
+    if (opts?.startDate) url += `&startDate=${opts.startDate}`;
+    if (opts?.endDate) url += `&endDate=${opts.endDate}`;
+    if (opts?.billId) url += `&billId=${opts.billId}`;
+    return this.fetch(url);
+  }
+
+  async getCreditNote(id: string) {
+    return this.fetch(`/credit-notes/${id}`);
+  }
+
+  async getGstSummary(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/reports/gst/summary?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getGstr1(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/reports/gst/gstr1?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getGstr1PortalJson(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/reports/gst/gstr1/portal-json?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  async getGstSalesRegister(storeId: string, params: { startDate?: string; endDate?: string; page?: number; pageSize?: number; all?: boolean; search?: string }) {
+    let url = `/reports/gst/sales-register?storeId=${storeId}`;
+    if (params.startDate) url += `&startDate=${params.startDate}`;
+    if (params.endDate) url += `&endDate=${params.endDate}`;
+    if (params.page) url += `&page=${params.page}`;
+    if (params.pageSize) url += `&pageSize=${params.pageSize}`;
+    if (params.all) url += `&all=true`;
+    if (params.search) url += `&search=${encodeURIComponent(params.search)}`;
+    return this.fetch(url);
   }
 
   // Support Tickets — store users raise tickets for their store
