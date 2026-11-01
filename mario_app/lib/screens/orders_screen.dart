@@ -825,18 +825,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       style: TextStyle(color: AppColors.gray500),
                     ),
                   )
-                : GridView.builder(
-                    shrinkWrap: true,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 1.1,
+                : ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.6,
                     ),
-                    itemCount: availableTables.length,
-                    itemBuilder: (_, i) =>
-                        _moveTableTile(availableTables[i], order, data),
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 1.1,
+                      ),
+                      itemCount: availableTables.length,
+                      itemBuilder: (_, i) =>
+                          _moveTableTile(availableTables[i], order, data),
+                    ),
                   ),
           ),
           actions: [

@@ -64,55 +64,57 @@ Future<bool> showMoveTableDialog(
               ),
             ),
             const SizedBox(height: 18),
-            GridView.builder(
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-              itemCount: availableTables.length,
-              itemBuilder: (itemBuilderContext, index) {
-                final table = availableTables[index];
-                return InkWell(
-                  onTap: () => Navigator.pop(dialogContext, table),
-                  borderRadius: ClayStyles.radius(18),
-                  child: Container(
-                    decoration: ClayStyles.surface(
-                      radiusValue: 18,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.gray100,
-                          AppColors.clayBlue.withOpacity(0.65),
+            Flexible(
+              child: GridView.builder(
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: availableTables.length,
+                itemBuilder: (itemBuilderContext, index) {
+                  final table = availableTables[index];
+                  return InkWell(
+                    onTap: () => Navigator.pop(dialogContext, table),
+                    borderRadius: ClayStyles.radius(18),
+                    child: Container(
+                      decoration: ClayStyles.surface(
+                        radiusValue: 18,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.gray100,
+                            AppColors.clayBlue.withOpacity(0.65),
+                          ],
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            table.label,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          Text(
+                            '${table.seats} seats',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.gray500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          table.label,
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.dark,
-                          ),
-                        ),
-                        Text(
-                          '${table.seats} seats',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.gray500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 10),
             Align(
@@ -240,56 +242,58 @@ Future<bool> showMergeBillDialog(
               ),
             ),
             const SizedBox(height: 18),
-            GridView.builder(
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-              itemCount: occupiedTables.length,
-              itemBuilder: (itemBuilderContext, index) {
-                final table = occupiedTables[index];
-                final otherOrder = data.getOrderForTable(table.id);
-                return InkWell(
-                  onTap: () => Navigator.pop(dialogContext, table),
-                  borderRadius: ClayStyles.radius(18),
-                  child: Container(
-                    decoration: ClayStyles.surface(
-                      radiusValue: 18,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.gray100,
-                          AppColors.clayBlue.withOpacity(0.65),
+            Flexible(
+              child: GridView.builder(
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: occupiedTables.length,
+                itemBuilder: (itemBuilderContext, index) {
+                  final table = occupiedTables[index];
+                  final otherOrder = data.getOrderForTable(table.id);
+                  return InkWell(
+                    onTap: () => Navigator.pop(dialogContext, table),
+                    borderRadius: ClayStyles.radius(18),
+                    child: Container(
+                      decoration: ClayStyles.surface(
+                        radiusValue: 18,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.gray100,
+                            AppColors.clayBlue.withOpacity(0.65),
+                          ],
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            table.label,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          Text(
+                            '₹${(otherOrder?.totalAmount ?? 0).toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.gray500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          table.label,
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.dark,
-                          ),
-                        ),
-                        Text(
-                          '₹${(otherOrder?.totalAmount ?? 0).toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.gray500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 10),
             Align(

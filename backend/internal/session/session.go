@@ -85,7 +85,12 @@ func (s *Store) Get(ctx context.Context, token string) (*Data, error) {
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return nil, err
 	}
-	_ = s.client.Expire(ctx, sessionKey(token), s.ttl).Err()
+	// Keep the user's session index alive as long as the session itself, so
+	// DeleteUserSessions can still find and revoke long-lived sessions.
+	pipe := s.client.Pipeline()
+	pipe.Expire(ctx, sessionKey(token), s.ttl)
+	pipe.Expire(ctx, indexKey(d.UserID), s.ttl)
+	_, _ = pipe.Exec(ctx)
 	return &d, nil
 }
 
