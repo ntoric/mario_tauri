@@ -180,6 +180,55 @@ jobs:
           path: mario_business/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
+  flutter-app:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.x
+
+      - name: Configure SDK paths
+        shell: bash
+        working-directory: mario_app/android
+        run: |
+          # android/local.properties is committed with developer-machine
+          # paths; rewrite it for the CI runner's SDK locations.
+          rm -f local.properties
+          {
+            echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+            echo "flutter.sdk=$FLUTTER_ROOT"
+          } > local.properties
+
+      - name: Build release APK
+        working-directory: mario_app
+        run: |
+          flutter pub get
+          flutter build apk --release \
+            --dart-define=API_URL="$API_URL" \
+            --dart-define=API_BASE_URL="${API_URL%/api}"
+        env:
+          API_URL: ${{ vars.VITE_API_URL || 'https://mario-api.ntoric.com/api' }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mario-app-android
+          path: mario_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
   release:
     needs: build
     runs-on: ubuntu-latest
