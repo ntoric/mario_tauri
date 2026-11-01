@@ -299,6 +299,9 @@ func TestTaxDisabled(t *testing.T) {
 	if res.ChargesTax || res.TotalTax != 0 || res.Total != 100 {
 		t.Fatalf("disabled tax: %+v", res)
 	}
+	if res.DocumentType != "bill" {
+		t.Fatalf("disabled tax should produce a plain bill, got %s", res.DocumentType)
+	}
 }
 
 func TestNonTaxableCategories(t *testing.T) {

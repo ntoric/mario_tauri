@@ -25,7 +25,7 @@ class _CategoriesItemsScreenState extends State<CategoriesItemsScreen>
 
   // Tax % and HSN fields are hidden when the store has tax switched off.
   bool get _taxOn =>
-      context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+      context.read<AuthProvider>().currentStore?.taxEnabled ?? false;
 
   @override
   void initState() {

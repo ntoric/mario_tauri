@@ -73,7 +73,7 @@ class _BillScreenState extends State<BillScreen> {
 
   // GST fields are hidden when the store has tax switched off.
   bool get _taxOn =>
-      context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+      context.read<AuthProvider>().currentStore?.taxEnabled ?? false;
 
   Future<void> _refreshPreview() async {
     final auth = context.read<AuthProvider>();

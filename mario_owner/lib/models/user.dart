@@ -83,7 +83,7 @@ class Store {
     this.logoUrl,
     required this.isActive,
     this.remoteBillingEnabled = false,
-    this.taxEnabled = true,
+    this.taxEnabled = false,
   });
 
   factory Store.fromJson(Map<String, dynamic> json) {
@@ -98,7 +98,7 @@ class Store {
       logoUrl: json['logoUrl'] ?? json['logo_url'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
       remoteBillingEnabled: json['remoteBillingEnabled'] ?? json['remote_billing_enabled'] ?? false,
-      taxEnabled: (json['taxEnabled'] ?? json['tax_enabled']) != false,
+      taxEnabled: (json['taxEnabled'] ?? json['tax_enabled']) == true,
     );
   }
 

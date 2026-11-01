@@ -855,7 +855,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                 const SizedBox(height: 6),
                 _summaryLine('Discount', -order.discountAmount),
               ],
-              if (context.read<AuthProvider>().currentStore?.taxEnabled ?? true) ...[
+              if (context.read<AuthProvider>().currentStore?.taxEnabled ?? false) ...[
                 const SizedBox(height: 6),
                 _summaryLine('Tax', order.taxAmount),
               ],

@@ -230,7 +230,7 @@ class _GstReportScreenState extends State<GstReportScreen>
 
   @override
   Widget build(BuildContext context) {
-    final taxOn = context.watch<AuthProvider>().currentStore?.taxEnabled ?? true;
+    final taxOn = context.watch<AuthProvider>().currentStore?.taxEnabled ?? false;
     if (!taxOn) {
       return Scaffold(
         backgroundColor: AppColors.background,

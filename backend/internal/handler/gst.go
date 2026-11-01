@@ -482,7 +482,7 @@ func validateGSTStoreFields(raw map[string]interface{}, existing *models.Store) 
 	// Changing registration to a tax-paying type requires a valid GSTIN on
 	// the resulting store. Legacy stores already in that state and not being
 	// touched are left alone, and so are stores with tax switched off.
-	taxEnabled := existing == nil || existing.TaxEnabled
+	taxEnabled := existing != nil && existing.TaxEnabled
 	if v, ok := raw["taxEnabled"].(bool); ok {
 		taxEnabled = v
 	}

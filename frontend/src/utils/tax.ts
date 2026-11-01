@@ -1,12 +1,11 @@
 import type { Store } from '../types';
 
 /**
- * Returns true when tax is enabled for the given store.
- * Defaults to enabled (true) when the flag is undefined for backward compatibility
- * with stores created before the tax toggle was introduced.
+ * Returns true only when tax is explicitly enabled for the given store.
+ * Tax is opt-in: an unset flag means tax is disabled.
  */
 export const isTaxEnabled = (store?: Store | null): boolean => {
-  return store?.taxEnabled !== false;
+  return store?.taxEnabled === true;
 };
 
 /**

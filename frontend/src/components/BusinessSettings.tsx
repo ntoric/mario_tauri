@@ -90,7 +90,7 @@ const BusinessSettings: React.FC = () => {
   });
 
   const [taxSettings, setTaxSettings] = useState({
-    taxEnabled: true,
+    taxEnabled: false,
     defaultTaxPercent: 0,
   });
   const [gstSettings, setGstSettings] = useState({
@@ -136,7 +136,7 @@ const BusinessSettings: React.FC = () => {
         themeColor: currentStore.themeColor || '',
       });
       setTaxSettings({
-        taxEnabled: currentStore.taxEnabled !== false,
+        taxEnabled: currentStore.taxEnabled === true,
         defaultTaxPercent: currentStore.defaultTaxPercent ?? 0,
       });
       setGstSettings({

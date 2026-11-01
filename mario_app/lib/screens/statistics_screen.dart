@@ -1265,7 +1265,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // when the bill carries them; legacy bills fall back to the totals row.
   void _showBillDetails(Bill bill) {
     final taxOn =
-        context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+        context.read<AuthProvider>().currentStore?.taxEnabled ?? false;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(

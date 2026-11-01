@@ -328,7 +328,10 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50)`,
 		// Tax configuration — global enable/disable per store and a default tax percent
-		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS tax_enabled BOOLEAN DEFAULT true`,
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS tax_enabled BOOLEAN DEFAULT false`,
+		// Existing deployments created the column with DEFAULT true — bring
+		// their default in line with tax-disabled-by-default.
+		`ALTER TABLE stores ALTER COLUMN tax_enabled SET DEFAULT false`,
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS default_tax_percent DECIMAL(5, 2) DEFAULT 0`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,

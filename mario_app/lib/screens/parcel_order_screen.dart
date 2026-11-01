@@ -103,7 +103,7 @@ class _ParcelOrderScreenState extends State<ParcelOrderScreen> {
 
   // GST fields and notes are hidden when the store has tax switched off.
   bool get _taxOn =>
-      context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+      context.read<AuthProvider>().currentStore?.taxEnabled ?? false;
 
   // GST only applies to counter/POS sales from a regular, tax-enabled
   // store. Platform orders (Sec 9(5)) and composition/unregistered dealers

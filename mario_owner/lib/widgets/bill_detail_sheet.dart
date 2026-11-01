@@ -41,7 +41,7 @@ class BillDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxOn = context.read<AuthProvider>().currentStore?.taxEnabled ?? true;
+    final taxOn = context.read<AuthProvider>().currentStore?.taxEnabled ?? false;
     final hasGst = taxOn && bill.hasGstDetails;
     return ListView(
       controller: scrollController,

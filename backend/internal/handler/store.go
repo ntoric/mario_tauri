@@ -101,13 +101,10 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the body once into a buffer so we can decode it twice: once into
-	// the typed Store struct and once into a raw map to detect whether
-	// taxEnabled was explicitly provided. Go's bool zero value is false, so
-	// we cannot distinguish "absent" from "explicitly false" after a single
-	// unmarshal. Default to enabled (true) only when the client did not send
-	// the field, preserving backward-compatible behaviour for older clients
-	// that predate the tax toggle.
+	// Read the body once into a buffer so it can be decoded twice: once into
+	// the typed Store struct and once into a raw map for GST field
+	// validation. Tax is opt-in — taxEnabled defaults to false (Go's bool
+	// zero value) when the client does not send it.
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid request payload")
@@ -119,15 +116,6 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
-	}
-
-	var raw map[string]interface{}
-	if json.Unmarshal(bodyBytes, &raw) == nil {
-		if _, exists := raw["taxEnabled"]; !exists {
-			req.TaxEnabled = true
-		}
-	} else {
-		req.TaxEnabled = true
 	}
 
 	// GST field validation/normalization for new stores.

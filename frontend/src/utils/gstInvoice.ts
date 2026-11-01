@@ -29,10 +29,10 @@ const paymentBlock = (method: string | undefined, total: number) => ({
 const fmtDate = (iso?: string) =>
   iso ? new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : new Date().toLocaleString('en-IN');
 
-const docTitle = (documentType?: string) => {
+const docTitle = (documentType: string | undefined, taxEnabled: boolean) => {
   switch (documentType) {
-    case 'tax_invoice': return 'TAX INVOICE';
-    case 'bill_of_supply': return 'BILL OF SUPPLY';
+    case 'tax_invoice': return taxEnabled ? 'TAX INVOICE' : 'INVOICE';
+    case 'bill_of_supply': return taxEnabled ? 'BILL OF SUPPLY' : 'INVOICE';
     case 'bill': return 'INVOICE';
     default: return 'RETAIL INVOICE';
   }
@@ -91,8 +91,8 @@ export const buildInvoicePrintJob = (bill: Bill, store: Store) => {
       invoice_no: bill.invoiceNo || '',
       bill_no: bill.invoiceNo || '',
       date: fmtDate(bill.generatedAt),
-      document_title: docTitle(bill.documentType),
-      ...(bill.documentType === 'bill_of_supply'
+      document_title: docTitle(bill.documentType, taxEnabled),
+      ...(taxEnabled && bill.documentType === 'bill_of_supply'
         ? { declaration: 'Composition taxable person, not eligible to collect tax on supplies' }
         : {}),
       ...(posLabel ? { place_of_supply: posLabel } : {}),

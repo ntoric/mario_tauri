@@ -584,9 +584,9 @@ func Compute(in Input) (Result, error) {
 	}
 
 	switch {
-	case regType == RegistrationComposition:
+	case in.Store.TaxEnabled && regType == RegistrationComposition:
 		res.DocumentType = "bill_of_supply"
-	case regType == RegistrationRegular && in.Store.GSTIN != "":
+	case in.Store.TaxEnabled && regType == RegistrationRegular && in.Store.GSTIN != "":
 		res.DocumentType = "tax_invoice"
 	default:
 		res.DocumentType = "bill"

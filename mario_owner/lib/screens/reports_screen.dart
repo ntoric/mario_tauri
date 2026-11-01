@@ -89,7 +89,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (context.watch<AuthProvider>().currentStore?.taxEnabled ?? true) ...[
+                  if (context.watch<AuthProvider>().currentStore?.taxEnabled ?? false) ...[
                     FadeSlideIn(child: _buildGstCard(context)),
                     const SizedBox(height: 24),
                   ],

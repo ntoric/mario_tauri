@@ -89,7 +89,7 @@ class Store {
     this.logoUrl,
     required this.isActive,
     this.remoteBillingEnabled = false,
-    this.taxEnabled = true,
+    this.taxEnabled = false,
     this.defaultTaxPercent = 0,
     this.gstRegistrationType,
     this.stateCode,
@@ -118,7 +118,7 @@ class Store {
       remoteBillingEnabled: json['remoteBillingEnabled'] ??
           json['remote_billing_enabled'] ??
           false,
-      taxEnabled: json['taxEnabled'] ?? json['tax_enabled'] ?? true,
+      taxEnabled: json['taxEnabled'] ?? json['tax_enabled'] ?? false,
       defaultTaxPercent: _parseDouble(
           json['defaultTaxPercent'] ?? json['default_tax_percent']),
       gstRegistrationType:
