@@ -93,7 +93,7 @@ const BillModal: React.FC = () => {
       });
 
       try {
-        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!));
+        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!, order.items)!);
       } catch (printError: any) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);

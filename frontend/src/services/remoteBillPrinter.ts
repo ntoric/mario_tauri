@@ -196,7 +196,10 @@ class RemoteBillPrinterService {
       if (embeddedBill && embeddedBill.invoiceNo) {
         payload = buildInvoicePrintJob(embeddedBill, store);
       }
-      if (!payload) {
+      // An embedded bill without printable items (e.g. echoed by an older
+      // backend) must not produce an empty receipt — fall back to the
+      // self-contained queue items.
+      if (!payload?.invoice?.items?.length) {
         payload = buildInvoiceFromBillData(billData, undefined, store);
       }
       if (!payload) {

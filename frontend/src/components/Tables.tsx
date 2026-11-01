@@ -415,7 +415,7 @@ const Tables: React.FC = () => {
           subtotal, taxTotal: tax, discount: 0, total, paymentMethod,
           customerName: 'Walk-in Customer',
         });
-        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!));
+        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!, activeOrder.items)!);
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);
@@ -471,7 +471,7 @@ const Tables: React.FC = () => {
         subtotal, taxTotal: tax, discount: 0, total,
         customerName: 'Walk-in Customer',
       });
-      await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore));
+      await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore, activeOrder.items)!);
       notify.success('Bill printed');
     } catch (printError) {
       console.error('Failed to print bill:', printError);

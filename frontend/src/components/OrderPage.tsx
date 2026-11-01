@@ -247,9 +247,11 @@ const OrderPage: React.FC = () => {
     }
   };
 
-  const printIssuedBill = async (bill: Bill) => {
+  const printIssuedBill = async (bill: Bill | undefined) => {
     if (!currentStore) throw new Error('Store not selected');
-    await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore));
+    const job = buildInvoicePrintJob(bill, currentStore, orderItems);
+    if (!job) throw new Error('Bill was not returned by the server');
+    await printerService.printInvoice(job);
   };
 
   const handleSave = async () => {

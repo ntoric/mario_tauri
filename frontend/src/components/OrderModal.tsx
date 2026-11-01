@@ -300,7 +300,7 @@ const OrderModal: React.FC = () => {
 
 
       try {
-        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore));
+        await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore, orderItems)!);
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);

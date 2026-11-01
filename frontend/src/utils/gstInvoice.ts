@@ -1,4 +1,4 @@
-import type { Bill, CreditNote, Store } from '../types';
+import type { Bill, CreditNote, OrderItem, Store } from '../types';
 import { isTaxEnabled } from './tax';
 
 const printerBlock = (store: Store) => ({
@@ -42,11 +42,19 @@ const docTitle = (documentType: string | undefined, taxEnabled: boolean) => {
  * Builds the printerService.printInvoice payload purely from an issued Bill.
  * The bill is authoritative: its invoice number, GST lines and totals are
  * printed verbatim so the receipt always matches the recorded document.
+ * Returns null when no bill was returned (e.g. an older backend that does not
+ * echo the issued document).
+ *
+ * orderItems is a last-resort item source for non-GST bills whose response
+ * carries no items — older backends echo the create request back with
+ * items/lines unset, which would otherwise print an itemless receipt.
  */
-export const buildInvoicePrintJob = (bill: Bill, store: Store) => {
+export const buildInvoicePrintJob = (bill: Bill | undefined, store: Store, orderItems?: OrderItem[]) => {
+  if (!bill) return null;
   const isGstBill = !!bill.fy && (bill.lines?.length ?? 0) > 0;
   const taxEnabled = isTaxEnabled(store);
 
+  const sourceItems = bill.items?.length ? bill.items : (orderItems || []);
   const items = isGstBill
     ? bill.lines!.map(l => ({
         name: l.name,
@@ -57,7 +65,7 @@ export const buildInvoicePrintJob = (bill: Bill, store: Store) => {
         tax_percent: l.taxRate,
         amount: l.taxableValue,
       }))
-    : (bill.items || []).map((oi: any) => {
+    : sourceItems.map((oi: any) => {
         const rate = Number(oi.unitPrice ?? oi.item?.price ?? 0);
         return {
           name: oi.item?.name || '',

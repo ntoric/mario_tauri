@@ -67,7 +67,7 @@ const History: React.FC = () => {
         associatedBill = await api.getBill(associatedBill.id);
       }
       if (associatedBill?.fy && associatedBill.lines?.length) {
-        await printerService.printInvoice(buildInvoicePrintJob(associatedBill, currentStore!));
+        await printerService.printInvoice(buildInvoicePrintJob(associatedBill, currentStore!, order.items)!);
         notify.success('Bill reprinted');
         return;
       }

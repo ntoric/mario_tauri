@@ -268,7 +268,7 @@ const ParcelOrderPage: React.FC = () => {
       // Print invoice — the issued bill is authoritative
       try {
         if (createdOrder?.bill) {
-          await printerService.printInvoice(buildInvoicePrintJob(createdOrder.bill, currentStore!));
+          await printerService.printInvoice(buildInvoicePrintJob(createdOrder.bill, currentStore!, createdOrder.items)!);
         }
       } catch (error) {
         console.error('Failed to print invoice:', error);
