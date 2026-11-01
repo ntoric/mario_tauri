@@ -16,7 +16,7 @@ import OrderTimer from './OrderTimer';
 import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
 import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import notify from '../utils/toast';
-import type { Table } from '../types';
+import type { Bill, Table } from '../types';
 
 // Tables without an explicit section (NULL in the DB) belong to the store's
 // default section. Falls back to this label when no catalog row is flagged.
@@ -404,27 +404,46 @@ const Tables: React.FC = () => {
       return;
     }
 
+    const issueBill = () => createBill({
+      orderId: activeOrder.id,
+      tableNumber: targetTable.number,
+      tableName: targetTable.name,
+      subtotal, taxTotal: tax, discount: 0, total, paymentMethod,
+      customerName: 'Walk-in Customer',
+    });
+
     setIsPrinting(true);
 
+    let bill: Bill | undefined;
     try {
       try {
-        const bill = await createBill({
-          orderId: activeOrder.id,
-          tableNumber: targetTable.number,
-          tableName: targetTable.name,
-          subtotal, taxTotal: tax, discount: 0, total, paymentMethod,
-          customerName: 'Walk-in Customer',
-        });
+        bill = await issueBill();
         await printerService.printInvoice(buildInvoicePrintJob(bill, currentStore!, activeOrder.items)!);
       } catch (printError) {
         console.error('Failed to print invoice:', printError);
         setIsPrinting(false);
+        notify.error('Printer error — please check connection and settings');
         setPrinterConfirm({
           show: true,
           title: 'Printer Not Working',
-          message: 'Failed to print the bill. Keep order on table?',
-          onConfirm: () => {
+          message: 'Failed to print the bill. Save E-bill and complete the order?',
+          onConfirm: async () => {
             setPrinterConfirm(p => ({ ...p, show: false }));
+            setIsPrinting(true);
+            try {
+              // Ensure an e-bill exists even when issuing it failed above
+              const savedBill = bill ?? await issueBill().catch(() => undefined);
+              await completeOrder(activeOrder.id, paymentMethod);
+              setBillDialogTable(null);
+              notify.info(savedBill?.invoiceNo
+                ? `E-bill ${savedBill.invoiceNo} saved — reprint from History`
+                : 'Order completed — bill can be printed from History');
+            } catch (error) {
+              console.error('Failed to complete order:', error);
+              setErrorDialog({ show: true, message: (error as Error).message || 'Failed to complete order. Please try again.' });
+            } finally {
+              setIsPrinting(false);
+            }
           },
         });
         return;
