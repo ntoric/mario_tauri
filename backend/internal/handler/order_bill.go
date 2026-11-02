@@ -95,6 +95,11 @@ func parseLimitQuery(r *http.Request, max int) int {
 // This prevents fetching all historical orders which can be slow for stores with many orders.
 const defaultOrderLimit = 70
 
+// defaultBillLimit is the default number of bills to fetch when no limit is
+// specified. Each bill row is expensive (order items + bill_lines aggregates),
+// so an unbounded default makes every list call slower as history grows.
+const defaultBillLimit = 50
+
 // GetOrders handles GET /api/orders
 func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	claims, ok := middleware.GetUserFromContext(r.Context())
@@ -852,6 +857,12 @@ func (h *Handler) GetBills(w http.ResponseWriter, r *http.Request) {
 		From:  parseTimeQuery(r, "from"),
 		To:    parseEndOfDayQuery(r, "to"),
 		Limit: parseLimitQuery(r, maxListLimit),
+	}
+
+	// Apply default limit only if no limit was specified and client didn't request all bills
+	// Clients can pass limit=0 to fetch all bills (for backward compatibility)
+	if filter.Limit == 0 && r.URL.Query().Get("limit") != "0" {
+		filter.Limit = defaultBillLimit
 	}
 
 	cutoff, err := h.retentionCutoff(r.Context(), claims, targetStoreID)

@@ -50,7 +50,7 @@ const History: React.FC = () => {
   const findBillForOrder = async (orderId: string): Promise<Bill | undefined> => {
     const cached = bills.find(b => b.orderId === orderId);
     if (cached) return cached;
-    await fetchBills(true);
+    await fetchBills(true, 1000);
     return useDataStore.getState().bills.find(b => b.orderId === orderId);
   };
 
@@ -153,7 +153,7 @@ const History: React.FC = () => {
   // Fetch data on mount
   useEffect(() => {
     fetchOrders({ limit: 1000, sort: 'paid' }); // Fetch more orders for history view (all statuses)
-    fetchBills(true); // always fresh: bills may have been issued elsewhere
+    fetchBills(true, 1000); // always fresh: bills may have been issued elsewhere
   }, [fetchOrders, fetchBills]);
 
   // When the "View Bill" modal opens on an order with a GST bill, load the full
@@ -166,7 +166,7 @@ const History: React.FC = () => {
     if (!associated && !refetchedFor.current.has(viewingBill.id)) {
       // Not in the list yet — refresh once; this effect re-runs on `bills`.
       refetchedFor.current.add(viewingBill.id);
-      fetchBills(true);
+      fetchBills(true, 1000);
       return;
     }
     if (!associated?.fy) return;

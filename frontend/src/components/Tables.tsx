@@ -46,7 +46,9 @@ const Tables: React.FC = () => {
 
     let ws: WebSocket | null = null;
     let retryTimer: number | null = null;
+    let retryDelay = 2000;
     let pollTimer: number | null = null;
+    let syncTimer: number | null = null;
     let isClosed = false;
     let isSyncing = false;
 
@@ -87,6 +89,7 @@ const Tables: React.FC = () => {
       ws = new WebSocket(url);
 
       ws.onopen = () => {
+        retryDelay = 2000;
         stopPolling();
       };
 
@@ -94,7 +97,13 @@ const Tables: React.FC = () => {
         try {
           const msg = JSON.parse(event.data);
           if (msg?.type === 'table_status_update') {
-            void syncTablesAndOrders();
+            // Coalesce bursts: every order event broadcasts to all devices in
+            // the store, and each device fires two requests per sync.
+            if (syncTimer !== null) return;
+            syncTimer = window.setTimeout(() => {
+              syncTimer = null;
+              void syncTablesAndOrders();
+            }, 250);
           }
         } catch {
           // Ignore parse errors
@@ -104,7 +113,10 @@ const Tables: React.FC = () => {
       ws.onclose = () => {
         if (isClosed) return;
         startPolling();
-        retryTimer = window.setTimeout(connect, 2000);
+        // Back off exponentially (2s → 30s cap) so a backend without the WS
+        // endpoint isn't hammered with a reconnect every 2 seconds.
+        retryTimer = window.setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
       };
 
       ws.onerror = () => {
@@ -118,6 +130,9 @@ const Tables: React.FC = () => {
       isClosed = true;
       if (retryTimer) {
         window.clearTimeout(retryTimer);
+      }
+      if (syncTimer) {
+        window.clearTimeout(syncTimer);
       }
       stopPolling();
       ws?.close();

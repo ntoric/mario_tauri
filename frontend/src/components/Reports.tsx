@@ -18,7 +18,7 @@ const Reports: React.FC = () => {
 
   useEffect(() => {
     fetchOrders({ limit: 1000 }); // Fetch more orders for reports/analytics (all statuses)
-    fetchBills(true);
+    fetchBills(true, 1000);
   }, [fetchOrders, fetchBills, currentStoreId]);
 
   useReportPageHeader({

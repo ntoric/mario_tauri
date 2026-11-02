@@ -5,9 +5,9 @@ export const API_URL = import.meta.env.VITE_BACKEND_URL ||
   'http://localhost:8088/api';
 
 // Log API URL for debugging
-console.log('API URL configured as:', API_URL);
-console.log('Window location:', window.location.href);
-console.log('Build mode:', import.meta.env.MODE);
+if (import.meta.env.DEV) {
+  console.log('API URL configured as:', API_URL);
+}
 
 class ApiService {
   private token: string | null = null;
@@ -49,16 +49,10 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log(`Fetching: ${url}`);
-    console.log(`Token present: ${!!token}`);
-    console.log(`Token length: ${token?.length || 0}`);
     const response = await fetch(url, {
       ...options,
       headers,
     });
-
-    console.log(`Response URL: ${response.url}`);
-    console.log(`Response status: ${response.status}`);
 
     if (!response.ok) {
       console.error(`[API ERROR] Request failed: ${response.status} ${response.statusText}`);
@@ -83,7 +77,6 @@ class ApiService {
     }
 
     const text = await response.text();
-    console.log(`Response content-type: ${response.headers.get('content-type')}`);
     try {
       return JSON.parse(text);
     } catch (e) {
@@ -370,13 +363,10 @@ class ApiService {
   }
 
   async createOrder(order: any) {
-    console.log('[API] Creating order', order);
-    const result = await this.fetch('/orders', {
+    return this.fetch('/orders', {
       method: 'POST',
       body: JSON.stringify(order),
     });
-    console.log('[API] Order created response', result);
-    return result;
   }
 
   async createParcelOrder(order: any) {
@@ -401,13 +391,10 @@ class ApiService {
   }
 
   async updateOrder(id: string, order: any) {
-    console.log('[API] Updating order', { id, order });
-    const result = await this.fetch(`/orders/${id}`, {
+    return this.fetch(`/orders/${id}`, {
       method: 'PUT',
       body: JSON.stringify(order),
     });
-    console.log('[API] Order updated response', result);
-    return result;
   }
 
   async completeOrder(id: string, paymentMethod?: string) {
@@ -434,8 +421,11 @@ class ApiService {
   }
 
   // Bills
-  async getBills(storeId: string) {
-    return this.fetch(`/bills?storeId=${storeId}`);
+  // limit: absent → server default; 0 → all bills (backward compatible)
+  async getBills(storeId: string, limit?: number) {
+    let url = `/bills?storeId=${storeId}`;
+    if (limit !== undefined) url += `&limit=${limit}`;
+    return this.fetch(url);
   }
 
   async createBill(bill: any) {

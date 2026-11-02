@@ -72,7 +72,7 @@ interface DataState {
   getActiveOrderByTable: (tableId: string) => Order | undefined;
   
   // Bills
-  fetchBills: (bypassCache?: boolean) => Promise<void>;
+  fetchBills: (bypassCache?: boolean, limit?: number) => Promise<void>;
   createBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<Bill>;
   enqueueBill: (bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>) => Promise<void>;
   getNextInvoiceNo: () => Promise<string>;
@@ -99,6 +99,16 @@ interface DataState {
   updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
 }
+
+const BILLS_CACHE_TTL = 3 * 60 * 1000;
+
+// Dedupe by bill id and order: IssueBill can return an already-issued bill
+// (e.g. print-only followed by print-and-complete), which must not produce a
+// second entry in the list.
+const prependBill = (bills: Bill[], bill: Bill): Bill[] => [
+  bill,
+  ...bills.filter(b => b.id !== bill.id && b.orderId !== bill.orderId),
+];
 
 export const useDataStore = create<DataState>((set, get) => ({
   stores: [],
@@ -152,7 +162,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         get().fetchItems(),
         get().fetchTables(),
         get().fetchTableSections(),
-        get().fetchOrders({ limit: 0 }), // Fetch all orders for refresh
+        get().fetchOrders(), // bounded by the backend default limit
         get().fetchBills(),
         get().fetchUsers(),
       ]);
@@ -448,28 +458,22 @@ export const useDataStore = create<DataState>((set, get) => ({
     let currentStoreId = useAuthStore.getState().currentStoreId;
     let currentUser = useAuthStore.getState().user;
 
-    console.log('[DataStore] Auth check:', { currentStoreId, currentUser, hasStoreId: !!currentStoreId, hasUser: !!currentUser });
-
     // If user is null, try to refresh from server
     if (!currentUser) {
-      console.log('[DataStore] User is null, attempting to refresh...');
       const authStore = useAuthStore.getState();
       currentUser = await authStore.refreshUser();
       currentStoreId = authStore.currentStoreId;
-      console.log('[DataStore] After refresh:', { currentUser, currentStoreId });
     }
 
     if (!currentStoreId || !currentUser) {
       console.error('[DataStore] Auth failed:', { currentStoreId, currentUser });
       throw new Error('User or store not authenticated');
     }
-    console.log('[DataStore] Creating order', { order, currentStoreId, userId: currentUser.id });
     const newOrder = await api.createOrder({
       ...order,
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    console.log('[DataStore] Order created successfully', newOrder);
 
     if (!options?.skipRefresh) {
       // Optimistic update: add new order to the beginning of the array
@@ -489,14 +493,16 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       createdBy: currentUser.id,
     });
-    // A bill was issued — drop the cached list so the next fetch sees it.
-    cache.delete(cacheKeys.bills(currentStoreId));
 
     if (!options?.skipRefresh) {
       // Optimistic update: add new order to the beginning of the array
       set(state => ({ orders: [savedOrder, ...state.orders] }));
-      // Also refresh bills since a bill was created
-      await get().fetchBills();
+      // The response embeds the issued bill — prepend it instead of
+      // refetching the entire bill history.
+      if (savedOrder.bill) {
+        set(state => ({ bills: prependBill(state.bills, savedOrder.bill!) }));
+        cache.set(cacheKeys.bills(currentStoreId), get().bills, BILLS_CACHE_TTL);
+      }
     }
     return savedOrder;
   },
@@ -513,7 +519,6 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
-    cache.delete(cacheKeys.bills(currentStoreId));
 
     if (!options?.skipRefresh) {
       // Optimistic update: update the order with completed status
@@ -522,8 +527,12 @@ export const useDataStore = create<DataState>((set, get) => ({
           orders: state.orders.map(o => o.id === orderId ? completedOrder : o)
         }));
       }
-      // Also refresh bills since a bill was created
-      await get().fetchBills();
+      // The response embeds the issued bill — prepend it instead of
+      // refetching the entire bill history.
+      if (completedOrder?.bill) {
+        set(state => ({ bills: prependBill(state.bills, completedOrder.bill!) }));
+        cache.set(cacheKeys.bills(currentStoreId), get().bills, BILLS_CACHE_TTL);
+      }
     }
     return completedOrder?.bill;
   },
@@ -533,9 +542,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    console.log('[DataStore] Updating order', { id, order });
     const updatedOrder = await api.updateOrder(id, order);
-    console.log('[DataStore] Order updated successfully', updatedOrder);
 
     if (!options?.skipRefresh) {
       // Optimistic update: update the order in the array
@@ -574,6 +581,11 @@ export const useDataStore = create<DataState>((set, get) => ({
           orders: state.orders.map(o => o.id === id ? cancelledOrder : o)
         }));
       }
+      // Cancelling an order also cancels its bill server-side.
+      set(state => ({
+        bills: state.bills.map(b => b.orderId === id ? { ...b, status: 'cancelled' } : b)
+      }));
+      cache.set(cacheKeys.bills(currentStoreId), get().bills, BILLS_CACHE_TTL);
     }
   },
 
@@ -582,8 +594,15 @@ export const useDataStore = create<DataState>((set, get) => ({
     if (!currentStoreId) {
       throw new Error('Store not selected');
     }
-    await api.mergeOrders(id, mergeOrderId);
-    await get().fetchOrders({ limit: 0 }); // Fetch all orders to ensure merged order is included
+    const merged = await api.mergeOrders(id, mergeOrderId);
+    if (merged?.id) {
+      // Optimistic update: swap in the merged order and drop the folded one.
+      set(state => ({
+        orders: state.orders.map(o => o.id === id ? merged : o).filter(o => o.id !== mergeOrderId)
+      }));
+    } else {
+      await get().fetchOrders({ status: 'active' });
+    }
   },
 
   getActiveOrderByTable: (tableId) => {
@@ -591,12 +610,12 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Bills
-  fetchBills: async (bypassCache = false) => {
+  fetchBills: async (bypassCache = false, limit?: number) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
       const cacheKey = cacheKeys.bills(currentStoreId);
-      
+
       if (!bypassCache) {
         // Try cache first
         const cached = cache.get<Bill[]>(cacheKey);
@@ -605,9 +624,9 @@ export const useDataStore = create<DataState>((set, get) => ({
           return;
         }
       }
-      
-      const bills = await api.getBills(currentStoreId);
-      cache.set(cacheKey, bills, 3 * 60 * 1000); // 3 minutes TTL for bills
+
+      const bills = await api.getBills(currentStoreId, limit);
+      cache.set(cacheKey, bills, BILLS_CACHE_TTL);
       set({ bills });
     } catch (error) {
       console.error('Failed to fetch bills:', error);
@@ -624,10 +643,12 @@ export const useDataStore = create<DataState>((set, get) => ({
       ...bill,
       storeId: currentStoreId,
       generatedBy: currentUser.id,
-    });
-    cache.delete(cacheKeys.bills(currentStoreId));
-    await get().fetchBills();
-    return created as Bill;
+    }) as Bill;
+    // The response is the issued bill — prepend it instead of refetching the
+    // entire bill history.
+    set(state => ({ bills: prependBill(state.bills, created) }));
+    cache.set(cacheKeys.bills(currentStoreId), get().bills, BILLS_CACHE_TTL);
+    return created;
   },
 
   gstMeta: null,
@@ -654,10 +675,19 @@ export const useDataStore = create<DataState>((set, get) => ({
       storeId: currentStoreId,
       generatedBy: currentUser.id,
     });
-    // Mark order as completed and release the table
-    await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
+    // A real bill is issued server-side before queueing, but the response
+    // doesn't carry it — drop the cached list so the next fetch sees it.
     cache.delete(cacheKeys.bills(currentStoreId));
-    await get().fetchOrders({ limit: 0 }); // Fetch all orders to ensure completed order is included
+
+    // Mark order as completed and release the table
+    const completed = await api.completeOrder(bill.orderId, bill.paymentMethod || 'cash');
+    if (completed?.id) {
+      set(state => ({
+        orders: state.orders.map(o => o.id === bill.orderId ? completed : o)
+      }));
+    } else {
+      await get().fetchOrders({ status: 'active' });
+    }
   },
 
   getNextInvoiceNo: async () => {
