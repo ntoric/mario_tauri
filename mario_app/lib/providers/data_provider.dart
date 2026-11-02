@@ -188,9 +188,10 @@ class DataProvider extends ChangeNotifier {
     DateTime? to,
   }) async {
     try {
-      final data = await _backend.api.getOrders(storeId, from: from, to: to);
-      // Backend returns orders by created_at; history shows most recently
-      // updated first.
+      final data = await _backend.api
+          .getOrders(storeId, from: from, to: to, sort: 'paid');
+      // Backend already orders by payment time; the local sort by updatedAt
+      // keeps the same order against older servers that ignore sort=paid.
       data.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       _historyOrders = data;
       _historyFrom = from;

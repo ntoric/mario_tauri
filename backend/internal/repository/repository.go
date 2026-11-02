@@ -1289,6 +1289,11 @@ type OrderFilter struct {
 	From     *time.Time
 	To       *time.Time
 	Limit    int
+	// Sort selects the result ordering: "paid" orders by payment time — the
+	// bill's generated_at when one exists, else updated_at (stamped at
+	// complete/cancel/merge). Anything else keeps the default created_at
+	// ordering used by the active-orders view.
+	Sort string
 }
 
 func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFilter) ([]models.Order, error) {
@@ -1320,6 +1325,14 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFil
 		LEFT JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN items i ON oi.item_id = i.id
 		LEFT JOIN categories c ON i.category_id = c.id
+	`
+	if f.Sort == "paid" {
+		sqlStr += `
+		LEFT JOIN (
+			SELECT order_id, MAX(generated_at) AS paid_at FROM bills GROUP BY order_id
+		) pb ON pb.order_id = o.id`
+	}
+	sqlStr += `
 		WHERE o.store_id = $1
 	`
 	var args []interface{}
@@ -1342,7 +1355,15 @@ func (r *OrderRepository) GetAll(ctx context.Context, storeID string, f OrderFil
 		idx++
 	}
 
-	sqlStr += " GROUP BY o.id ORDER BY o.created_at DESC"
+	if f.Sort == "paid" {
+		sqlStr += ` GROUP BY o.id, pb.paid_at
+			ORDER BY COALESCE(
+				CASE WHEN o.status = 'cancelled' THEN o.cancelled_at END,
+				pb.paid_at, o.updated_at, o.created_at
+			) DESC, o.created_at DESC`
+	} else {
+		sqlStr += " GROUP BY o.id ORDER BY o.created_at DESC"
+	}
 
 	if f.Limit > 0 {
 		sqlStr += fmt.Sprintf(" LIMIT $%d", idx)

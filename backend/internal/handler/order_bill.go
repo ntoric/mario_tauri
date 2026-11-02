@@ -108,6 +108,7 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		From:     parseTimeQuery(r, "from"),
 		To:       parseEndOfDayQuery(r, "to"),
 		Limit:    parseLimitQuery(r, maxListLimit),
+		Sort:     r.URL.Query().Get("sort"),
 	}
 
 	// Apply default limit only if no limit was specified and client didn't request all orders

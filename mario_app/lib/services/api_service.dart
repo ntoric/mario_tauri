@@ -195,6 +195,7 @@ class ApiService {
     DateTime? from,
     DateTime? to,
     int? limit,
+    String? sort,
   }) async {
     var url = '$_baseUrl/orders?storeId=$storeId';
     if (status != null) {
@@ -208,6 +209,9 @@ class ApiService {
     }
     if (limit != null) {
       url += '&limit=$limit';
+    }
+    if (sort != null) {
+      url += '&sort=${Uri.encodeQueryComponent(sort)}';
     }
     final response = await _get(url);
     final data = await _handleResponse(response);

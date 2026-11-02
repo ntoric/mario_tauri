@@ -152,7 +152,7 @@ const History: React.FC = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchOrders({ limit: 1000 }); // Fetch more orders for history view (all statuses)
+    fetchOrders({ limit: 1000, sort: 'paid' }); // Fetch more orders for history view (all statuses)
     fetchBills(true); // always fresh: bills may have been issued elsewhere
   }, [fetchOrders, fetchBills]);
 
@@ -227,6 +227,19 @@ const History: React.FC = () => {
     }
   };
 
+  // History is ordered by payment time, not order-open time: an order can sit
+  // active for a while before billing, so created_at ordering would push a
+  // recently-paid long-running table below newer quick orders. For billed
+  // orders the bill's generated_at is the exact payment timestamp; for the
+  // rest, updated_at is stamped at complete/cancel time.
+  const billByOrderId = new Map<string, Bill>(bills.map(b => [b.orderId, b]));
+  const paidAt = (o: Order) =>
+    new Date(
+      o.status === 'cancelled'
+        ? o.cancelledAt ?? o.updatedAt ?? o.createdAt
+        : billByOrderId.get(o.id)?.generatedAt ?? o.updatedAt ?? o.createdAt
+    ).getTime();
+
   const filteredOrders = orders.filter(order => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -243,7 +256,7 @@ const History: React.FC = () => {
     const matchesDate = (!from || orderDate >= from) && (!to || orderDate <= to);
 
     return matchesSearch && matchesStatus && matchesDate;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }).sort((a, b) => paidAt(b) - paidAt(a) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;

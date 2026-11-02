@@ -61,7 +61,7 @@ interface DataState {
   setDefaultTableSection: (name: string) => Promise<void>;
   
   // Orders
-  fetchOrders: (options?: { status?: string; limit?: number }) => Promise<void>;
+  fetchOrders: (options?: { status?: string; limit?: number; sort?: string }) => Promise<void>;
   createOrder: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
   saveEBill: (order: Omit<Order, 'id' | 'storeId' | 'status' | 'createdAt' | 'updatedAt' | 'createdBy'> & Partial<Pick<Order, 'status' | 'createdBy'>>, options?: { skipRefresh?: boolean }) => Promise<Order>;
   savePrint: (orderId: string, bill: Omit<Bill, 'id' | 'storeId' | 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'> & Partial<Pick<Bill, 'items' | 'isPrinted' | 'generatedAt' | 'generatedBy'>>, options?: { skipRefresh?: boolean }) => Promise<Bill | undefined>;
@@ -433,11 +433,11 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
 
   // Orders
-  fetchOrders: async (options?: { status?: string; limit?: number }) => {
+  fetchOrders: async (options?: { status?: string; limit?: number; sort?: string }) => {
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
-      const orders = await api.getOrders(currentStoreId, options?.status, options?.limit);
+      const orders = await api.getOrders(currentStoreId, options?.status, options?.limit, options?.sort);
       set({ orders });
     } catch (error) {
       console.error('Failed to fetch orders:', error);

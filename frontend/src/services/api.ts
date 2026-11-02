@@ -361,10 +361,11 @@ class ApiService {
   }
 
   // Orders
-  async getOrders(storeId: string, status?: string, limit?: number) {
+  async getOrders(storeId: string, status?: string, limit?: number, sort?: string) {
     let url = `/orders?storeId=${storeId}`;
     if (status) url += `&status=${status}`;
     if (limit) url += `&limit=${limit}`;
+    if (sort) url += `&sort=${sort}`;
     return this.fetch(url);
   }
 
