@@ -58,14 +58,25 @@ class AuthProvider extends ChangeNotifier {
 
     // A token restored from secure storage is only useful while the backend
     // is reachable, so validate it with /auth/me before marking the user
-    // authenticated. Invalid or expired sessions fall through to login.
-    if (_isBackendConnected && _backend.currentToken != null) {
-      final valid = await _backend.validateToken();
-      if (valid && _backend.currentUser != null) {
+    // authenticated. Only a definitive 401 ends the session — transient
+    // failures (radio still reconnecting after wake, timeouts, 5xx) keep the
+    // stored token so a later launch can restore the session. Retry a couple
+    // of times because a cold start right after the screen wakes routinely
+    // races the network coming back up.
+    if (_backend.currentToken != null) {
+      var validation = await _backend.validateToken();
+      for (var attempt = 0;
+          attempt < 2 && validation == TokenValidation.unreachable;
+          attempt++) {
+        await Future.delayed(const Duration(seconds: 2));
+        validation = await _backend.validateToken();
+      }
+      if (validation == TokenValidation.valid &&
+          _backend.currentUser != null) {
         _user = User.fromJson(_backend.currentUser!);
         _isAuthenticated = true;
         _currentStore = _resolveCurrentStore(_user!);
-      } else {
+      } else if (validation == TokenValidation.invalid) {
         _backend.logout();
       }
     }
@@ -84,6 +95,10 @@ class AuthProvider extends ChangeNotifier {
       _user = User.fromJson(meData);
       _currentStore = _resolveCurrentStore(_user!);
       notifyListeners();
+    } on SessionExpiredException {
+      // The server-side session is gone — drop back to the login screen
+      // rather than leaving a shell whose requests all 401.
+      await logout();
     } catch (e) {
       print('Failed to refresh user: $e');
     }

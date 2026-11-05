@@ -1,18 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '../services/api';
+import { authStorage, AUTH_KEYS } from '../services/authStorage';
 import type { User } from '../types';
 import { useDataStore } from './dataStore';
 
 // Helper to clear persisted auth storage
 const clearAuthStorage = () => {
-  sessionStorage.removeItem('cafe-auth');
-  sessionStorage.removeItem('cafe_token');
-  sessionStorage.removeItem('cafe-user');
-  // Clean up credentials persisted by older builds.
-  localStorage.removeItem('cafe-auth');
-  localStorage.removeItem('cafe_token');
-  localStorage.removeItem('cafe-user');
+  for (const key of AUTH_KEYS) {
+    void authStorage.removeItem(key);
+  }
 };
 
 interface AuthState {
@@ -240,7 +237,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cafe-auth',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => authStorage),
+      // main.tsx rehydrates before first render; auto-hydration would flash
+      // the login screen while the store plugin reads from disk.
+      skipHydration: true,
       partialize: (state) => ({
         user: state.user,
         token: state.token,

@@ -1,3 +1,5 @@
+import { api } from './api';
+
 const getWsBase = (): string | null => {
   const env = (import.meta as any).env;
   const isWeb = /^https?:$/.test(window.location.protocol);
@@ -25,7 +27,7 @@ const getWsBase = (): string | null => {
   return base;
 };
 
-const getToken = (): string | null => sessionStorage.getItem('cafe_token');
+const getToken = (): string | null => api.getToken();
 
 export const getTableStatusWsUrl = (storeId: string): string => {
   const token = getToken();

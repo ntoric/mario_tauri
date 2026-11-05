@@ -2,6 +2,12 @@ import '../services/api_service.dart';
 
 export '../services/api_service.dart';
 
+/// Outcome of validating a stored token against the backend. Only
+/// [invalid] (a real 401) should end the session; [unreachable] means the
+/// request never got a verdict (network, timeout, 5xx) and the stored
+/// token must be kept so a later launch can still restore the session.
+enum TokenValidation { valid, invalid, unreachable }
+
 class BackendService {
   static final BackendService _instance = BackendService._internal();
   factory BackendService() => _instance;
@@ -57,14 +63,16 @@ class BackendService {
     }
   }
 
-  Future<bool> validateToken() async {
-    if (_currentToken == null) return false;
+  Future<TokenValidation> validateToken() async {
+    if (_currentToken == null) return TokenValidation.invalid;
     try {
       final user = await _api.getMe();
       _currentUser = user.toJson();
-      return true;
-    } catch (e) {
-      return false;
+      return TokenValidation.valid;
+    } on SessionExpiredException {
+      return TokenValidation.invalid;
+    } catch (_) {
+      return TokenValidation.unreachable;
     }
   }
 

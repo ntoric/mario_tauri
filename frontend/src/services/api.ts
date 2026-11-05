@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import { authStorage, AUTH_KEYS } from './authStorage';
+
 export const API_URL = import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_URL ||
   'http://localhost:8088/api';
@@ -12,29 +14,31 @@ if (import.meta.env.DEV) {
 class ApiService {
   private token: string | null = null;
 
+  // Load the persisted token once at bootstrap, before the UI issues
+  // requests — the store plugin's read is async, so getToken() stays sync.
+  async hydrateToken() {
+    this.token = (await authStorage.getItem('cafe_token')) ?? null;
+  }
+
   setToken(token: string) {
     this.token = token;
-    // Session-scoped storage only: nothing survives a browser/app restart,
-    // matching the server-side Redis session model.
-    sessionStorage.setItem('cafe_token', token);
+    void authStorage.setItem('cafe_token', token);
   }
 
   getToken(): string | null {
     if (!this.token) {
-      this.token = sessionStorage.getItem('cafe_token');
+      // Web builds keep the token in localStorage; hydrateToken() covers the
+      // Tauri path before first render.
+      this.token = localStorage.getItem('cafe_token');
     }
     return this.token;
   }
 
   clearToken() {
     this.token = null;
-    sessionStorage.removeItem('cafe_token');
-    sessionStorage.removeItem('cafe-auth');
-    sessionStorage.removeItem('cafe-user');
-    // Clean up any credentials persisted by older builds.
-    localStorage.removeItem('cafe_token');
-    localStorage.removeItem('cafe-auth');
-    localStorage.removeItem('cafe-user');
+    for (const key of AUTH_KEYS) {
+      void authStorage.removeItem(key);
+    }
   }
 
   private async fetch(endpoint: string, options: RequestInit = {}, skipAuthRedirect = false) {

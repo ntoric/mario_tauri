@@ -11,6 +11,18 @@ import '../models/bill.dart';
 import '../models/statistics.dart';
 import '../models/app_update.dart';
 
+/// Thrown on HTTP 401: the server definitively rejected the session token.
+/// Distinguished from transient failures (timeouts, socket errors, 5xx) so
+/// callers don't destroy a still-valid session on a flaky network.
+class SessionExpiredException implements Exception {
+  final String message;
+  const SessionExpiredException(
+      [this.message = 'Session expired. Please login again.']);
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -118,7 +130,7 @@ class ApiService {
       return jsonDecode(response.body);
     } else if (response.statusCode == 401) {
       await clearToken();
-      throw Exception('Session expired. Please login again.');
+      throw const SessionExpiredException();
     } else {
       final error = jsonDecode(response.body);
       throw Exception(error['error'] ?? 'Request failed');
