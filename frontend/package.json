@@ -1,6 +1,6 @@
 {
   "name": "mario-juicy",
-  "version": "1.20.0",
+  "version": "1.10.1",
   "private": true,
   "scripts": {
     "dev": "vite --mode development",
