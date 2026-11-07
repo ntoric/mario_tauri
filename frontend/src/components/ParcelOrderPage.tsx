@@ -294,6 +294,24 @@ const ParcelOrderPage: React.FC = () => {
     }
   };
 
+  const handleCancel = () => {
+    if (orderItems.length > 0) {
+      setPrinterConfirm({
+        show: true,
+        title: 'Discard Order',
+        message: 'You have unsaved items in the cart. Discard this parcel order and go back?',
+        onConfirm: () => {
+          setPrinterConfirm(p => ({ ...p, show: false }));
+          navigate('/');
+          setOrderItems([]);
+        },
+      });
+    } else {
+      navigate('/');
+      setOrderItems([]);
+    }
+  };
+
   return (
     <div className="order-page">
       <div className="order-page-layout">
@@ -355,6 +373,7 @@ const ParcelOrderPage: React.FC = () => {
                   <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
                 )}
                 <div className="item-name">{item.name}</div>
+                <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
                 <div className="item-price">{formatCurrency(item.price)}</div>
               </div>
             ))}
@@ -530,7 +549,7 @@ const ParcelOrderPage: React.FC = () => {
             <Printer size={14} />
             {actionType === 'save-print' ? 'Processing...' : 'Save & Print'}
           </button>
-          <button className="btn btn-danger" onClick={() => navigate('/')}>
+          <button className="btn btn-danger" onClick={handleCancel}>
             <X size={14} />
             Cancel
           </button>

@@ -3245,7 +3245,7 @@ body {
 
 .order-layout-fixed {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 304px;
   height: 100%;
   max-height: calc(85vh - 140px);
 }
@@ -3757,6 +3757,20 @@ body {
   overflow: hidden;
   width: 100%;
   text-align: center;
+}
+
+.item-category {
+  width: 100%;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.15rem;
 }
 
 .item-price {
@@ -5054,7 +5068,7 @@ body {
 /* 3-pane Petpooja layout: categories | items | cart — floating glass panes */
 .order-page-layout {
   display: grid;
-  grid-template-columns: 192px 1fr 480px;
+  grid-template-columns: 192px 1fr 456px;
   gap: 0.75rem;
   padding: 0.75rem 1.25rem 0;
   flex: 1;

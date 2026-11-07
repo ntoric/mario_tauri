@@ -86,7 +86,7 @@ const MenuUpload: React.FC = () => {
     fetchGstMeta().catch(() => {});
     setHeaderContent({
       title: 'AI Menu Upload',
-      subtitle: 'Parse a menu image/PDF with Gemini and import it into a store - Superadmin only',
+      subtitle: 'AI Scan a menu image/PDF and import it into a store - Superadmin only',
       actions: null,
     });
   }, [setHeaderContent]);
@@ -239,8 +239,8 @@ const MenuUpload: React.FC = () => {
       setInfo(`Parsed ${diffed.categories.length} categories and ${totalItems} items from ${files.length} file${files.length > 1 ? 's' : ''} using ${data.model || 'Gemini'}.`);
       notify.info(`Parsed ${diffed.categories.length} categories and ${totalItems} items`);
     } catch (err: any) {
-      setError(err.message || 'Failed to parse menu with Gemini');
-      notify.error(err.message || 'Failed to parse menu with Gemini');
+      setError(err.message || 'AI Scan failed');
+      notify.error(err.message || 'AI Scan failed');
     } finally {
       setIsParsing(false);
     }
@@ -563,9 +563,9 @@ const MenuUpload: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               {isParsing ? (
-                <><Loader2 size={18} className="animate-spin" /> Parsing with Gemini...</>
+                <><Loader2 size={18} className="animate-spin" /> AI Scanning...</>
               ) : (
-                <><Sparkles size={18} /> Parse {files.length > 1 ? `${files.length} Files` : 'Menu'} with Gemini</>
+                <><Sparkles size={18} /> AI Scan{files.length > 1 ? ` ${files.length} Files` : ''}</>
               )}
             </button>
             {(files.length > 0 || parsedMenu) && (

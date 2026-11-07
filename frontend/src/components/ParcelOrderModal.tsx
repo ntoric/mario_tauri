@@ -373,6 +373,7 @@ const ParcelOrderModal: React.FC = () => {
                     onClick={() => addItemToOrder(item)}
                   >
                     <div className="item-name">{item.name}</div>
+                    <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
                     <div className="item-price">{formatCurrency(item.price)}</div>
                   </div>
                 ))}

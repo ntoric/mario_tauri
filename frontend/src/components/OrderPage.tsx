@@ -548,6 +548,17 @@ const OrderPage: React.FC = () => {
           }
         },
       });
+    } else if (orderItems.length > 0) {
+      setPrinterConfirm({
+        show: true,
+        title: 'Discard Order',
+        message: 'You have unsaved items in the cart. Discard this order and go back to tables?',
+        onConfirm: () => {
+          setPrinterConfirm(p => ({ ...p, show: false }));
+          navigate('/');
+          setOrderItems([]);
+        },
+      });
     } else {
       navigate('/');
       setOrderItems([]);
@@ -737,6 +748,7 @@ const OrderPage: React.FC = () => {
                   <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
                 )}
                 <div className="item-name">{item.name}</div>
+                <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
                 <div className="item-price">{formatCurrency(item.price)}</div>
               </div>
             ))}
