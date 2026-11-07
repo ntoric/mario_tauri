@@ -4,15 +4,19 @@ import {
   Crown, CheckCircle2, RefreshCw, Building2, CalendarClock,
   Infinity as InfinityIcon, AlertTriangle, CreditCard, Zap,
   ArrowUpCircle, ArrowDownCircle, Repeat, X, Ban, Clock3, Send,
+  Download,
 } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { Button } from '../components/ui/Button';
 import { api } from '../services/api';
+import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { formatCurrency } from '../utils/currency';
+import { downloadPaymentReceipt, paymentMethodLabel } from '../utils/paymentReceipt';
 import notify from '../utils/toast';
 import type {
   MySubscription, MySubscriptionHistory, RecurringType, SubscriptionPlan,
+  SubscriptionPayment,
 } from '../types';
 
 const RECURRING_LABELS: Record<RecurringType, string> = {
@@ -36,10 +40,30 @@ const STATUS_META: Record<string, { label: string; badge: string }> = {
   replaced: { label: 'Replaced', badge: 'badge-primary' },
 };
 
+const ACTION_META: Record<string, { label: string; badge: string }> = {
+  created: { label: 'Created', badge: 'badge-success' },
+  renewed: { label: 'Renewed', badge: 'badge-primary' },
+  expired: { label: 'Expired', badge: 'badge-danger' },
+  cancelled: { label: 'Cancelled', badge: 'badge-warning' },
+  replaced: { label: 'Replaced', badge: 'badge-warning' },
+  upgraded: { label: 'Upgraded', badge: 'badge-success' },
+  downgraded: { label: 'Downgraded', badge: 'badge-warning' },
+  plan_changed: { label: 'Plan Changed', badge: 'badge-primary' },
+  auto_renew_enabled: { label: 'Auto-Renew On', badge: 'badge-primary' },
+  auto_renew_disabled: { label: 'Auto-Renew Off', badge: 'badge-warning' },
+  request_submitted: { label: 'Requested', badge: 'badge-primary' },
+  request_approved: { label: 'Req. Approved', badge: 'badge-success' },
+  request_rejected: { label: 'Req. Rejected', badge: 'badge-danger' },
+  request_withdrawn: { label: 'Req. Withdrawn', badge: 'badge-warning' },
+};
+
 const DAY_MS = 86400000;
 
 const formatDate = (s?: string) =>
   s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+const formatDateTime = (s?: string) =>
+  s ? new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 const MyPlan: React.FC = () => {
   const { user, currentStoreId } = useAuthStore();
@@ -57,6 +81,11 @@ const MyPlan: React.FC = () => {
   const [showReqModal, setShowReqModal] = useState(false);
   const [reqPlanId, setReqPlanId] = useState('');
   const [isSubmittingReq, setIsSubmittingReq] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payPlanId, setPayPlanId] = useState('');
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [payEnabled, setPayEnabled] = useState(false);
 
   // Re-render the countdown every minute.
   useEffect(() => {
@@ -67,12 +96,14 @@ const MyPlan: React.FC = () => {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [res, planRes] = await Promise.all([
+      const [res, planRes, payRes] = await Promise.all([
         api.getMySubscription(currentStoreId || undefined),
         api.getSubscriptionPlans(),
+        api.getPaymentConfig().catch(() => null),
       ]);
       setData(res);
       setPlans(planRes || []);
+      setPayEnabled(!!payRes?.enabled);
     } catch (err: any) {
       notify.error(err.message || 'Failed to load subscription');
     } finally {
@@ -191,6 +222,83 @@ const MyPlan: React.FC = () => {
     }
   };
 
+  // ---- online payment (Cashfree) ----
+
+  // Poll the verify endpoint until the gateway settles the order (a webhook
+  // may beat us to it — verify is idempotent either way).
+  const verifyAndFinish = useCallback(async (orderId: string) => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        const res = await api.verifyPlanPayment(orderId);
+        if (res.status === 'paid') {
+          notify.success('Payment successful — your plan is now active');
+          setPendingOrderId(null);
+          load();
+          if (activeTab === 'history') loadHistory();
+          return;
+        }
+        if (res.status !== 'pending') {
+          notify.error(`Payment ${res.status} — please try again`);
+          setPendingOrderId(null);
+          return;
+        }
+      } catch (err: any) {
+        notify.error(err.message || 'Could not verify payment status');
+        return;
+      }
+      if (attempt < 5) await new Promise((r) => setTimeout(r, 2500));
+    }
+    // Still processing — leave a manual re-check option on the page.
+    setPendingOrderId(orderId);
+    notify.info('Payment is being processed — tap "Check status" in a moment');
+  }, [load, loadHistory, activeTab]);
+
+  const openPayModal = () => {
+    const currentPlanAvailable = plans.some((p) => p.id === sub?.planId && p.isActive);
+    setPayPlanId(currentPlanAvailable ? sub!.planId : '');
+    setShowPayModal(true);
+  };
+
+  const handlePayNow = async () => {
+    // planId empty means "renew current plan" — only valid when one exists.
+    const planId = payPlanId || undefined;
+    if (!sub && !planId) {
+      notify.error('Select a plan');
+      return;
+    }
+    setIsPaying(true);
+    try {
+      const res = await api.createPlanPaymentOrder(currentStoreId || undefined, planId);
+      const cashfree = await loadCashfree({ mode: res.mode === 'production' ? 'production' : 'sandbox' });
+      if (!cashfree) throw new Error('Payment SDK failed to load');
+      setShowPayModal(false);
+      const result = await cashfree.checkout({
+        paymentSessionId: res.paymentSessionId,
+        redirectTarget: '_modal',
+      });
+      if (result?.error) {
+        notify.error(result.error.message || 'Payment failed');
+        setPendingOrderId(res.order.id);
+        return;
+      }
+      await verifyAndFinish(res.order.id);
+    } catch (err: any) {
+      notify.error(err.message || 'Failed to start payment');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const recheckPayment = async () => {
+    if (!pendingOrderId) return;
+    setIsPaying(true);
+    try {
+      await verifyAndFinish(pendingOrderId);
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
   // ---- countdown math ----
   const startMs = sub ? new Date(sub.startDate).getTime() : 0;
   const endMs = sub ? new Date(sub.endDate).getTime() : 0;
@@ -234,6 +342,11 @@ const MyPlan: React.FC = () => {
           <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
             {currentStore ? `${currentStore.name} doesn't` : 'This store doesn\'t'} have a subscription plan. Contact your administrator to get started.
           </p>
+          {canRequest && payEnabled && plans.some((p) => p.isActive) && (
+            <Button variant="primary" leftIcon={<CreditCard size={15} />} onClick={openPayModal} style={{ marginTop: '1.5rem' }}>
+              Subscribe Online
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -430,6 +543,17 @@ const MyPlan: React.FC = () => {
           {/* request actions */}
           {isActive && canRequest && !pending && (requestablePlans.length > 0 || true) && (
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
+              {payEnabled && (
+                <Button
+                  variant="primary"
+                  leftIcon={<CreditCard size={15} />}
+                  onClick={openPayModal}
+                  isLoading={isPaying}
+                  loadingText="Processing..."
+                >
+                  Pay &amp; Renew
+                </Button>
+              )}
               {requestablePlans.length > 0 && (
                 <Button
                   variant="outline"
@@ -452,21 +576,52 @@ const MyPlan: React.FC = () => {
             </div>
           )}
 
+          {/* pending payment banner */}
+          {pendingOrderId && (
+            <div className="card" style={{ marginTop: '1.25rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Clock3 size={20} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)' }}>
+                  <strong>Payment is being processed</strong> — your plan will update as soon as the gateway confirms.
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={recheckPayment} isLoading={isPaying} loadingText="Checking...">
+                Check status
+              </Button>
+            </div>
+          )}
+
           {/* alerts */}
           {sub.status === 'expired' && (
-            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--danger)' }}>
+            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--danger)', flexWrap: 'wrap' }}>
               <AlertTriangle size={20} style={{ color: 'var(--danger)', flexShrink: 0 }} />
-              <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)' }}>
-                Your subscription expired on <strong>{formatDate(sub.endDate)}</strong>. Contact your administrator to renew and restore full access.
+              <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)', flex: 1 }}>
+                Your subscription expired on <strong>{formatDate(sub.endDate)}</strong>.{' '}
+                {payEnabled
+                  ? 'Pay online to reactivate instantly, or contact your administrator.'
+                  : 'Contact your administrator to reactivate.'}
               </div>
+              {canRequest && payEnabled && (
+                <Button size="sm" variant="primary" leftIcon={<CreditCard size={14} />} onClick={openPayModal} isLoading={isPaying} loadingText="Processing...">
+                  Pay to Reactivate
+                </Button>
+              )}
             </div>
           )}
           {sub.status === 'cancelled' && (
-            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)' }}>
+            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', flexWrap: 'wrap' }}>
               <AlertTriangle size={20} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-              <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)' }}>
-                This subscription was cancelled. Contact your administrator to start a new plan.
+              <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)', flex: 1 }}>
+                This subscription was cancelled.{' '}
+                {payEnabled
+                  ? 'Pay online to start a new plan, or contact your administrator.'
+                  : 'Contact your administrator to start a new plan.'}
               </div>
+              {canRequest && payEnabled && plans.some((p) => p.isActive) && (
+                <Button size="sm" variant="primary" leftIcon={<CreditCard size={14} />} onClick={openPayModal} isLoading={isPaying} loadingText="Processing...">
+                  Choose a Plan &amp; Pay
+                </Button>
+              )}
             </div>
           )}
           {isActive && !sub.autoRenew && (
@@ -546,6 +701,106 @@ const MyPlan: React.FC = () => {
             </div>
           </div>
 
+          <div className="card" style={{ marginTop: '1.25rem' }}>
+            <div className="card-header" style={{ paddingBottom: 0 }}>
+              <span className="card-title" style={{ fontSize: '0.95rem' }}>Payments</span>
+            </div>
+            <div className="table-scroll-container">
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Plan</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Period</th>
+                    <th>Status</th>
+                    <th>By</th>
+                    <th style={{ width: '90px' }}>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isHistoryLoading ? (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>Loading history...</td></tr>
+                  ) : !history || history.payments.length === 0 ? (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>No payments recorded</td></tr>
+                  ) : (
+                    history.payments.map((p: SubscriptionPayment) => (
+                      <tr key={p.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(p.paidAt || p.createdAt)}</td>
+                        <td>{p.planName || '—'}</td>
+                        <td><strong>{hidePrice ? '—' : formatCurrency(p.amount)}</strong></td>
+                        <td>{paymentMethodLabel(p.method)}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{p.periodStart && p.periodEnd ? `${formatDate(p.periodStart)} → ${formatDate(p.periodEnd)}` : '—'}</td>
+                        <td><span className={`badge ${p.status === 'paid' ? 'badge-success' : p.status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>{p.status}</span></td>
+                        <td>{p.recordedByName || 'System'}</td>
+                        <td>
+                          {p.status === 'paid' && !hidePrice ? (
+                            <button
+                              type="button"
+                              className="action-btn"
+                              title="Download receipt"
+                              style={{ color: 'var(--primary)' }}
+                              onClick={() => downloadPaymentReceipt(p, currentStore)}
+                            >
+                              <Download size={16} />
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--gray-400)' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: '1.25rem' }}>
+            <div className="card-header" style={{ paddingBottom: 0 }}>
+              <span className="card-title" style={{ fontSize: '0.95rem' }}>Activity</span>
+            </div>
+            <div className="table-scroll-container">
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Event</th>
+                    <th>Plan Change</th>
+                    <th>By</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isHistoryLoading ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>Loading history...</td></tr>
+                  ) : !history || history.events.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>No activity yet</td></tr>
+                  ) : (
+                    history.events.map((ev) => {
+                      const meta = ACTION_META[ev.action] || { label: ev.action, badge: 'badge-primary' };
+                      return (
+                        <tr key={ev.id}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(ev.createdAt)}</td>
+                          <td><span className={`badge ${meta.badge}`}>{meta.label}</span></td>
+                          <td>
+                            {ev.fromPlanName && ev.toPlanName && ev.fromPlanName !== ev.toPlanName ? (
+                              <span>{ev.fromPlanName} → <strong>{ev.toPlanName}</strong></span>
+                            ) : (
+                              <span>{ev.toPlanName || ev.fromPlanName || '—'}</span>
+                            )}
+                          </td>
+                          <td>{ev.createdByName || 'System'}</td>
+                          <td style={{ maxWidth: '340px', fontSize: '0.82rem', color: 'var(--gray-600)' }}>{ev.notes || '—'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 
@@ -599,6 +854,62 @@ const MyPlan: React.FC = () => {
                 </Button>
                 <Button type="submit" variant="primary" isLoading={isSubmittingReq} loadingText="Submitting..." leftIcon={<Send size={14} />}>
                   Submit Request
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== online payment modal ===== */}
+      {showPayModal && (
+        <div className="modal-overlay" onClick={() => setShowPayModal(false)}>
+          <div className="modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Pay Online</h2>
+              <button className="close-btn" onClick={() => setShowPayModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handlePayNow(); }}>
+              <div className="modal-body">
+                {sub && (
+                  <div className="form-group">
+                    <label>Current Plan</label>
+                    <input type="text" value={hidePrice ? sub.planName : `${sub.planName} (${formatCurrency(sub.planPrice)}${RECURRING_SUFFIX[sub.recurringType]})`} disabled />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>{sub ? 'Plan to pay for' : 'Choose a plan'} *</label>
+                  <select value={payPlanId} onChange={(e) => setPayPlanId(e.target.value)} required>
+                    <option value="">Select plan...</option>
+                    {plans.filter((p) => p.isActive).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {hidePrice ? `${p.name} (${RECURRING_LABELS[p.recurringType]})` : `${p.name} — ${formatCurrency(p.price)}${RECURRING_SUFFIX[p.recurringType]} (${RECURRING_LABELS[p.recurringType]})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {payPlanId && sub && payPlanId !== sub.planId && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <span className="badge badge-primary">
+                      {(plans.find((p) => p.id === payPlanId)?.price ?? 0) > sub.planPrice ? 'Upgrade' : 'Switch plan'} — applies immediately on payment
+                    </span>
+                  </div>
+                )}
+                <small style={{ color: 'var(--gray-500)', fontSize: '0.8rem', display: 'block' }}>
+                  You'll be taken to Cashfree's secure checkout. Once the payment succeeds,
+                  your plan is recorded and renewed automatically — no admin action needed.
+                </small>
+              </div>
+              <div className="modal-footer">
+                <Button type="button" variant="secondary" onClick={() => setShowPayModal(false)} disabled={isPaying}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" isLoading={isPaying} loadingText="Opening checkout..." leftIcon={<CreditCard size={14} />}>
+                  {payPlanId && !hidePrice
+                    ? `Pay ${formatCurrency(plans.find((p) => p.id === payPlanId)?.price ?? 0)}`
+                    : 'Pay Now'}
                 </Button>
               </div>
             </form>

@@ -614,3 +614,38 @@ export interface SubscriptionEvent {
   createdByName?: string;
   createdAt: string;
 }
+
+export interface PaymentOrder {
+  id: string;
+  gateway: string;
+  storeId: string;
+  storeName?: string;
+  subscriptionId?: string;
+  planId?: string;
+  planName: string;
+  planPrice: number;
+  recurringType: RecurringType;
+  amount: number;
+  currency: string;
+  status: 'created' | 'paid' | 'failed' | 'expired';
+  paymentSessionId?: string;
+  cfPaymentId?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePaymentOrderResponse {
+  order: PaymentOrder;
+  paymentSessionId: string;
+  mode: 'sandbox' | 'production';
+}
+
+export type VerifyPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
+
+export interface VerifyPaymentOrderResponse {
+  status: VerifyPaymentStatus;
+  order: PaymentOrder;
+  subscription?: StoreSubscription | null;
+  payment?: SubscriptionPayment | null;
+}

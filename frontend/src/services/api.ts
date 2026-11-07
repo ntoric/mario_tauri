@@ -670,6 +670,30 @@ class ApiService {
     return this.fetch('/system/gemini-models');
   }
 
+  // Cashfree Payment Configuration (superadmin only)
+  async getCashfreeConfig() {
+    return this.fetch('/system/cashfree-config');
+  }
+
+  async updateCashfreeConfig(config: {
+    enabled: boolean;
+    appId: string;
+    secretKey: string;
+    env: string;
+    returnUrl: string;
+    notifyUrl: string;
+  }) {
+    return this.fetch('/system/cashfree-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  // Whether online plan payment is available (any authenticated user)
+  async getPaymentConfig() {
+    return this.fetch('/subscriptions/my/payment-config');
+  }
+
   // AI Menu Parsing (superadmin only)
   // Supports either a single image (legacy) or multiple images in one request.
   async parseMenuImage(storeId: string, imageBase64: string, mimeType: string) {
@@ -1115,6 +1139,20 @@ class ApiService {
     let url = '/subscriptions/history';
     if (storeId) url += `?storeId=${storeId}`;
     return this.fetch(url);
+  }
+
+  // My Plan — online payment (Cashfree checkout)
+  async createPlanPaymentOrder(storeId: string | undefined, planId?: string) {
+    return this.fetch('/subscriptions/my/pay', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, planId }),
+    });
+  }
+
+  async verifyPlanPayment(orderId: string) {
+    return this.fetch(`/subscriptions/my/pay/${orderId}/verify`, {
+      method: 'POST',
+    });
   }
 
 }

@@ -23,6 +23,12 @@ type Config struct {
 	SuperadminPassword string
 	SuperadminName     string
 	RequestLogDir      string
+	EncryptionKey      string
+	CashfreeAppID      string
+	CashfreeSecretKey  string
+	CashfreeEnv        string
+	CashfreeReturnURL  string
+	CashfreeNotifyURL  string
 }
 
 func LoadConfig() (*Config, error) {
@@ -92,6 +98,11 @@ func LoadConfig() (*Config, error) {
 	requestLogDir := getEnv("REQUEST_LOG_DIR", "logs")
 
 	return &Config{
+		CashfreeAppID:      getEnv("CASHFREE_APP_ID", ""),
+		CashfreeSecretKey:  getEnv("CASHFREE_SECRET_KEY", ""),
+		CashfreeEnv:        getEnv("CASHFREE_ENV", "sandbox"),
+		CashfreeReturnURL:  getEnv("CASHFREE_RETURN_URL", ""),
+		CashfreeNotifyURL:  getEnv("CASHFREE_NOTIFY_URL", ""),
 		DBHost:             dbHost,
 		DBPort:             dbPort,
 		DBName:             dbName,
@@ -106,6 +117,7 @@ func LoadConfig() (*Config, error) {
 		SuperadminPassword: superadminPassword,
 		SuperadminName:     superadminName,
 		RequestLogDir:      requestLogDir,
+		EncryptionKey:      getEnv("ENCRYPTION_KEY", ""),
 	}, nil
 }
 
