@@ -568,11 +568,11 @@ const SystemReset: React.FC = () => {
 
       {showConfirm && (
         <div className="modal-overlay">
-          <div className="modal-content modal-sm">
+          <div className="modal" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h3>Confirm System Reset</h3>
-              <button className="btn btn-icon" onClick={() => setShowConfirm(false)}>
-                <X size={20} />
+              <button className="close-btn" onClick={() => setShowConfirm(false)}>
+                <X size={18} />
               </button>
             </div>
             <div className="modal-body">
@@ -597,7 +597,7 @@ const SystemReset: React.FC = () => {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowConfirm(false)}>
+              <button className="btn btn-secondary" onClick={() => setShowConfirm(false)}>
                 Cancel
               </button>
               <button 

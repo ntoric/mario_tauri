@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, DollarSign, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, DollarSign, Eye, IndianRupee, Receipt, TrendingUp, Tags, Filter } from 'lucide-react';
 import { useDataStore, useUIStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -230,6 +230,20 @@ const Expenses: React.FC = () => {
     category.name.toLowerCase().includes(categorySearchQuery.toLowerCase())
   );
 
+  const filteredTotal = useMemo(
+    () => filteredExpenses.reduce((sum, e) => sum + e.amount, 0),
+    [filteredExpenses]
+  );
+  const avgExpense = filteredExpenses.length ? filteredTotal / filteredExpenses.length : 0;
+
+  const usageByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    expenses.forEach(e => {
+      if (e.categoryId) map[e.categoryId] = (map[e.categoryId] || 0) + 1;
+    });
+    return map;
+  }, [expenses]);
+
   const paginatedExpenses = useMemo(() => {
     const start = (expensePage - 1) * PAGE_SIZE;
     return filteredExpenses.slice(start, start + PAGE_SIZE);
@@ -241,7 +255,7 @@ const Expenses: React.FC = () => {
   }, [filteredCategories, categoryPage]);
 
   return (
-    <div className="expenses-page">
+    <div className="inv-page">
       <ConfirmDialog
         isOpen={confirmState.isOpen}
         title={confirmState.title}
@@ -412,28 +426,66 @@ const Expenses: React.FC = () => {
         </div>
       )}
 
+      {/* Stats */}
+      <div className="inv-stats">
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-primary"><IndianRupee size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Total Spend</div>
+            <div className="inv-stat-value">{formatCurrency(filteredTotal)}</div>
+            <div className="inv-stat-sub">{filteredExpenses.length} expense{filteredExpenses.length === 1 ? '' : 's'} shown</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-warning"><Receipt size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Expenses</div>
+            <div className="inv-stat-value">{filteredExpenses.length}</div>
+            <div className="inv-stat-sub">records in view</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-info"><TrendingUp size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Avg per Expense</div>
+            <div className="inv-stat-value">{formatCurrency(avgExpense)}</div>
+            <div className="inv-stat-sub">across shown records</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-success"><Tags size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Categories</div>
+            <div className="inv-stat-value">{expenseCategories.length}</div>
+            <div className="inv-stat-sub">expense groups</div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
-      <div className="tabs">
+      <div className="inv-tabs">
         <button
-          className={`tab ${activeTab === 'expenses' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'expenses' ? 'active' : ''}`}
           onClick={() => setActiveTab('expenses')}
         >
           Expenses
+          <span className="inv-tab-count">{filteredExpenses.length}</span>
         </button>
         <button
-          className={`tab ${activeTab === 'categories' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'categories' ? 'active' : ''}`}
           onClick={() => setActiveTab('categories')}
         >
           Categories
+          <span className="inv-tab-count">{expenseCategories.length}</span>
         </button>
       </div>
 
       {/* Expenses Tab */}
       {activeTab === 'expenses' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
               <input
                 type="text"
                 placeholder="Search expenses..."
@@ -441,88 +493,100 @@ const Expenses: React.FC = () => {
                 onChange={(e) => { setExpenseSearchQuery(e.target.value); setExpensePage(1); }}
               />
             </div>
-            <div className="date-filters">
-              <div className="date-input">
-                <Calendar size={16} />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  placeholder="Start date"
-                />
-              </div>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  placeholder="End date"
-                />
-              </div>
-              <Button onClick={handleDateFilter} variant="secondary" size="sm">
-                Filter
-              </Button>
-              {(startDate || endDate) && (
-                <Button onClick={clearDateFilter} variant="ghost" size="sm">
-                  Clear
-                </Button>
-              )}
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                placeholder="Start date"
+              />
             </div>
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                placeholder="End date"
+              />
+            </div>
+            <button className="inv-toolbar-btn" onClick={handleDateFilter}>
+              <Filter size={14} />
+              Filter
+            </button>
+            {(startDate || endDate) && (
+              <button className="inv-toolbar-btn is-ghost" onClick={clearDateFilter}>Clear</button>
+            )}
+            <div className="inv-spacer" />
             <Button onClick={() => openExpenseForm()}>
-              <Plus size={18} />
+              <Plus size={16} />
               Add Expense
             </Button>
           </div>
 
-          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="inv-card">
             {filteredExpenses.length === 0 ? (
-              <div className="empty-state">
-                <DollarSign size={48} />
-                <p>No expenses found</p>
-                <Button onClick={() => openExpenseForm()}>Add your first expense</Button>
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><DollarSign size={26} /></div>
+                <div className="inv-empty-title">No expenses found</div>
+                <div className="inv-empty-sub">Record business expenses to keep your books accurate.</div>
+                <Button onClick={() => openExpenseForm()} style={{ marginTop: '0.6rem' }}>Add your first expense</Button>
               </div>
             ) : (
               <>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+                <div className="inv-scroll">
+                  <table className="inv-table">
                     <thead>
                       <tr>
                         <th>Title</th>
-                        <th>Amount</th>
+                        <th className="num">Amount</th>
                         <th>Category</th>
                         <th>Date</th>
                         <th>Vendor</th>
                         <th>Payment</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th className="num">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedExpenses.map((expense) => (
-                        <tr key={expense.id} onClick={() => setDetailExpense(expense)}>
-                          <td>{expense.title}</td>
-                          <td className="col-amount">{formatCurrency(expense.amount)}</td>
-                          <td>{expense.categoryName || 'Uncategorized'}</td>
-                          <td className="col-date">{new Date(expense.expenseDate).toLocaleDateString()}</td>
-                          <td>{expense.vendor || '—'}</td>
-                          <td className="col-payment">
-                            {expense.paymentMethod ? <span className="payment-badge">{expense.paymentMethod}</span> : '—'}
+                        <tr key={expense.id} onClick={() => setDetailExpense(expense)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            <span className="inv-name">{expense.title}</span>
+                            {expense.description && <span className="inv-sub">{expense.description}</span>}
                           </td>
-                          <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                            <button title="View" onClick={() => setDetailExpense(expense)}>
-                              <Eye size={14} />
-                            </button>
-                            <button title="Edit" onClick={() => openExpenseForm(expense)}>
-                              <Edit2 size={14} />
-                            </button>
-                            <button className="delete" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
-                              {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                            </button>
+                          <td className="num inv-money">{formatCurrency(expense.amount)}</td>
+                          <td>
+                            {expense.categoryName
+                              ? <span className="inv-badge is-primary">{expense.categoryName}</span>
+                              : <span className="inv-muted">Uncategorized</span>}
+                          </td>
+                          <td className="inv-muted">{new Date(expense.expenseDate).toLocaleDateString()}</td>
+                          <td>{expense.vendor || '—'}</td>
+                          <td>
+                            {expense.paymentMethod ? <span className="inv-badge is-neutral">{expense.paymentMethod}</span> : '—'}
+                          </td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <div className="inv-actions">
+                              <button className="inv-icon-btn" title="View" onClick={() => setDetailExpense(expense)}>
+                                <Eye size={14} />
+                              </button>
+                              <button className="inv-icon-btn" title="Edit" onClick={() => openExpenseForm(expense)}>
+                                <Edit2 size={14} />
+                              </button>
+                              <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteExpense(expense.id)} disabled={loadingExpenseId === expense.id}>
+                                {loadingExpenseId === expense.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="inv-card-footer">
+                  <span>{filteredExpenses.length} expense{filteredExpenses.length === 1 ? '' : 's'}</span>
+                  <span>Total <strong>{formatCurrency(filteredTotal)}</strong></span>
                 </div>
                 <Pagination
                   currentPage={expensePage}
@@ -534,15 +598,15 @@ const Expenses: React.FC = () => {
               </>
             )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Categories Tab */}
       {activeTab === 'categories' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
               <input
                 type="text"
                 placeholder="Search categories..."
@@ -550,41 +614,50 @@ const Expenses: React.FC = () => {
                 onChange={(e) => { setCategorySearchQuery(e.target.value); setCategoryPage(1); }}
               />
             </div>
+            <div className="inv-spacer" />
             <Button onClick={() => openCategoryForm()}>
-              <Plus size={18} />
+              <Plus size={16} />
               Add Category
             </Button>
           </div>
 
-          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="inv-card">
             {filteredCategories.length === 0 ? (
-              <div className="empty-state">
-                <p>No expense categories found</p>
-                <Button onClick={() => openCategoryForm()}>Add your first category</Button>
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><Tags size={26} /></div>
+                <div className="inv-empty-title">No expense categories found</div>
+                <div className="inv-empty-sub">Group expenses into categories like Rent, Utilities or Supplies.</div>
+                <Button onClick={() => openCategoryForm()} style={{ marginTop: '0.6rem' }}>Add your first category</Button>
               </div>
             ) : (
               <>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+                <div className="inv-scroll">
+                  <table className="inv-table">
                     <thead>
                       <tr>
                         <th>Name</th>
                         <th>Description</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th className="num">Expenses</th>
+                        <th className="num">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedCategories.map((category) => (
                         <tr key={category.id}>
-                          <td><strong>{category.name}</strong></td>
-                          <td>{category.description || '—'}</td>
-                          <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                            <button title="Edit" onClick={() => openCategoryForm(category)}>
-                              <Edit2 size={14} />
-                            </button>
-                            <button className="delete" title="Delete" onClick={() => handleDeleteCategory(category.id)} disabled={loadingCategoryId === category.id}>
-                              {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                            </button>
+                          <td><span className="inv-name">{category.name}</span></td>
+                          <td className="inv-muted">{category.description || '—'}</td>
+                          <td className="num">
+                            <span className="inv-badge is-neutral">{usageByCategory[category.id] || 0}</span>
+                          </td>
+                          <td>
+                            <div className="inv-actions">
+                              <button className="inv-icon-btn" title="Edit" onClick={() => openCategoryForm(category)}>
+                                <Edit2 size={14} />
+                              </button>
+                              <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteCategory(category.id)} disabled={loadingCategoryId === category.id}>
+                                {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -601,7 +674,7 @@ const Expenses: React.FC = () => {
               </>
             )}
           </div>
-        </div>
+        </>
       )}
       {/* Expense Detail Modal */}
       {detailExpense && (
@@ -632,7 +705,7 @@ const Expenses: React.FC = () => {
                 <div className="expense-detail-item">
                   <span className="expense-detail-label">Payment Method</span>
                   <span className="expense-detail-value">
-                    {detailExpense.paymentMethod ? <span className="payment-badge">{detailExpense.paymentMethod}</span> : '—'}
+                    {detailExpense.paymentMethod ? <span className="inv-badge is-neutral">{detailExpense.paymentMethod}</span> : '—'}
                   </span>
                 </div>
                 <div className="expense-detail-item">

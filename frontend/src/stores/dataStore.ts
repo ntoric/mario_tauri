@@ -4,6 +4,15 @@ import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
 import type { Category, Item, Table, TableSection, Order, Bill, Store, ExpenseCategory, Expense, RawMaterial, RawMaterialPurchase, RawMaterialTransaction } from '../types';
 
+export interface RawMaterialTxnQuery {
+  materialId?: string;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
 interface DataState {
   // Data
   stores: Store[];
@@ -19,6 +28,8 @@ interface DataState {
   rawMaterials: RawMaterial[];
   rawMaterialPurchases: RawMaterialPurchase[];
   rawMaterialTransactions: RawMaterialTransaction[];
+  rawMaterialTransactionsTotal: number;
+  rawMaterialTxnQuery: RawMaterialTxnQuery;
   
   // Loading states
   isLoading: boolean;
@@ -115,7 +126,7 @@ interface DataState {
   deleteRawMaterialPurchase: (id: string) => Promise<void>;
 
   // Raw Material Stock Transactions
-  fetchRawMaterialTransactions: (params?: { materialId?: string; type?: string; startDate?: string; endDate?: string }) => Promise<void>;
+  fetchRawMaterialTransactions: (params?: RawMaterialTxnQuery) => Promise<void>;
   createRawMaterialTransaction: (txn: Partial<RawMaterialTransaction>) => Promise<void>;
   deleteRawMaterialTransaction: (id: string) => Promise<void>;
 
@@ -147,6 +158,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   rawMaterials: [],
   rawMaterialPurchases: [],
   rawMaterialTransactions: [],
+  rawMaterialTransactionsTotal: 0,
+  rawMaterialTxnQuery: {},
   isLoading: false,
   isInitialized: false,
 
@@ -259,6 +272,8 @@ export const useDataStore = create<DataState>((set, get) => ({
       rawMaterials: [],
       rawMaterialPurchases: [],
       rawMaterialTransactions: [],
+      rawMaterialTransactionsTotal: 0,
+      rawMaterialTxnQuery: {},
     });
 
     // Clear store-specific cache when switching stores
@@ -914,8 +929,14 @@ export const useDataStore = create<DataState>((set, get) => ({
     const currentStoreId = useAuthStore.getState().currentStoreId;
     if (!currentStoreId) return;
     try {
-      const rawMaterialTransactions = await api.getRawMaterialTransactions(currentStoreId, params);
-      set({ rawMaterialTransactions: rawMaterialTransactions || [] });
+      const res = await api.getRawMaterialTransactions(currentStoreId, params);
+      // Paginated requests return { items, total }; legacy calls return an array.
+      if (Array.isArray(res)) {
+        set({ rawMaterialTransactions: res || [], rawMaterialTransactionsTotal: res?.length || 0 });
+      } else {
+        set({ rawMaterialTransactions: res?.items || [], rawMaterialTransactionsTotal: res?.total || 0 });
+      }
+      set({ rawMaterialTxnQuery: params || {} });
     } catch (error) {
       console.error('Failed to fetch raw material transactions:', error);
     }
@@ -928,12 +949,12 @@ export const useDataStore = create<DataState>((set, get) => ({
       throw new Error('User or store not authenticated');
     }
     await api.createRawMaterialTransaction({ ...txn, storeId: currentStoreId, createdBy: currentUser.id });
-    await Promise.all([get().fetchRawMaterialTransactions(), get().fetchRawMaterials()]);
+    await Promise.all([get().fetchRawMaterialTransactions(get().rawMaterialTxnQuery), get().fetchRawMaterials()]);
   },
 
   deleteRawMaterialTransaction: async (id) => {
     await api.deleteRawMaterialTransaction(id);
-    await Promise.all([get().fetchRawMaterialTransactions(), get().fetchRawMaterials()]);
+    await Promise.all([get().fetchRawMaterialTransactions(get().rawMaterialTxnQuery), get().fetchRawMaterials()]);
   },
 
   setItemRecipe: async (itemId, lines) => {

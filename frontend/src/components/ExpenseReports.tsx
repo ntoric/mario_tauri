@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Calendar, BarChart3, TrendingUp, Download, Loader2, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { Calendar, BarChart3, Download, Loader2, Search, ArrowUp, ArrowDown, IndianRupee, Receipt, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
@@ -221,171 +221,161 @@ const ExpenseReports: React.FC = () => {
     totalAmount > 0 ? (amount / totalAmount * 100).toFixed(1) : '0.0';
 
   return (
-    <div className="expense-reports-page">
-      <div className="tabs">
+    <div className="inv-page expense-reports-page">
+      <div className="inv-tabs">
         <button
-          className={`tab ${activeTab === 'category' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'category' ? 'active' : ''}`}
           onClick={() => setActiveTab('category')}
         >
-          <BarChart3 size={18} />
+          <BarChart3 size={15} />
           By Category
         </button>
         <button
-          className={`tab ${activeTab === 'date' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'date' ? 'active' : ''}`}
           onClick={() => setActiveTab('date')}
         >
-          <Calendar size={18} />
+          <Calendar size={15} />
           By Date
         </button>
       </div>
 
-      <div className="content-header">
-        <div className="date-filters">
-          <div className="date-input">
-            <Calendar size={16} />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              placeholder="Start date"
-            />
-          </div>
-          <div className="date-input">
-            <Calendar size={16} />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              placeholder="End date"
-            />
-          </div>
-          <Button onClick={handleFilter} variant="secondary" size="sm" disabled={isLoading}>
-            {isLoading ? <Loader2 className="animate-spin" size={16} /> : null}
-            Filter
-          </Button>
-          {(startDate || endDate || appliedStart || appliedEnd) && (
-            <Button onClick={clearFilter} variant="ghost" size="sm">
-              Clear
-            </Button>
-          )}
-          {activeTab === 'category' && (
-            <div className="search-bar">
-              <Search size={15} />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search categories..."
-              />
-            </div>
-          )}
-          <select
-            className="form-input"
-            value={pageSize}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (activeTab === 'category') {
-                setCategoryPageSize(n);
-                setCategoryPage(1);
-              } else {
-                setDatePageSize(n);
-                setDatePage(1);
-              }
-            }}
-            style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
-            title="Rows per page"
-          >
-            {PAGE_SIZES.map(n => (
-              <option key={n} value={n}>{n} / page</option>
-            ))}
-          </select>
+      <div className="inv-toolbar">
+        <div className="inv-date">
+          <Calendar size={14} />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            placeholder="Start date"
+          />
         </div>
+        <div className="inv-date">
+          <Calendar size={14} />
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            placeholder="End date"
+          />
+        </div>
+        <button className="inv-toolbar-btn" onClick={handleFilter} disabled={isLoading}>
+          {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Filter size={14} />}
+          Filter
+        </button>
+        {(startDate || endDate || appliedStart || appliedEnd) && (
+          <button className="inv-toolbar-btn is-ghost" onClick={clearFilter}>Clear</button>
+        )}
+        {activeTab === 'category' && (
+          <div className="inv-search">
+            <Search size={15} />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search categories..."
+            />
+          </div>
+        )}
+        <select
+          className="inv-select"
+          value={pageSize}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (activeTab === 'category') {
+              setCategoryPageSize(n);
+              setCategoryPage(1);
+            } else {
+              setDatePageSize(n);
+              setDatePage(1);
+            }
+          }}
+          title="Rows per page"
+        >
+          {PAGE_SIZES.map(n => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </select>
+        <div className="inv-spacer" />
         <Button onClick={exportReport} variant="secondary" disabled={exporting}>
-          <Download size={18} />
+          <Download size={16} />
           Export CSV
         </Button>
       </div>
 
       {/* Summary Cards */}
-      <div className="summary-cards">
-        <div className="summary-card">
-          <div className="card-icon">
-            <TrendingUp size={24} />
-          </div>
-          <div className="card-content">
-            <div className="card-label">Total Expenses</div>
-            <div className="card-value">{formatCurrency(totalAmount)}</div>
+      <div className="inv-stats">
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-primary"><IndianRupee size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Total Expenses</div>
+            <div className="inv-stat-value">{formatCurrency(totalAmount)}</div>
+            <div className="inv-stat-sub">for selected period</div>
           </div>
         </div>
-        <div className="summary-card">
-          <div className="card-icon">
-            <BarChart3 size={24} />
-          </div>
-          <div className="card-content">
-            <div className="card-label">Total Transactions</div>
-            <div className="card-value">{totalCount}</div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-info"><Receipt size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Total Transactions</div>
+            <div className="inv-stat-value">{totalCount}</div>
+            <div className="inv-stat-sub">{totalRows} grouped row{totalRows === 1 ? '' : 's'}</div>
           </div>
         </div>
       </div>
 
       {/* Expense Split Chart */}
       {donutData.length > 0 && (
-        <div className="report-widget-grid">
-          <div className="card">
-            <div className="card-header">
-              <h3 style={{ margin: 0, fontSize: '1rem' }}>
-                Expense Split — {activeTab === 'category' ? 'By Category' : 'By Date'}
-              </h3>
-            </div>
-            <div className="card-body">
-              <div className="chart-split">
-                <DonutChart
-                  data={donutData}
-                  size={150}
-                  thickness={20}
-                  centerValue={formatCurrency(totalAmount)}
-                  centerLabel="total"
-                />
-                <ChartLegend data={donutData} formatValue={formatCurrency} />
-              </div>
+        <div className="inv-card">
+          <div className="inv-panel-head">
+            <span className="inv-panel-title">Expense Split — {activeTab === 'category' ? 'By Category' : 'By Date'}</span>
+            <span className="inv-panel-sub">top {Math.min(donutData.length, 6)} slices</span>
+          </div>
+          <div style={{ padding: '1.1rem' }}>
+            <div className="chart-split">
+              <DonutChart
+                data={donutData}
+                size={150}
+                thickness={20}
+                centerValue={formatCurrency(totalAmount)}
+                centerLabel="total"
+              />
+              <ChartLegend data={donutData} formatValue={formatCurrency} />
             </div>
           </div>
         </div>
       )}
 
       {/* Reports Table */}
-      <div className="reports-table-container">
+      <div className="inv-card">
         {isLoading && totalRows === 0 ? (
-          <div className="loading-state">
-            <Loader2 className="animate-spin" size={32} />
-            <p>Loading reports...</p>
+          <div className="inv-loading">
+            <Loader2 className="animate-spin" size={28} />
           </div>
         ) : (
           <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-            <table className="reports-table">
+            <table className="inv-table">
               <thead>
                 {activeTab === 'category' ? (
                   <tr>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleCategorySort('category')}>
+                    <th className="inv-sort" onClick={() => handleCategorySort('category')}>
                       Category <CategorySortIcon field="category" />
                     </th>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleCategorySort('amount')}>
+                    <th className="inv-sort num" onClick={() => handleCategorySort('amount')}>
                       Total Amount <CategorySortIcon field="amount" />
                     </th>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleCategorySort('count')}>
+                    <th className="inv-sort num" onClick={() => handleCategorySort('count')}>
                       Expense Count <CategorySortIcon field="count" />
                     </th>
                     <th>Percentage</th>
                   </tr>
                 ) : (
                   <tr>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleDateSort('date')}>
+                    <th className="inv-sort" onClick={() => handleDateSort('date')}>
                       Date <DateSortIcon field="date" />
                     </th>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleDateSort('amount')}>
+                    <th className="inv-sort num" onClick={() => handleDateSort('amount')}>
                       Total Amount <DateSortIcon field="amount" />
                     </th>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleDateSort('count')}>
+                    <th className="inv-sort num" onClick={() => handleDateSort('count')}>
                       Expense Count <DateSortIcon field="count" />
                     </th>
                     <th>Percentage</th>
@@ -403,9 +393,9 @@ const ExpenseReports: React.FC = () => {
                   ) : (
                     (categoryReport?.rows ?? []).map((report) => (
                       <tr key={report.categoryId}>
-                        <td>{report.categoryName}</td>
-                        <td className="amount">{formatCurrency(report.totalAmount)}</td>
-                        <td>{report.expenseCount}</td>
+                        <td><span className="inv-name">{report.categoryName}</span></td>
+                        <td className="num inv-money">{formatCurrency(report.totalAmount)}</td>
+                        <td className="num">{report.expenseCount}</td>
                         <td>
                           <div className="percentage-bar">
                             <div
@@ -428,9 +418,9 @@ const ExpenseReports: React.FC = () => {
                   ) : (
                     (dateReport?.rows ?? []).map((summary) => (
                       <tr key={summary.date}>
-                        <td>{new Date(summary.date).toLocaleDateString()}</td>
-                        <td className="amount">{formatCurrency(summary.totalAmount)}</td>
-                        <td>{summary.expenseCount}</td>
+                        <td><span className="inv-name">{new Date(summary.date).toLocaleDateString()}</span></td>
+                        <td className="num inv-money">{formatCurrency(summary.totalAmount)}</td>
+                        <td className="num">{summary.expenseCount}</td>
                         <td>
                           <div className="percentage-bar">
                             <div

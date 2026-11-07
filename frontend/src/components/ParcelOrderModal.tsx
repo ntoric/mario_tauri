@@ -257,7 +257,7 @@ const ParcelOrderModal: React.FC = () => {
       <div className="modal order-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>
-            <Package size={20} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+            <Package size={19} />
             Parcel Order
           </h2>
           <button className="close-btn" onClick={closeParcelOrderModal}>

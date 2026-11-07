@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, Package, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, Package, PackagePlus, PackageMinus, SlidersHorizontal, Boxes, IndianRupee, AlertTriangle, Receipt, Filter } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { useSearchParams } from 'react-router-dom';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -18,22 +18,19 @@ const PAYMENT_METHODS = ['Cash', 'Card', 'UPI', 'Net Banking', 'Credit'];
 
 const today = () => new Date().toISOString().split('T')[0];
 
-const txnBadgeStyle = (type: RawMaterialTransactionType): React.CSSProperties => {
-  const colors: Record<RawMaterialTransactionType, string> = {
-    purchase: '#2e7d32',
-    usage: '#c62828',
-    wastage: '#e65100',
-    adjustment: '#1565c0',
-    consumption: '#6a1b9a',
-  };
-  return { background: `${colors[type]}1f`, color: colors[type] };
+const txnBadgeClass: Record<RawMaterialTransactionType, string> = {
+  purchase: 'is-success',
+  usage: 'is-danger',
+  wastage: 'is-warning',
+  adjustment: 'is-info',
+  consumption: 'is-purple',
 };
 
 type TxnFormType = 'usage' | 'wastage' | 'adjustment';
 
 const Inventory: React.FC = () => {
   const {
-    rawMaterials, rawMaterialPurchases, rawMaterialTransactions,
+    rawMaterials, rawMaterialPurchases, rawMaterialTransactions, rawMaterialTransactionsTotal,
     fetchRawMaterials, fetchRawMaterialPurchases, fetchRawMaterialTransactions,
     createRawMaterial, updateRawMaterial, deleteRawMaterial,
     createRawMaterialPurchase, updateRawMaterialPurchase, deleteRawMaterialPurchase,
@@ -88,6 +85,8 @@ const Inventory: React.FC = () => {
 
   const emptyTxnForm = { quantity: '', notes: '', date: today() };
   const [txnForm, setTxnForm] = useState(emptyTxnForm);
+  const [txnMatSearch, setTxnMatSearch] = useState('');
+  const [txnMatDropOpen, setTxnMatDropOpen] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -100,11 +99,19 @@ const Inventory: React.FC = () => {
     });
   }, [setHeaderContent]);
 
+  // Materials power the stats bar and the material pickers used across tabs.
   useEffect(() => {
     fetchRawMaterials();
-    fetchRawMaterialPurchases();
-    fetchRawMaterialTransactions();
-  }, [fetchRawMaterials, fetchRawMaterialPurchases, fetchRawMaterialTransactions]);
+  }, [fetchRawMaterials]);
+
+  // Load each tab's data the first time that tab is opened.
+  const loadedTabsRef = useRef<Set<InvTab>>(new Set());
+  useEffect(() => {
+    if (loadedTabsRef.current.has(activeTab)) return;
+    loadedTabsRef.current.add(activeTab);
+    if (activeTab === 'purchases') fetchRawMaterialPurchases();
+    else if (activeTab === 'transactions') fetchRawMaterialTransactions({ page: 1, limit: PAGE_SIZE });
+  }, [activeTab, fetchRawMaterialPurchases, fetchRawMaterialTransactions]);
 
   const loadConsumption = useCallback(async (start?: string, end?: string) => {
     if (!currentStoreId) return;
@@ -282,7 +289,7 @@ const Inventory: React.FC = () => {
         notify.success('Purchase recorded — stock updated');
       }
       setPurchaseModal({ isOpen: false, editing: null });
-      fetchRawMaterialTransactions();
+      if (loadedTabsRef.current.has('transactions')) fetchTxnPage(txnPage);
     } catch (err: any) {
       notify.error(err.message || 'Failed to save purchase');
     } finally {
@@ -300,7 +307,7 @@ const Inventory: React.FC = () => {
     try {
       await deleteRawMaterialPurchase(purchase.id);
       notify.success('Purchase deleted and stock reversed');
-      fetchRawMaterialTransactions();
+      if (loadedTabsRef.current.has('transactions')) fetchTxnPage(txnPage);
     } catch (err: any) {
       notify.error(err.message || 'Failed to delete purchase');
     } finally {
@@ -312,11 +319,28 @@ const Inventory: React.FC = () => {
 
   const openTxnForm = (type: TxnFormType, materialId?: string) => {
     setTxnForm(emptyTxnForm);
-    setTxnModal({ isOpen: true, type, materialId: materialId || rawMaterials[0]?.id || '' });
+    const id = materialId || rawMaterials[0]?.id || '';
+    setTxnModal({ isOpen: true, type, materialId: id });
+    setTxnMatSearch(id ? (rawMaterials.find(m => m.id === id)?.name || '') : '');
+    setTxnMatDropOpen(false);
+  };
+
+  const filteredTxnMaterials = rawMaterials.filter(m =>
+    m.name.toLowerCase().includes(txnMatSearch.trim().toLowerCase())
+  );
+
+  const selectTxnMaterial = (m: { id: string; name: string }) => {
+    setTxnModal(prev => ({ ...prev, materialId: m.id }));
+    setTxnMatSearch(m.name);
+    setTxnMatDropOpen(false);
   };
 
   const handleTxnSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!txnModal.materialId) {
+      notify.error('Please select a material from the list');
+      return;
+    }
     setIsSubmitting(true);
     const payload: any = {
       materialId: txnModal.materialId,
@@ -346,6 +370,10 @@ const Inventory: React.FC = () => {
     try {
       await deleteRawMaterialTransaction(txn.id);
       notify.success('Transaction deleted and stock recalculated');
+      // If the page emptied out, step back one page.
+      if (useDataStore.getState().rawMaterialTransactions.length === 0 && txnPage > 1) {
+        goTxnPage(txnPage - 1);
+      }
     } catch (err: any) {
       notify.error(err.message || 'Failed to delete transaction');
     } finally {
@@ -366,15 +394,26 @@ const Inventory: React.FC = () => {
     fetchRawMaterialPurchases();
   };
 
+  // Transactions are server-side paginated: every page change or filter
+  // apply re-queries the API with the current filters + page/limit.
+  const fetchTxnPage = (page: number, filters = { materialId: txnMaterial, type: txnType, startDate: txnStart, endDate: txnEnd }) => {
+    fetchRawMaterialTransactions({ ...filters, page, limit: PAGE_SIZE });
+  };
+
+  const goTxnPage = (page: number) => {
+    setTxnPage(page);
+    fetchTxnPage(page);
+  };
+
   const applyTxnFilters = () => {
     setTxnPage(1);
-    fetchRawMaterialTransactions({ materialId: txnMaterial, type: txnType, startDate: txnStart, endDate: txnEnd });
+    fetchTxnPage(1);
   };
 
   const clearTxnFilters = () => {
     setTxnMaterial(''); setTxnType(''); setTxnStart(''); setTxnEnd('');
     setTxnPage(1);
-    fetchRawMaterialTransactions();
+    fetchTxnPage(1, { materialId: '', type: '', startDate: '', endDate: '' });
   };
 
   const filteredMaterials = rawMaterials.filter(m =>
@@ -395,15 +434,15 @@ const Inventory: React.FC = () => {
 
   const paginatedMaterials = useMemo(() => filteredMaterials.slice((stockPage - 1) * PAGE_SIZE, stockPage * PAGE_SIZE), [filteredMaterials, stockPage]);
   const paginatedPurchases = useMemo(() => filteredPurchases.slice((purchasePage - 1) * PAGE_SIZE, purchasePage * PAGE_SIZE), [filteredPurchases, purchasePage]);
-  const paginatedTxns = useMemo(() => rawMaterialTransactions.slice((txnPage - 1) * PAGE_SIZE, txnPage * PAGE_SIZE), [rawMaterialTransactions, txnPage]);
 
   const lowStockCount = rawMaterials.filter(m => m.minStock > 0 && m.currentStock <= m.minStock).length;
+  const stockValue = rawMaterials.reduce((s, m) => s + (m.currentStock || 0) * (m.avgCost || 0), 0);
 
   const txnModalMaterial = materialById[txnModal.materialId];
   const txnQuantityLabel = txnModal.type === 'adjustment' ? 'New Stock Level *' : 'Quantity *';
 
   return (
-    <div className="expenses-page">
+    <div className="inv-page">
       <ConfirmDialog
         isOpen={confirmState.isOpen}
         title={confirmState.title}
@@ -533,35 +572,24 @@ const Inventory: React.FC = () => {
                       }}
                     />
                     {purchaseMatDropOpen && (
-                      <div style={{
-                        position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
-                        background: 'var(--white, #fff)', border: '1px solid var(--gray-200)',
-                        borderRadius: '8px', maxHeight: '200px', overflowY: 'auto',
-                        boxShadow: '0 8px 20px rgba(10,15,22,0.15)',
-                      }}>
+                      <div className="inv-dropdown">
                         {filteredPurchaseMaterials.map(m => (
                           <div
                             key={m.id}
+                            className="inv-dropdown-option"
                             onMouseDown={() => selectPurchaseMaterial(m)}
-                            style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--gray-100)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                           >
-                            {m.name} <span style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>({m.unit})</span>
+                            {m.name} <span className="unit">({m.unit})</span>
                           </div>
                         ))}
                         {purchaseMatSearch.trim() && !purchaseExactMatch && (
                           <div
+                            className="inv-dropdown-create"
                             onMouseDown={handleCreatePurchaseMaterial}
-                            style={{
-                              padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem',
-                              color: 'var(--primary)', fontWeight: 600,
-                              borderTop: filteredPurchaseMaterials.length ? '1px solid var(--gray-200)' : undefined,
-                              display: 'flex', alignItems: 'center', gap: '0.4rem',
-                            }}
+                            style={{ borderTop: filteredPurchaseMaterials.length ? undefined : 'none' }}
                           >
                             {creatingPurchaseMaterial ? <Loader2 size={13} className="animate-spin" style={{ flexShrink: 0 }} /> : <Plus size={13} style={{ flexShrink: 0 }} />}
-                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span className="label">
                               Add "{purchaseMatSearch.trim()}" as new material
                             </span>
                             <select
@@ -569,9 +597,8 @@ const Inventory: React.FC = () => {
                               onMouseDown={e => e.stopPropagation()}
                               onClick={e => e.stopPropagation()}
                               onChange={e => setPurchaseNewUnit(e.target.value)}
-                              style={{ padding: '0.15rem 0.2rem', fontSize: '0.8rem', width: '64px', flexShrink: 0 }}
                             >
-                              {['pcs','kg','g','mg','l','ml','packet','box','dozen','tray'].map(u => <option key={u} value={u}>{u}</option>)}
+                              {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
                           </div>
                         )}
@@ -708,18 +735,39 @@ const Inventory: React.FC = () => {
             <form onSubmit={handleTxnSubmit}>
               <div className="modal-body">
                 <div className="form-row">
-                  <div className="form-group">
+                  <div className="form-group" style={{ position: 'relative' }}>
                     <label>Material *</label>
-                    <select
-                      value={txnModal.materialId}
-                      onChange={e => setTxnModal({ ...txnModal, materialId: e.target.value })}
-                      required
-                    >
-                      <option value="">Select material</option>
-                      {rawMaterials.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={txnMatSearch}
+                      placeholder="Search material..."
+                      required={!txnModal.materialId}
+                      onFocus={() => setTxnMatDropOpen(true)}
+                      onBlur={() => setTimeout(() => setTxnMatDropOpen(false), 150)}
+                      onChange={e => {
+                        setTxnMatSearch(e.target.value);
+                        setTxnMatDropOpen(true);
+                        setTxnModal(prev => ({ ...prev, materialId: '' }));
+                      }}
+                    />
+                    {txnMatDropOpen && (
+                      <div className="inv-dropdown">
+                        {filteredTxnMaterials.map(m => (
+                          <div
+                            key={m.id}
+                            className="inv-dropdown-option"
+                            onMouseDown={() => selectTxnMaterial(m)}
+                          >
+                            {m.name} <span className="unit">({m.unit})</span>
+                          </div>
+                        ))}
+                        {filteredTxnMaterials.length === 0 && (
+                          <div className="inv-dropdown-option" style={{ color: 'var(--gray-400)', cursor: 'default' }}>
+                            No materials match
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label>Type *</label>
@@ -737,9 +785,9 @@ const Inventory: React.FC = () => {
                   </div>
                 </div>
                 {txnModalMaterial && (
-                  <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: 'var(--gray-400)' }}>
+                  <div className="inv-hint">
                     Current stock: <strong>{txnModalMaterial.currentStock} {txnModalMaterial.unit}</strong>
-                  </p>
+                  </div>
                 )}
                 <div className="form-row">
                   <div className="form-group">
@@ -788,40 +836,81 @@ const Inventory: React.FC = () => {
         </div>
       )}
 
+      {/* Stats */}
+      <div className="inv-stats">
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-primary"><Boxes size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Materials</div>
+            <div className="inv-stat-value">{rawMaterials.length}</div>
+            <div className="inv-stat-sub">tracked in inventory</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-success"><IndianRupee size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Est. Stock Value</div>
+            <div className="inv-stat-value">{formatCurrency(stockValue)}</div>
+            <div className="inv-stat-sub">at current avg cost</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className={`inv-stat-icon ${lowStockCount > 0 ? 'tint-danger' : 'tint-neutral'}`}><AlertTriangle size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Low Stock</div>
+            <div className="inv-stat-value">{lowStockCount}</div>
+            <div className="inv-stat-sub">{lowStockCount > 0 ? 'below minimum level' : 'all levels healthy'}</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-warning"><Receipt size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Purchase Spend</div>
+            <div className="inv-stat-value">{formatCurrency(filteredTxnTotal)}</div>
+            <div className="inv-stat-sub">{filteredPurchases.length} record{filteredPurchases.length === 1 ? '' : 's'} shown</div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
-      <div className="tabs">
+      <div className="inv-tabs">
         <button
-          className={`tab ${activeTab === 'purchases' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'purchases' ? 'active' : ''}`}
           onClick={() => setActiveTab('purchases')}
         >
           Purchases
+          <span className="inv-tab-count">{filteredPurchases.length}</span>
         </button>
         <button
-          className={`tab ${activeTab === 'transactions' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'transactions' ? 'active' : ''}`}
           onClick={() => setActiveTab('transactions')}
         >
           Transactions
+          <span className="inv-tab-count">{rawMaterialTransactionsTotal}</span>
         </button>
         <button
-          className={`tab ${activeTab === 'consumption' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'consumption' ? 'active' : ''}`}
           onClick={() => setActiveTab('consumption')}
         >
           Consumption
         </button>
         <button
-          className={`tab ${activeTab === 'stock' ? 'active' : ''}`}
+          className={`inv-tab ${activeTab === 'stock' ? 'active' : ''}`}
           onClick={() => setActiveTab('stock')}
         >
-          Stock {lowStockCount > 0 && <span className="payment-badge" style={{ marginLeft: 6, background: '#c628281f', color: '#c62828' }}>{lowStockCount} low</span>}
+          Stock
+          {lowStockCount > 0
+            ? <span className="inv-tab-count is-alert">{lowStockCount} low</span>
+            : <span className="inv-tab-count">{rawMaterials.length}</span>}
         </button>
       </div>
 
       {/* Stock Tab */}
       {activeTab === 'stock' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
               <input
                 type="text"
                 placeholder="Search materials..."
@@ -829,41 +918,41 @@ const Inventory: React.FC = () => {
                 onChange={e => { setStockSearch(e.target.value); setStockPage(1); }}
               />
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Button variant="secondary" onClick={() => openTxnForm('wastage')}>
-              <PackageMinus size={18} />
+            <div className="inv-spacer" />
+            <button className="inv-toolbar-btn" onClick={() => openTxnForm('wastage')}>
+              <PackageMinus size={15} />
               Usage / Wastage
-            </Button>
-            <Button variant="secondary" onClick={() => openPurchaseForm()}>
-              <PackagePlus size={18} />
+            </button>
+            <button className="inv-toolbar-btn" onClick={() => openPurchaseForm()}>
+              <PackagePlus size={15} />
               Record Purchase
-            </Button>
+            </button>
             <Button onClick={() => openMaterialForm()}>
-              <Plus size={18} />
+              <Plus size={16} />
               Add Material
             </Button>
-            </div>
           </div>
 
-          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="inv-card">
             {filteredMaterials.length === 0 ? (
-              <div className="empty-state">
-                <Package size={48} />
-                <p>No raw materials found</p>
-                <Button onClick={() => openMaterialForm()}>Add your first material</Button>
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><Package size={26} /></div>
+                <div className="inv-empty-title">No raw materials found</div>
+                <div className="inv-empty-sub">Add materials to start tracking stock, purchases and usage.</div>
+                <Button onClick={() => openMaterialForm()} style={{ marginTop: '0.6rem' }}>Add your first material</Button>
               </div>
             ) : (
               <>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+                <div className="inv-scroll">
+                  <table className="inv-table">
                     <thead>
                       <tr>
                         <th>Material</th>
                         <th>Unit</th>
-                        <th>Current Stock</th>
-                        <th>Min Stock</th>
+                        <th className="num">Current Stock</th>
+                        <th className="num">Min Stock</th>
                         <th>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th className="num">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -872,39 +961,43 @@ const Inventory: React.FC = () => {
                         return (
                           <tr key={material.id}>
                             <td>
-                              <div>{material.name}</div>
+                              <span className="inv-name">{material.name}</span>
                               {material.description && (
-                                <small style={{ color: 'var(--gray-400)' }}>{material.description}</small>
+                                <span className="inv-sub">{material.description}</span>
                               )}
                             </td>
-                            <td>{material.unit}</td>
-                            <td className="col-amount" style={{ fontWeight: 600, color: material.currentStock < 0 ? 'var(--danger)' : undefined }}>
+                            <td><span className="inv-badge is-neutral">{material.unit}</span></td>
+                            <td className={`num ${material.currentStock < 0 ? 'inv-qty-neg' : 'inv-strong'}`}>
                               {material.currentStock} {material.unit}
                             </td>
-                            <td>{material.minStock > 0 ? `${material.minStock} ${material.unit}` : '—'}</td>
+                            <td className="num inv-muted">
+                              {material.minStock > 0 ? `${material.minStock} ${material.unit}` : '—'}
+                            </td>
                             <td>
                               {isLow ? (
-                                <span className="payment-badge" style={{ background: '#c628281f', color: '#c62828' }}>Low Stock</span>
+                                <span className="inv-badge is-danger"><span className="inv-dot" />Low Stock</span>
                               ) : (
-                                <span className="payment-badge" style={{ background: '#2e7d321f', color: '#2e7d32' }}>In Stock</span>
+                                <span className="inv-badge is-success"><span className="inv-dot" />In Stock</span>
                               )}
                             </td>
-                            <td className="col-actions">
-                              <button title="Record purchase" onClick={() => openPurchaseForm(material.id)}>
-                                <PackagePlus size={14} />
-                              </button>
-                              <button title="Usage / wastage" onClick={() => openTxnForm('wastage', material.id)}>
-                                <PackageMinus size={14} />
-                              </button>
-                              <button title="Adjust stock" onClick={() => openTxnForm('adjustment', material.id)}>
-                                <SlidersHorizontal size={14} />
-                              </button>
-                              <button title="Edit" onClick={() => openMaterialForm(material)}>
-                                <Edit2 size={14} />
-                              </button>
-                              <button className="delete" title="Delete" onClick={() => handleDeleteMaterial(material)} disabled={loadingId === material.id}>
-                                {loadingId === material.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                              </button>
+                            <td>
+                              <div className="inv-actions">
+                                <button className="inv-icon-btn tint-primary" title="Record purchase" onClick={() => openPurchaseForm(material.id)}>
+                                  <PackagePlus size={14} />
+                                </button>
+                                <button className="inv-icon-btn" title="Usage / wastage" onClick={() => openTxnForm('wastage', material.id)}>
+                                  <PackageMinus size={14} />
+                                </button>
+                                <button className="inv-icon-btn" title="Adjust stock" onClick={() => openTxnForm('adjustment', material.id)}>
+                                  <SlidersHorizontal size={14} />
+                                </button>
+                                <button className="inv-icon-btn" title="Edit" onClick={() => openMaterialForm(material)}>
+                                  <Edit2 size={14} />
+                                </button>
+                                <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteMaterial(material)} disabled={loadingId === material.id}>
+                                  {loadingId === material.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -922,15 +1015,15 @@ const Inventory: React.FC = () => {
               </>
             )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Purchases Tab */}
       {activeTab === 'purchases' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="search-bar">
-              <Search size={18} />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
               <input
                 type="text"
                 placeholder="Search purchases..."
@@ -938,95 +1031,100 @@ const Inventory: React.FC = () => {
                 onChange={e => { setPurchaseSearch(e.target.value); setPurchasePage(1); }}
               />
             </div>
-            <div className="date-filters">
-              <select
-                value={purchaseMaterial}
-                onChange={e => setPurchaseMaterial(e.target.value)}
-                style={{ padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--gray-300)', background: 'var(--light)', color: 'inherit' }}
-              >
-                <option value="">All materials</option>
-                {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={purchaseStart} onChange={e => setPurchaseStart(e.target.value)} />
-              </div>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={purchaseEnd} onChange={e => setPurchaseEnd(e.target.value)} />
-              </div>
-              <Button onClick={applyPurchaseFilters} variant="secondary" size="sm">Filter</Button>
-              {(purchaseMaterial || purchaseStart || purchaseEnd) && (
-                <Button onClick={clearPurchaseFilters} variant="ghost" size="sm">Clear</Button>
-              )}
+            <select
+              className="inv-select"
+              value={purchaseMaterial}
+              onChange={e => setPurchaseMaterial(e.target.value)}
+            >
+              <option value="">All materials</option>
+              {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={purchaseStart} onChange={e => setPurchaseStart(e.target.value)} />
             </div>
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={purchaseEnd} onChange={e => setPurchaseEnd(e.target.value)} />
+            </div>
+            <button className="inv-toolbar-btn" onClick={applyPurchaseFilters}>
+              <Filter size={14} />
+              Filter
+            </button>
+            {(purchaseMaterial || purchaseStart || purchaseEnd) && (
+              <button className="inv-toolbar-btn is-ghost" onClick={clearPurchaseFilters}>Clear</button>
+            )}
+            <div className="inv-spacer" />
             <Button onClick={() => openPurchaseForm()}>
-              <Plus size={18} />
+              <Plus size={16} />
               Record Purchase
             </Button>
           </div>
 
-          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="inv-card">
             {filteredPurchases.length === 0 ? (
-              <div className="empty-state">
-                <PackagePlus size={48} />
-                <p>No purchases found</p>
-                <Button onClick={() => openPurchaseForm()}>Record your first purchase</Button>
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><PackagePlus size={26} /></div>
+                <div className="inv-empty-title">No purchases found</div>
+                <div className="inv-empty-sub">Record purchases to keep stock levels and costs up to date.</div>
+                <Button onClick={() => openPurchaseForm()} style={{ marginTop: '0.6rem' }}>Record your first purchase</Button>
               </div>
             ) : (
               <>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+                <div className="inv-scroll">
+                  <table className="inv-table">
                     <thead>
                       <tr>
                         <th>Date</th>
                         <th>Material</th>
-                        <th>Quantity</th>
-                        <th>Remaining</th>
+                        <th className="num">Quantity</th>
+                        <th className="num">Remaining</th>
                         <th>Expiry</th>
-                        <th>Unit Cost</th>
-                        <th>Total Cost</th>
+                        <th className="num">Unit Cost</th>
+                        <th className="num">Total Cost</th>
                         <th>Vendor</th>
                         <th>Invoice</th>
                         <th>Payment</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th className="num">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedPurchases.map(purchase => (
                         <tr key={purchase.id}>
-                          <td className="col-date">{new Date(purchase.purchaseDate).toLocaleDateString()}</td>
-                          <td>{purchase.materialName || '—'}</td>
-                          <td>{purchase.quantity} {purchase.materialUnit}</td>
-                          <td style={{ color: purchase.remainingQty != null && purchase.remainingQty <= 0 ? 'var(--gray-400)' : 'inherit' }}>
+                          <td className="inv-muted">{new Date(purchase.purchaseDate).toLocaleDateString()}</td>
+                          <td><span className="inv-name">{purchase.materialName || '—'}</span></td>
+                          <td className="num inv-strong">{purchase.quantity} {purchase.materialUnit}</td>
+                          <td className={`num ${purchase.remainingQty != null && purchase.remainingQty <= 0 ? 'inv-muted' : ''}`}>
                             {purchase.remainingQty != null ? `${purchase.remainingQty} ${purchase.materialUnit}` : '—'}
                           </td>
-                          <td className="col-date" style={{ color: purchase.expiryDate && new Date(purchase.expiryDate) < new Date() ? '#c62828' : 'inherit' }}>
+                          <td className={purchase.expiryDate && new Date(purchase.expiryDate) < new Date() ? 'inv-expired' : 'inv-muted'}>
                             {purchase.expiryDate ? new Date(purchase.expiryDate).toLocaleDateString() : '—'}
                           </td>
-                          <td className="col-amount">{formatCurrency(purchase.unitCost)}</td>
-                          <td className="col-amount" style={{ fontWeight: 600 }}>{formatCurrency(purchase.totalCost)}</td>
+                          <td className="num">{formatCurrency(purchase.unitCost)}</td>
+                          <td className="num inv-money">{formatCurrency(purchase.totalCost)}</td>
                           <td>{purchase.vendor || '—'}</td>
-                          <td>{purchase.invoiceNumber || '—'}</td>
-                          <td className="col-payment">
-                            {purchase.paymentMethod ? <span className="payment-badge">{purchase.paymentMethod}</span> : '—'}
+                          <td className="inv-muted">{purchase.invoiceNumber || '—'}</td>
+                          <td>
+                            {purchase.paymentMethod ? <span className="inv-badge is-neutral">{purchase.paymentMethod}</span> : '—'}
                           </td>
-                          <td className="col-actions">
-                            <button title="Edit" onClick={() => openPurchaseForm(undefined, purchase)}>
-                              <Edit2 size={14} />
-                            </button>
-                            <button className="delete" title="Delete" onClick={() => handleDeletePurchase(purchase)} disabled={loadingId === purchase.id}>
-                              {loadingId === purchase.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                            </button>
+                          <td>
+                            <div className="inv-actions">
+                              <button className="inv-icon-btn" title="Edit" onClick={() => openPurchaseForm(undefined, purchase)}>
+                                <Edit2 size={14} />
+                              </button>
+                              <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeletePurchase(purchase)} disabled={loadingId === purchase.id}>
+                                {loadingId === purchase.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <div style={{ padding: '0.6rem 1rem', borderTop: '1px solid var(--gray-200)', fontSize: '0.9rem', color: 'var(--gray-500)', display: 'flex', justifyContent: 'flex-end', gap: '1.5rem' }}>
+                <div className="inv-card-footer">
                   <span>{filteredPurchases.length} purchase{filteredPurchases.length === 1 ? '' : 's'}</span>
-                  <span>Total: <strong>{formatCurrency(filteredTxnTotal)}</strong></span>
+                  <span>Total spend <strong>{formatCurrency(filteredTxnTotal)}</strong></span>
                 </div>
                 <Pagination
                   currentPage={purchasePage}
@@ -1038,101 +1136,105 @@ const Inventory: React.FC = () => {
               </>
             )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Transactions Tab */}
       {activeTab === 'transactions' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="date-filters">
-              <select
-                value={txnMaterial}
-                onChange={e => setTxnMaterial(e.target.value)}
-                style={{ padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--gray-300)', background: 'var(--light)', color: 'inherit' }}
-              >
-                <option value="">All materials</option>
-                {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              <select
-                value={txnType}
-                onChange={e => setTxnType(e.target.value)}
-                style={{ padding: '0.4rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--gray-300)', background: 'var(--light)', color: 'inherit' }}
-              >
-                <option value="">All types</option>
-                <option value="purchase">Purchase</option>
-                <option value="usage">Usage</option>
-                <option value="wastage">Wastage</option>
-                <option value="adjustment">Adjustment</option>
-                <option value="consumption">Consumption</option>
-              </select>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={txnStart} onChange={e => setTxnStart(e.target.value)} />
-              </div>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={txnEnd} onChange={e => setTxnEnd(e.target.value)} />
-              </div>
-              <Button onClick={applyTxnFilters} variant="secondary" size="sm">Filter</Button>
-              {(txnMaterial || txnType || txnStart || txnEnd) && (
-                <Button onClick={clearTxnFilters} variant="ghost" size="sm">Clear</Button>
-              )}
+        <>
+          <div className="inv-toolbar">
+            <select
+              className="inv-select"
+              value={txnMaterial}
+              onChange={e => setTxnMaterial(e.target.value)}
+            >
+              <option value="">All materials</option>
+              {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <select
+              className="inv-select"
+              value={txnType}
+              onChange={e => setTxnType(e.target.value)}
+            >
+              <option value="">All types</option>
+              <option value="purchase">Purchase</option>
+              <option value="usage">Usage</option>
+              <option value="wastage">Wastage</option>
+              <option value="adjustment">Adjustment</option>
+              <option value="consumption">Consumption</option>
+            </select>
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={txnStart} onChange={e => setTxnStart(e.target.value)} />
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Button variant="secondary" onClick={() => openTxnForm('wastage')}>
-              <PackageMinus size={18} />
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={txnEnd} onChange={e => setTxnEnd(e.target.value)} />
+            </div>
+            <button className="inv-toolbar-btn" onClick={applyTxnFilters}>
+              <Filter size={14} />
+              Filter
+            </button>
+            {(txnMaterial || txnType || txnStart || txnEnd) && (
+              <button className="inv-toolbar-btn is-ghost" onClick={clearTxnFilters}>Clear</button>
+            )}
+            <div className="inv-spacer" />
+            <button className="inv-toolbar-btn" onClick={() => openTxnForm('wastage')}>
+              <PackageMinus size={15} />
               Usage / Wastage
-            </Button>
-            <Button variant="secondary" onClick={() => openTxnForm('adjustment')}>
-              <SlidersHorizontal size={18} />
+            </button>
+            <button className="inv-toolbar-btn" onClick={() => openTxnForm('adjustment')}>
+              <SlidersHorizontal size={15} />
               Adjust Stock
-            </Button>
-            </div>
+            </button>
           </div>
 
-          <div className="expenses-table-container" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {rawMaterialTransactions.length === 0 ? (
-              <div className="empty-state">
-                <Package size={48} />
-                <p>No stock transactions found</p>
+          <div className="inv-card">
+            {rawMaterialTransactionsTotal === 0 ? (
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><Package size={26} /></div>
+                <div className="inv-empty-title">No stock transactions found</div>
+                <div className="inv-empty-sub">Purchases, usage, wastage and adjustments will appear here.</div>
               </div>
             ) : (
               <>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+                <div className="inv-scroll">
+                  <table className="inv-table">
                     <thead>
                       <tr>
                         <th>Date</th>
                         <th>Material</th>
                         <th>Type</th>
-                        <th>Quantity</th>
-                        <th>Stock After</th>
+                        <th className="num">Quantity</th>
+                        <th className="num">Stock After</th>
                         <th>Notes</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th className="num">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedTxns.map(txn => (
+                      {rawMaterialTransactions.map(txn => (
                         <tr key={txn.id}>
-                          <td className="col-date">{new Date(txn.transactionDate).toLocaleDateString()}</td>
-                          <td>{txn.materialName || '—'}</td>
+                          <td className="inv-muted">{new Date(txn.transactionDate).toLocaleDateString()}</td>
+                          <td><span className="inv-name">{txn.materialName || '—'}</span></td>
                           <td>
-                            <span className="payment-badge" style={txnBadgeStyle(txn.type)}>
+                            <span className={`inv-badge ${txnBadgeClass[txn.type] || 'is-neutral'}`}>
+                              <span className="inv-dot" />
                               {txn.type.charAt(0).toUpperCase() + txn.type.slice(1)}
                             </span>
                           </td>
-                          <td className="col-amount" style={{ fontWeight: 600, color: txn.quantity < 0 ? 'var(--danger)' : '#2e7d32' }}>
+                          <td className={`num ${txn.quantity < 0 ? 'inv-qty-neg' : 'inv-qty-pos'}`}>
                             {txn.quantity > 0 ? '+' : ''}{txn.quantity} {txn.materialUnit}
                           </td>
-                          <td>{txn.stockAfter} {txn.materialUnit}</td>
-                          <td>{txn.notes || '—'}</td>
-                          <td className="col-actions">
-                            {txn.type !== 'purchase' && txn.type !== 'consumption' && (
-                              <button className="delete" title="Delete" onClick={() => handleDeleteTxn(txn)} disabled={loadingId === txn.id}>
-                                {loadingId === txn.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                              </button>
-                            )}
+                          <td className="num inv-muted">{txn.stockAfter} {txn.materialUnit}</td>
+                          <td className="inv-muted">{txn.notes || '—'}</td>
+                          <td>
+                            <div className="inv-actions">
+                              {txn.type !== 'purchase' && txn.type !== 'consumption' && (
+                                <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteTxn(txn)} disabled={loadingId === txn.id}>
+                                  {loadingId === txn.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1141,83 +1243,94 @@ const Inventory: React.FC = () => {
                 </div>
                 <Pagination
                   currentPage={txnPage}
-                  totalPages={Math.ceil(rawMaterialTransactions.length / PAGE_SIZE)}
-                  totalItems={rawMaterialTransactions.length}
+                  totalPages={Math.ceil(rawMaterialTransactionsTotal / PAGE_SIZE)}
+                  totalItems={rawMaterialTransactionsTotal}
                   pageSize={PAGE_SIZE}
-                  onPageChange={setTxnPage}
+                  onPageChange={goTxnPage}
                 />
               </>
             )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Consumption Tab */}
       {activeTab === 'consumption' && (
-        <div className="tab-content">
-          <div className="content-header">
-            <div className="date-filters">
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={consStart} onChange={e => setConsStart(e.target.value)} />
-              </div>
-              <div className="date-input">
-                <Calendar size={16} />
-                <input type="date" value={consEnd} onChange={e => setConsEnd(e.target.value)} />
-              </div>
-              <Button onClick={() => loadConsumption(consStart || undefined, consEnd || undefined)} variant="secondary" size="sm">Filter</Button>
-              {(consStart || consEnd) && (
-                <Button onClick={() => { setConsStart(''); setConsEnd(''); loadConsumption(); }} variant="ghost" size="sm">Clear</Button>
-              )}
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={consStart} onChange={e => setConsStart(e.target.value)} />
             </div>
-            <div style={{ marginLeft: 'auto', fontSize: '0.9rem', color: 'var(--gray-500)' }}>
-              Total consumption cost: <strong>{formatCurrency(consumptionReport?.totalCost ?? 0)}</strong>
+            <div className="inv-date">
+              <Calendar size={14} />
+              <input type="date" value={consEnd} onChange={e => setConsEnd(e.target.value)} />
+            </div>
+            <button className="inv-toolbar-btn" onClick={() => loadConsumption(consStart || undefined, consEnd || undefined)}>
+              <Filter size={14} />
+              Filter
+            </button>
+            {(consStart || consEnd) && (
+              <button className="inv-toolbar-btn is-ghost" onClick={() => { setConsStart(''); setConsEnd(''); loadConsumption(); }}>Clear</button>
+            )}
+            <div className="inv-spacer" />
+            <div className="inv-total-pill">
+              Total consumption cost <strong>{formatCurrency(consumptionReport?.totalCost ?? 0)}</strong>
             </div>
           </div>
 
           {loadingConsumption ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-              <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} />
+            <div className="inv-card">
+              <div className="inv-loading"><Loader2 size={24} className="animate-spin" /></div>
             </div>
           ) : !consumptionReport || (consumptionReport.byMaterial.length === 0 && consumptionReport.byItem.length === 0) ? (
-            <div className="empty-state">
-              <Package size={48} />
-              <p>No consumption recorded yet — materials are deducted when orders with recipes are completed.</p>
+            <div className="inv-card">
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><Package size={26} /></div>
+                <div className="inv-empty-title">No consumption recorded yet</div>
+                <div className="inv-empty-sub">Materials are deducted automatically when orders with recipes are completed.</div>
+              </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'start' }}>
-              <div className="expenses-table-container" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '0.6rem 1rem', fontWeight: 600, borderBottom: '1px solid var(--gray-200)' }}>By Material</div>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+            <div className="inv-grid-2">
+              <div className="inv-card">
+                <div className="inv-panel-head">
+                  <span className="inv-panel-title">By Material</span>
+                  <span className="inv-panel-sub">{consumptionReport.byMaterial.length} material{consumptionReport.byMaterial.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="inv-scroll inv-scroll--panel">
+                  <table className="inv-table">
                     <thead>
-                      <tr><th>Material</th><th>Consumed</th><th>Cost</th></tr>
+                      <tr><th>Material</th><th className="num">Consumed</th><th className="num">Cost</th></tr>
                     </thead>
                     <tbody>
                       {consumptionReport.byMaterial.map(row => (
                         <tr key={row.materialId}>
-                          <td>{row.materialName || '—'}</td>
-                          <td>{row.quantity} {row.materialUnit}</td>
-                          <td className="col-amount" style={{ fontWeight: 600 }}>{formatCurrency(row.totalCost)}</td>
+                          <td><span className="inv-name">{row.materialName || '—'}</span></td>
+                          <td className="num">{row.quantity} {row.materialUnit}</td>
+                          <td className="num inv-money">{formatCurrency(row.totalCost)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </div>
-              <div className="expenses-table-container" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '0.6rem 1rem', fontWeight: 600, borderBottom: '1px solid var(--gray-200)' }}>By Menu Item</div>
-                <div className="table-scroll-container">
-                  <table className="expenses-table">
+              <div className="inv-card">
+                <div className="inv-panel-head">
+                  <span className="inv-panel-title">By Menu Item</span>
+                  <span className="inv-panel-sub">{consumptionReport.byItem.length} item{consumptionReport.byItem.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="inv-scroll inv-scroll--panel">
+                  <table className="inv-table">
                     <thead>
-                      <tr><th>Item</th><th>Recipe Lines</th><th>Material Cost</th></tr>
+                      <tr><th>Item</th><th className="num">Recipe Lines</th><th className="num">Material Cost</th></tr>
                     </thead>
                     <tbody>
                       {consumptionReport.byItem.map(row => (
                         <tr key={row.itemId}>
-                          <td>{row.itemName || '—'}</td>
-                          <td>{row.txnCount}</td>
-                          <td className="col-amount" style={{ fontWeight: 600 }}>{formatCurrency(row.totalCost)}</td>
+                          <td><span className="inv-name">{row.itemName || '—'}</span></td>
+                          <td className="num">{row.txnCount}</td>
+                          <td className="num inv-money">{formatCurrency(row.totalCost)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1226,7 +1339,7 @@ const Inventory: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

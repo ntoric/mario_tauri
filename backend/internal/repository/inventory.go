@@ -589,45 +589,44 @@ func (r *InventoryRepository) DeletePurchase(ctx context.Context, id, modifiedBy
 
 // ---------- Transactions (usage / wastage / adjustment) ----------
 
-func (r *InventoryRepository) GetTransactions(ctx context.Context, storeID, materialID, txnType, startDate, endDate string) ([]models.RawMaterialTransaction, error) {
-	sqlStr := `
-		SELECT t.id, t.store_id, t.material_id, m.name, m.unit, t.type, t.quantity,
-		       t.stock_after, t.reference_id, t.item_id, i.name, t.unit_cost,
-		       t.notes, t.transaction_date, t.is_active, t.created_at, t.created_by
-		FROM raw_material_transactions t
-		LEFT JOIN raw_materials m ON t.material_id = m.id
-		LEFT JOIN items i ON i.id = t.item_id
-		WHERE t.store_id = $1 AND t.is_active = true`
+const txnSelectSQL = `
+	SELECT t.id, t.store_id, t.material_id, m.name, m.unit, t.type, t.quantity,
+	       t.stock_after, t.reference_id, t.item_id, i.name, t.unit_cost,
+	       t.notes, t.transaction_date, t.is_active, t.created_at, t.created_by
+	FROM raw_material_transactions t
+	LEFT JOIN raw_materials m ON t.material_id = m.id
+	LEFT JOIN items i ON i.id = t.item_id`
+
+// txnFilterSQL builds the shared WHERE clause for transaction listing.
+// args[0] is always the store id; additional placeholders continue from $2.
+func txnFilterSQL(storeID, materialID, txnType, startDate, endDate string) (string, []interface{}) {
+	where := "WHERE t.store_id = $1 AND t.is_active = true"
 	args := []interface{}{storeID}
 	idx := 2
 	if materialID != "" {
-		sqlStr += fmt.Sprintf(" AND t.material_id = $%d", idx)
+		where += fmt.Sprintf(" AND t.material_id = $%d", idx)
 		args = append(args, materialID)
 		idx++
 	}
 	if txnType != "" {
-		sqlStr += fmt.Sprintf(" AND t.type = $%d", idx)
+		where += fmt.Sprintf(" AND t.type = $%d", idx)
 		args = append(args, txnType)
 		idx++
 	}
 	if startDate != "" {
-		sqlStr += fmt.Sprintf(" AND t.transaction_date >= $%d", idx)
+		where += fmt.Sprintf(" AND t.transaction_date >= $%d", idx)
 		args = append(args, startDate)
 		idx++
 	}
 	if endDate != "" {
-		sqlStr += fmt.Sprintf(" AND t.transaction_date <= $%d", idx)
+		where += fmt.Sprintf(" AND t.transaction_date <= $%d", idx)
 		args = append(args, endDate)
 		idx++
 	}
-	sqlStr += " ORDER BY t.transaction_date DESC, t.created_at DESC"
+	return where, args
+}
 
-	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+func scanTransactions(rows *sql.Rows) ([]models.RawMaterialTransaction, error) {
 	var txns []models.RawMaterialTransaction
 	for rows.Next() {
 		var t models.RawMaterialTransaction
@@ -650,6 +649,46 @@ func (r *InventoryRepository) GetTransactions(ctx context.Context, storeID, mate
 		txns = append(txns, t)
 	}
 	return txns, nil
+}
+
+func (r *InventoryRepository) GetTransactions(ctx context.Context, storeID, materialID, txnType, startDate, endDate string) ([]models.RawMaterialTransaction, error) {
+	where, args := txnFilterSQL(storeID, materialID, txnType, startDate, endDate)
+	sqlStr := txnSelectSQL + " " + where + " ORDER BY t.transaction_date DESC, t.created_at DESC"
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTransactions(rows)
+}
+
+// GetTransactionsPaginated returns one page of the ledger plus the total row
+// count for the same filters, so the UI can page server-side.
+func (r *InventoryRepository) GetTransactionsPaginated(ctx context.Context, storeID, materialID, txnType, startDate, endDate string, page, limit int) ([]models.RawMaterialTransaction, int, error) {
+	where, args := txnFilterSQL(storeID, materialID, txnType, startDate, endDate)
+
+	var total int
+	if err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM raw_material_transactions t "+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	sqlStr := txnSelectSQL + " " + where +
+		fmt.Sprintf(" ORDER BY t.transaction_date DESC, t.created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	pageArgs := append(append([]interface{}{}, args...), limit, (page-1)*limit)
+
+	rows, err := r.db.QueryContext(ctx, sqlStr, pageArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	txns, err := scanTransactions(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return txns, total, nil
 }
 
 // GetTransactionByID returns a single ledger row (used by the delete handler

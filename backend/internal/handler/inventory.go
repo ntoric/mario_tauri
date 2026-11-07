@@ -3,6 +3,7 @@ package handler
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"cafe-backend/internal/middleware"
@@ -189,6 +190,40 @@ func (h *Handler) GetRawMaterialTransactions(w http.ResponseWriter, r *http.Requ
 	}
 
 	q := r.URL.Query()
+
+	// Server-side pagination: requested via ?page=&limit=, answered with an
+	// envelope. Without those params the legacy array shape is preserved.
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if page > 0 || limit > 0 {
+		if page < 1 {
+			page = 1
+		}
+		if limit < 1 {
+			limit = 20
+		}
+		if limit > 500 {
+			limit = 500
+		}
+		txns, total, err := h.Repo.Inventory.GetTransactionsPaginated(r.Context(), storeID,
+			q.Get("materialId"), q.Get("type"), q.Get("startDate"), q.Get("endDate"), page, limit)
+		if err != nil {
+			log.Printf("[RawMaterialTxn GetAll] Database error: %v", err)
+			h.writeError(w, http.StatusInternalServerError, "Failed to fetch stock transactions")
+			return
+		}
+		if txns == nil {
+			txns = []models.RawMaterialTransaction{}
+		}
+		h.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"items": txns,
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		})
+		return
+	}
+
 	txns, err := h.Repo.Inventory.GetTransactions(r.Context(), storeID,
 		q.Get("materialId"), q.Get("type"), q.Get("startDate"), q.Get("endDate"))
 	if err != nil {

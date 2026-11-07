@@ -284,31 +284,15 @@ const AppContextMenu: React.FC = () => {
 
       {/* Installing overlay */}
       {isInstalling && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10001,
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              borderRadius: '12px',
-              padding: '32px',
-              textAlign: 'center',
-              maxWidth: '400px',
-            }}
-          >
-            <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '12px' }} />
-            <h3 style={{ margin: '0 0 8px', fontSize: '20px' }}>
-              {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
-            </h3>
-            <p style={{ margin: 0, color: 'var(--gray-600)' }}>The app will relaunch shortly...</p>
+        <div className="modal-overlay" style={{ zIndex: 10001 }}>
+          <div className="modal" style={{ maxWidth: '400px' }}>
+            <div className="modal-body" style={{ padding: '2.25rem', textAlign: 'center' }}>
+              <Loader2 size={34} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '14px' }} />
+              <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--dark)' }}>
+                {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
+              </h3>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--gray-500)' }}>The app will relaunch shortly...</p>
+            </div>
           </div>
         </div>
       )}

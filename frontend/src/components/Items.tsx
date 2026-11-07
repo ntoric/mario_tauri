@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star, ArrowUpDown, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star, ArrowUpDown, GripVertical, IndianRupee } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -361,14 +361,6 @@ const Items: React.FC = () => {
     return `${(item.profitPercent ?? 0).toFixed(1)}%`;
   };
 
-  const getProfitColor = (item: Item) => {
-    if (!item.totalCost || item.totalCost === 0) return 'var(--gray-500)';
-    const profit = item.profit ?? 0;
-    if (profit > 0) return '#2ba54a';
-    if (profit < 0) return '#c62828';
-    return 'var(--gray-600)';
-  };
-
   const filteredItems = useMemo(() => {
     const matched = items.filter(item =>
       item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
@@ -409,6 +401,10 @@ const Items: React.FC = () => {
   const modalPrice = parseFloat(itemForm.price) || 0;
   const modalProfit = modalPrice - modalTotalCost;
   const modalProfitPercent = modalPrice > 0 && modalTotalCost > 0 ? (modalProfit / modalPrice) * 100 : 0;
+
+  const enabledItemsCount = items.filter(i => i.enabled !== false).length;
+  const avgItemPrice = items.length ? items.reduce((s, i) => s + (i.price || 0), 0) / items.length : 0;
+  const recipeItemsCount = items.filter(i => (i.totalCost ?? 0) > 0).length;
 
   const handleDeleteItem = async (item: Item) => {
     const confirmed = await confirm({
@@ -572,31 +568,22 @@ const Items: React.FC = () => {
   };
 
   const renderExpenseSummary = () => (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.75rem',
-      marginBottom: '1.25rem',
-      padding: '0.75rem 1rem',
-      background: 'var(--gray-50)',
-      borderRadius: '8px',
-      fontSize: '0.85rem',
-    }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: 'var(--gray-500)' }}>Total Cost</div>
-        <strong>{formatCurrency(modalTotalCost)}</strong>
+    <div className="inv-recipe-bar">
+      <div className="inv-recipe-cell">
+        <div className="inv-recipe-label">Total Cost</div>
+        <div className="inv-recipe-value">{formatCurrency(modalTotalCost)}</div>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: 'var(--gray-500)' }}>Profit</div>
-        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
+      <div className="inv-recipe-cell">
+        <div className="inv-recipe-label">Profit</div>
+        <div className="inv-recipe-value" style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--gray-500)' }}>
           {modalTotalCost > 0 ? formatCurrency(modalProfit) : '—'}
-        </strong>
+        </div>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: 'var(--gray-500)' }}>Profit %</div>
-        <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
+      <div className="inv-recipe-cell">
+        <div className="inv-recipe-label">Profit %</div>
+        <div className="inv-recipe-value" style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--gray-500)' }}>
           {modalTotalCost > 0 && modalPrice > 0 ? `${modalProfitPercent.toFixed(1)}%` : '—'}
-        </strong>
+        </div>
       </div>
       {!isCreating && (
         <Button
@@ -616,118 +603,82 @@ const Items: React.FC = () => {
 
   const renderRecipeTab = () => (
     <div className="modal-body">
-      <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+      <p className="inv-note" style={{ margin: '0 0 1rem' }}>
         Pick the raw materials needed to prepare one unit of this item. Stock is deducted automatically when orders are completed, and the recipe drives the item's cost.
       </p>
 
       {loadingRecipe && !isCreating ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-          <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} />
-        </div>
+        <div className="inv-loading"><Loader2 size={24} className="animate-spin" /></div>
       ) : (
         <>
           {renderExpenseSummary()}
 
           {recipeLines.length > 0 && (
-            <div style={{
-              marginBottom: '1.25rem',
-              border: '1px solid var(--gray-200)',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(10,15,22,0.06)',
-              background: 'var(--white, #fff)',
-            }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 150px 90px 44px',
-                gap: '0.5rem',
-                alignItems: 'center',
-                padding: '0.6rem 1rem',
-                background: 'var(--gray-50)',
-                borderBottom: '1px solid var(--gray-200)',
-                fontSize: '0.68rem',
-                fontWeight: 700,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                color: 'var(--gray-500)',
-              }}>
-                <span>Material</span>
-                <span>Qty / unit</span>
-                <span style={{ textAlign: 'right' }}>Est. Cost</span>
-                <span />
-              </div>
-              {recipeLines.map((line, idx) => {
-                const mat = materialById[line.materialId];
-                const unit = line.unit || mat?.unit || '';
-                const lowStock = mat && mat.currentStock < (parseFloat(line.quantity) || 0);
-                return (
-                <div
-                  key={line.key}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 150px 90px 44px',
-                    gap: '0.5rem',
-                    alignItems: 'center',
-                    padding: '0.65rem 1rem',
-                    borderTop: idx > 0 ? '1px solid var(--gray-100)' : 'none',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--gray-50)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{line.name || mat?.name || 'Unknown material'}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.1rem' }}>
-                      avg {formatCurrency(line.avgCost ?? mat?.avgCost ?? 0)}/{unit}
-                      {lowStock && (
-                        <span style={{ color: '#c62828', fontWeight: 600 }}> · low stock ({mat.currentStock} {unit})</span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{
-                    display: 'flex', alignItems: 'center',
-                    border: '1px solid var(--gray-300)', borderRadius: '8px',
-                    overflow: 'hidden', background: '#fff',
-                  }}>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
-                      value={line.quantity}
-                      onChange={e => handleLineQtyChange(line.key, e.target.value)}
-                      style={{
-                        width: '100%', border: 'none', outline: 'none',
-                        padding: '0.4rem 0.5rem', fontSize: '0.9rem', fontWeight: 600,
-                      }}
-                    />
-                    <span style={{
-                      padding: '0.4rem 0.55rem',
-                      fontSize: '0.75rem', fontWeight: 600,
-                      color: 'var(--gray-500)', background: 'var(--gray-100)',
-                      borderLeft: '1px solid var(--gray-200)',
-                    }}>{unit}</span>
-                  </div>
-                  <div style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.9rem', color: lineCost(line) > 0 ? 'var(--primary)' : 'var(--gray-400)' }}>
-                    {lineCost(line) > 0 ? formatCurrency(lineCost(line)) : '—'}
-                  </div>
-                  <button
-                    type="button"
-                    className="action-btn delete"
-                    onClick={() => handleRemoveLine(line.key)}
-                    title="Remove material"
-                    style={{ justifySelf: 'center' }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                );
-              })}
+            <div className="inv-recipe-list">
+              <table className="inv-table">
+                <thead>
+                  <tr>
+                    <th>Material</th>
+                    <th style={{ width: 170 }}>Qty / unit</th>
+                    <th className="num" style={{ width: 110 }}>Est. Cost</th>
+                    <th style={{ width: 52 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {recipeLines.map((line) => {
+                    const mat = materialById[line.materialId];
+                    const unit = line.unit || mat?.unit || '';
+                    const lowStock = mat && mat.currentStock < (parseFloat(line.quantity) || 0);
+                    return (
+                      <tr key={line.key}>
+                        <td>
+                          <span className="inv-name">{line.name || mat?.name || 'Unknown material'}</span>
+                          <span className="inv-sub">
+                            avg {formatCurrency(line.avgCost ?? mat?.avgCost ?? 0)}/{unit}
+                            {lowStock && (
+                              <span className="inv-stock-warn"> · low stock ({mat.currentStock} {unit})</span>
+                            )}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="inv-qty-edit">
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0.001"
+                              value={line.quantity}
+                              onChange={e => handleLineQtyChange(line.key, e.target.value)}
+                            />
+                            <span className="unit">{unit}</span>
+                          </div>
+                        </td>
+                        <td className={`num ${lineCost(line) > 0 ? 'inv-money' : 'inv-muted'}`}>
+                          {lineCost(line) > 0 ? formatCurrency(lineCost(line)) : '—'}
+                        </td>
+                        <td>
+                          <div className="inv-actions">
+                            <button
+                              type="button"
+                              className="inv-icon-btn tint-danger"
+                              onClick={() => handleRemoveLine(line.key)}
+                              title="Remove material"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
 
-          <div style={{ border: '1px solid var(--gray-200)', borderRadius: '8px', padding: '1rem', background: 'var(--gray-50)' }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Add Material</div>
+          <div className="inv-recipe-add">
+            <div className="inv-recipe-add-title">Add Material</div>
             {rawMaterials.length === 0 && (
-              <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#c62828' }}>
+              <p className="inv-form-error">
                 No raw materials yet —{' '}
                 <Link to="/inventory" onClick={closeItemModal} style={{ color: 'var(--primary)', fontWeight: 600 }}>
                   add them on the Raw Materials page
@@ -736,7 +687,7 @@ const Items: React.FC = () => {
               </p>
             )}
             {lineFormError && (
-              <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{lineFormError}</div>
+              <div className="inv-form-error">{lineFormError}</div>
             )}
             <div className="form-row">
               <div className="form-group" style={{ marginBottom: '0.75rem', position: 'relative' }}>
@@ -754,40 +705,29 @@ const Items: React.FC = () => {
                   }}
                 />
                 {materialDropOpen && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
-                    background: 'var(--white, #fff)', border: '1px solid var(--gray-200)',
-                    borderRadius: '8px', maxHeight: '200px', overflowY: 'auto',
-                    boxShadow: '0 8px 20px rgba(10,15,22,0.15)',
-                  }}>
+                  <div className="inv-dropdown">
                     {filteredMaterialOptions.map(m => (
                       <div
                         key={m.id}
+                        className="inv-dropdown-option"
                         onMouseDown={() => selectMaterialOption(m)}
-                        style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--gray-100)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        {m.name} <span style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>({m.unit})</span>
+                        {m.name} <span className="unit">({m.unit})</span>
                       </div>
                     ))}
                     {filteredMaterialOptions.length === 0 && materialSearch.trim() && !materialExactMatch && (
-                      <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                      <div className="inv-dropdown-option" style={{ color: 'var(--gray-400)', cursor: 'default' }}>
                         No existing material matches
                       </div>
                     )}
                     {materialSearch.trim() && !materialExactMatch && (
                       <div
+                        className="inv-dropdown-create"
                         onMouseDown={handleCreateMaterial}
-                        style={{
-                          padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem',
-                          color: 'var(--primary)', fontWeight: 600,
-                          borderTop: filteredMaterialOptions.length ? '1px solid var(--gray-200)' : undefined,
-                          display: 'flex', alignItems: 'center', gap: '0.4rem',
-                        }}
+                        style={{ borderTop: filteredMaterialOptions.length ? undefined : 'none' }}
                       >
                         {creatingMaterial ? <Loader2 size={13} className="animate-spin" style={{ flexShrink: 0 }} /> : <Plus size={13} style={{ flexShrink: 0 }} />}
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span className="label">
                           Add "{materialSearch.trim()}" as new material
                         </span>
                         <select
@@ -795,7 +735,6 @@ const Items: React.FC = () => {
                           onMouseDown={e => e.stopPropagation()}
                           onClick={e => e.stopPropagation()}
                           onChange={e => setNewMaterialUnit(e.target.value)}
-                          style={{ padding: '0.15rem 0.2rem', fontSize: '0.8rem', width: '64px', flexShrink: 0 }}
                         >
                           {['pcs','kg','g','mg','l','ml','packet','box','dozen','tray'].map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -817,15 +756,13 @@ const Items: React.FC = () => {
                 />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} disabled={rawMaterials.length === 0}>
-                <Plus size={14} /> Add to Recipe
-              </Button>
-            </div>
+            <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} disabled={rawMaterials.length === 0}>
+              <Plus size={14} /> Add to Recipe
+            </Button>
           </div>
 
           {isCreating && recipeLines.length > 0 && (
-            <p style={{ margin: '1rem 0 0', fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+            <p className="inv-note" style={{ margin: '0.9rem 0 0' }}>
               {recipeLines.length} material{recipeLines.length !== 1 ? 's' : ''} will be saved as the recipe when you create the item.
             </p>
           )}
@@ -951,222 +888,288 @@ const Items: React.FC = () => {
   );
 
   return (
-    <div>
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>
-          <Coffee size={16} />
+    <div className="inv-page">
+      {/* Stats */}
+      <div className="inv-stats">
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-primary"><Coffee size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Menu Items</div>
+            <div className="inv-stat-value">{items.length}</div>
+            <div className="inv-stat-sub">{enabledItemsCount} enabled</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-info"><FolderOpen size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Categories</div>
+            <div className="inv-stat-value">{categories.length}</div>
+            <div className="inv-stat-sub">menu groups</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-success"><IndianRupee size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Avg. Item Price</div>
+            <div className="inv-stat-value">{formatCurrency(avgItemPrice)}</div>
+            <div className="inv-stat-sub">across the menu</div>
+          </div>
+        </div>
+        <div className="inv-stat">
+          <div className="inv-stat-icon tint-warning"><Receipt size={19} /></div>
+          <div className="inv-stat-body">
+            <div className="inv-stat-label">Recipe Coverage</div>
+            <div className="inv-stat-value">{recipeItemsCount}</div>
+            <div className="inv-stat-sub">items costed by recipe</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="inv-tabs">
+        <button className={`inv-tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>
+          <Coffee size={15} />
           Items
-          <span className="tab-badge">{items.length}</span>
+          <span className="inv-tab-count">{items.length}</span>
         </button>
-        <button className={`tab ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
-          <FolderOpen size={16} />
+        <button className={`inv-tab ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+          <FolderOpen size={15} />
           Categories
-          <span className="tab-badge">{categories.length}</span>
+          <span className="inv-tab-count">{categories.length}</span>
         </button>
       </div>
 
       {activeTab === 'items' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">All Items ({filteredItems.length})</span>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <div className="search-input-wrapper">
-                <Search size={16} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={itemSearchQuery}
-                  onChange={e => { setItemSearchQuery(e.target.value); setItemPage(1); }}
-                  className="search-input"
-                />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
+              <input
+                type="text"
+                placeholder="Search items or categories..."
+                value={itemSearchQuery}
+                onChange={e => { setItemSearchQuery(e.target.value); setItemPage(1); }}
+              />
+            </div>
+            <div className="inv-spacer" />
+            <Button onClick={() => openItemForm()}>
+              <Plus size={16} />
+              Add Item
+            </Button>
+          </div>
+
+          <div className="inv-card">
+            {filteredItems.length === 0 ? (
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><Coffee size={26} /></div>
+                <div className="inv-empty-title">No items found</div>
+                <div className="inv-empty-sub">Add menu items to start taking orders.</div>
+                <Button onClick={() => openItemForm()} style={{ marginTop: '0.6rem' }}>Add your first item</Button>
               </div>
-              <button className="btn btn-primary" onClick={() => openItemForm()}>
-                <Plus size={18} />
-                Add Item
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="inv-scroll">
+                  <table className="inv-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Category</th>
+                        <th className="num">Price</th>
+                        <th className="num">Prep Cost</th>
+                        <th className="num">Profit</th>
+                        <th className="num">Profit %</th>
+                        {taxEnabled && <th className="num">Tax %</th>}
+                        <th>Status</th>
+                        <th className="num">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedItems.map(item => {
+                        const isEnabled = item.enabled !== false;
+                        const hasCost = (item.totalCost ?? 0) > 0;
+                        const profit = item.profit ?? 0;
+                        const profitClass = hasCost ? (profit > 0 ? 'inv-qty-pos' : profit < 0 ? 'inv-qty-neg' : 'inv-muted') : 'inv-muted';
+                        return (
+                      <tr key={item.id} style={{ opacity: isEnabled ? 1 : 0.55 }}>
+                        <td>
+                          <span className="inv-name">
+                            {item.isFavourite && <Star size={12} fill="currentColor" style={{ color: '#f5a623', marginRight: 5, verticalAlign: -1 }} />}
+                            {item.name}
+                          </span>
+                          {item.description && <span className="inv-sub">{item.description}</span>}
+                        </td>
+                        <td><span className="inv-badge is-primary">{getCategoryName(item.categoryId)}</span></td>
+                        <td className="num inv-money">{formatCurrency(item.price)}</td>
+                        <td className={`num ${hasCost ? '' : 'inv-muted'}`}>
+                          {hasCost ? formatCurrency(item.totalCost!) : '—'}
+                        </td>
+                        <td className={`num ${profitClass}`}>
+                          {hasCost ? formatCurrency(profit) : '—'}
+                        </td>
+                        <td className={`num ${profitClass}`}>{hasCost ? formatProfitPercent(item) : '—'}</td>
+                        {taxEnabled && <td className="num inv-muted">{item.taxPercent || 0}%</td>}
+                        <td>
+                          {isEnabled ? (
+                            <span className="inv-badge is-success"><span className="inv-dot" />Enabled</span>
+                          ) : (
+                            <span className="inv-badge is-neutral"><span className="inv-dot" />Disabled</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="inv-actions">
+                            <button
+                              className="inv-icon-btn"
+                              onClick={() => handleToggleItemFavourite(item)}
+                              disabled={loadingItemId === item.id}
+                              title={item.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
+                              style={{ color: item.isFavourite ? '#f5a623' : undefined }}
+                            >
+                              {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={item.isFavourite ? 'currentColor' : 'none'} />}
+                            </button>
+                            <button
+                              className="inv-icon-btn"
+                              onClick={() => handleToggleItem(item)}
+                              disabled={loadingItemId === item.id}
+                              title={isEnabled ? 'Disable item (hide from ordering)' : 'Enable item'}
+                              style={{ color: isEnabled ? 'var(--success)' : undefined }}
+                            >
+                              {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                            </button>
+                            <button className="inv-icon-btn" onClick={() => openItemForm(item)} disabled={loadingItemId === item.id} title="Edit item">
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="inv-icon-btn tint-danger" onClick={() => handleDeleteItem(item)} disabled={loadingItemId === item.id} title="Delete item">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  currentPage={itemPage}
+                  totalPages={Math.ceil(filteredItems.length / PAGE_SIZE)}
+                  totalItems={filteredItems.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setItemPage}
+                />
+              </>
+            )}
           </div>
-          <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="table-scroll-container">
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>Item Name</th>
-                    <th>Category</th>
-                    <th>Price</th>
-                    <th>Prep Cost</th>
-                    <th>Profit</th>
-                    <th>Profit %</th>
-                    {taxEnabled && <th>Tax %</th>}
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedItems.map(item => {
-                    const isEnabled = item.enabled !== false;
-                    return (
-                  <tr key={item.id} style={{ opacity: isEnabled ? 1 : 0.5 }}>
-                    <td><strong>{item.name}</strong></td>
-                    <td><span className="badge badge-primary">{getCategoryName(item.categoryId)}</span></td>
-                    <td style={{ color: 'var(--primary)', fontWeight: 600 }}>{formatCurrency(item.price)}</td>
-                    <td style={{ color: 'var(--gray-600)' }}>
-                      {item.totalCost && item.totalCost > 0 ? formatCurrency(item.totalCost) : '—'}
-                    </td>
-                    <td style={{ color: getProfitColor(item), fontWeight: 600 }}>
-                      {item.totalCost && item.totalCost > 0 ? formatCurrency(item.profit ?? 0) : '—'}
-                    </td>
-                    <td style={{ color: getProfitColor(item), fontWeight: 600 }}>{formatProfitPercent(item)}</td>
-                    {taxEnabled && <td>{item.taxPercent || 0}%</td>}
-                    <td>
-                      <span style={{
-                        fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px',
-                        color: isEnabled ? 'var(--success)' : 'var(--gray-500)',
-                        background: isEnabled ? 'rgba(43,165,74,0.15)' : 'var(--gray-100)',
-                      }}>
-                        {isEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-btns">
-                        <button
-                          className="action-btn"
-                          onClick={() => handleToggleItemFavourite(item)}
-                          disabled={loadingItemId === item.id}
-                          title={item.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
-                          style={{ color: item.isFavourite ? '#f5a623' : 'var(--gray-400)' }}
-                        >
-                          {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={item.isFavourite ? 'currentColor' : 'none'} />}
-                        </button>
-                        <button
-                          className="action-btn"
-                          onClick={() => handleToggleItem(item)}
-                          disabled={loadingItemId === item.id}
-                          title={isEnabled ? 'Disable item (hide from ordering)' : 'Enable item'}
-                          style={{ color: isEnabled ? 'var(--success)' : 'var(--gray-400)' }}
-                        >
-                          {loadingItemId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
-                        </button>
-                        <button className="action-btn edit" onClick={() => openItemForm(item)} disabled={loadingItemId === item.id} title="Edit item">
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="action-btn delete" onClick={() => handleDeleteItem(item)} disabled={loadingItemId === item.id} title="Delete Item">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  )})}
-                </tbody>
-              </table>
-            </div>
-            <Pagination
-              currentPage={itemPage}
-              totalPages={Math.ceil(filteredItems.length / PAGE_SIZE)}
-              totalItems={filteredItems.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setItemPage}
-            />
-          </div>
-        </div>
+        </>
       )}
 
       {activeTab === 'categories' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">All Categories ({filteredCategories.length})</span>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <div className="search-input-wrapper">
-                <Search size={16} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search categories..."
-                  value={categorySearchQuery}
-                  onChange={e => { setCategorySearchQuery(e.target.value); setCategoryPage(1); }}
-                  className="search-input"
-                />
+        <>
+          <div className="inv-toolbar">
+            <div className="inv-search">
+              <Search size={15} />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={categorySearchQuery}
+                onChange={e => { setCategorySearchQuery(e.target.value); setCategoryPage(1); }}
+              />
+            </div>
+            <div className="inv-spacer" />
+            <button className="inv-toolbar-btn" onClick={openSortModal} disabled={categories.length < 2} title="Drag and drop to set the category order on the order page">
+              <ArrowUpDown size={15} />
+              Sort Order
+            </button>
+            <Button onClick={() => openCategoryForm()}>
+              <Plus size={16} />
+              Add Category
+            </Button>
+          </div>
+
+          <div className="inv-card">
+            {filteredCategories.length === 0 ? (
+              <div className="inv-empty">
+                <div className="inv-empty-icon"><FolderOpen size={26} /></div>
+                <div className="inv-empty-title">No categories found</div>
+                <div className="inv-empty-sub">Group menu items into categories like Beverages, Starters or Desserts.</div>
+                <Button onClick={() => openCategoryForm()} style={{ marginTop: '0.6rem' }}>Add your first category</Button>
               </div>
-              <button className="btn btn-secondary" onClick={openSortModal} disabled={categories.length < 2} title="Drag and drop to set the category order on the order page">
-                <ArrowUpDown size={18} />
-                Sort Order
-              </button>
-              <button className="btn btn-primary" onClick={() => openCategoryForm()}>
-                <Plus size={18} />
-                Add Category
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="inv-scroll">
+                  <table className="inv-table">
+                    <thead>
+                      <tr>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th className="num">Items</th>
+                        <th>Status</th>
+                        <th className="num">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedCategories.map(category => {
+                        const isEnabled = category.enabled !== false;
+                        const itemCount = items.filter(i => i.categoryId === category.id).length;
+                        return (
+                      <tr key={category.id} style={{ opacity: isEnabled ? 1 : 0.55 }}>
+                        <td>
+                          <span className="inv-name">
+                            {category.isFavourite && <Star size={12} fill="currentColor" style={{ color: '#f5a623', marginRight: 5, verticalAlign: -1 }} />}
+                            {category.name}
+                          </span>
+                        </td>
+                        <td className="inv-muted">{category.description || '—'}</td>
+                        <td className="num"><span className="inv-badge is-neutral">{itemCount}</span></td>
+                        <td>
+                          {isEnabled ? (
+                            <span className="inv-badge is-success"><span className="inv-dot" />Enabled</span>
+                          ) : (
+                            <span className="inv-badge is-neutral"><span className="inv-dot" />Disabled</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="inv-actions">
+                            <button
+                              className="inv-icon-btn"
+                              onClick={() => handleToggleCategoryFavourite(category)}
+                              disabled={loadingCategoryId === category.id}
+                              title={category.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
+                              style={{ color: category.isFavourite ? '#f5a623' : undefined }}
+                            >
+                              {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={category.isFavourite ? 'currentColor' : 'none'} />}
+                            </button>
+                            <button
+                              className="inv-icon-btn"
+                              onClick={() => handleToggleCategory(category)}
+                              disabled={loadingCategoryId === category.id}
+                              title={isEnabled ? 'Disable category (hide from ordering)' : 'Enable category'}
+                              style={{ color: isEnabled ? 'var(--success)' : undefined }}
+                            >
+                              {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
+                            </button>
+                            <button className="inv-icon-btn" onClick={() => openCategoryForm(category)} disabled={loadingCategoryId === category.id} title="Edit category">
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="inv-icon-btn tint-danger" onClick={() => handleDeleteCategory(category)} disabled={loadingCategoryId === category.id} title="Delete category">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  currentPage={categoryPage}
+                  totalPages={Math.ceil(filteredCategories.length / PAGE_SIZE)}
+                  totalItems={filteredCategories.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setCategoryPage}
+                />
+              </>
+            )}
           </div>
-          <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="table-scroll-container">
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>Category Name</th>
-                    <th>Description</th>
-                    <th>Items Count</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedCategories.map(category => {
-                    const isEnabled = category.enabled !== false;
-                    return (
-                  <tr key={category.id} style={{ opacity: isEnabled ? 1 : 0.5 }}>
-                    <td><strong>{category.name}</strong></td>
-                    <td style={{ color: 'var(--gray-600)' }}>{category.description || '-'}</td>
-                    <td>{items.filter(i => i.categoryId === category.id).length}</td>
-                    <td>
-                      <span style={{
-                        fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px',
-                        color: isEnabled ? 'var(--success)' : 'var(--gray-500)',
-                        background: isEnabled ? 'rgba(43,165,74,0.15)' : 'var(--gray-100)',
-                      }}>
-                        {isEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-btns">
-                        <button
-                          className="action-btn"
-                          onClick={() => handleToggleCategoryFavourite(category)}
-                          disabled={loadingCategoryId === category.id}
-                          title={category.isFavourite ? 'Remove from favourites' : 'Mark as favourite'}
-                          style={{ color: category.isFavourite ? '#f5a623' : 'var(--gray-400)' }}
-                        >
-                          {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} fill={category.isFavourite ? 'currentColor' : 'none'} />}
-                        </button>
-                        <button
-                          className="action-btn"
-                          onClick={() => handleToggleCategory(category)}
-                          disabled={loadingCategoryId === category.id}
-                          title={isEnabled ? 'Disable category (hide from ordering)' : 'Enable category'}
-                          style={{ color: isEnabled ? 'var(--success)' : 'var(--gray-400)' }}
-                        >
-                          {loadingCategoryId === category.id ? <Loader2 size={14} className="animate-spin" /> : <Power size={14} />}
-                        </button>
-                        <button className="action-btn edit" onClick={() => openCategoryForm(category)} disabled={loadingCategoryId === category.id}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="action-btn delete" onClick={() => handleDeleteCategory(category)} disabled={loadingCategoryId === category.id}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  )})}
-                </tbody>
-              </table>
-            </div>
-            <Pagination
-              currentPage={categoryPage}
-              totalPages={Math.ceil(filteredCategories.length / PAGE_SIZE)}
-              totalItems={filteredCategories.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setCategoryPage}
-            />
-          </div>
-        </div>
+        </>
       )}
 
       {sortModalOpen && (
@@ -1195,18 +1198,13 @@ const Items: React.FC = () => {
                   return (
                   <div
                     key={cat.id}
+                    className="inv-sort-row"
                     onPointerDown={e => handleSortPointerDown(e, index)}
                     onPointerMove={handleSortPointerMove}
                     onPointerUp={endSortDrag}
                     onPointerCancel={endSortDrag}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.6rem',
-                      padding: '0.55rem 0.75rem',
-                      border: '1px solid var(--gray-200)',
-                      borderRadius: '8px',
-                      background: isDragging ? 'var(--gray-100)' : 'var(--white, #fff)',
+                      background: isDragging ? 'rgba(var(--ink-rgb), 0.06)' : undefined,
                       cursor: isDragging ? 'grabbing' : 'grab',
                       opacity: cat.enabled === false ? 0.55 : 1,
                       position: 'relative',
@@ -1214,18 +1212,15 @@ const Items: React.FC = () => {
                       transform: translateY ? `translateY(${translateY}px)` : undefined,
                       transition: sortDrag && !isDragging ? 'transform 160ms ease' : 'none',
                       boxShadow: isDragging ? '0 8px 20px rgba(10, 15, 22, 0.16)' : undefined,
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                      touchAction: 'none',
                     }}
                   >
-                    <GripVertical size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
-                    <span style={{ fontWeight: 500, flex: 1 }}>{cat.name}</span>
+                    <GripVertical size={15} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
+                    <span className="inv-name" style={{ flex: 1 }}>{cat.name}</span>
                     {cat.isFavourite && (
                       <Star size={13} fill="currentColor" style={{ color: '#f5a623', flexShrink: 0 }} />
                     )}
                     {cat.enabled === false && (
-                      <span style={{ fontSize: '0.7rem', color: 'var(--gray-500)' }}>Disabled</span>
+                      <span className="inv-badge is-neutral">Disabled</span>
                     )}
                   </div>
                   );
@@ -1254,24 +1249,24 @@ const Items: React.FC = () => {
               </button>
             </div>
 
-            <div className="tabs" style={{ margin: '0 1.5rem', borderBottom: '1px solid var(--gray-200)' }}>
+            <div className="inv-tabs" style={{ margin: '0.9rem 1rem 0' }}>
               <button
                 type="button"
-                className={`tab ${itemModalTab === 'details' ? 'active' : ''}`}
+                className={`inv-tab ${itemModalTab === 'details' ? 'active' : ''}`}
                 onClick={() => setItemModalTab('details')}
               >
-                <Package size={16} />
+                <Package size={15} />
                 Item Details
               </button>
               <button
                 type="button"
-                className={`tab ${itemModalTab === 'recipe' ? 'active' : ''}`}
+                className={`inv-tab ${itemModalTab === 'recipe' ? 'active' : ''}`}
                 onClick={() => setItemModalTab('recipe')}
               >
-                <Receipt size={16} />
+                <Receipt size={15} />
                 Recipe
                 {recipeLines.length > 0 && (
-                  <span className="tab-badge">{recipeLines.length}</span>
+                  <span className="inv-tab-count">{recipeLines.length}</span>
                 )}
               </button>
             </div>

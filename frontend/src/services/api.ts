@@ -880,12 +880,16 @@ class ApiService {
     type?: string;
     startDate?: string;
     endDate?: string;
+    page?: number;
+    limit?: number;
   } = {}) {
     const qs = new URLSearchParams({ storeId });
     if (params.materialId) qs.set('materialId', params.materialId);
     if (params.type) qs.set('type', params.type);
     if (params.startDate) qs.set('startDate', params.startDate);
     if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
     return this.fetch(`/raw-material-transactions?${qs.toString()}`);
   }
 

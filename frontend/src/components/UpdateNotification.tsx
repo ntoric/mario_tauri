@@ -22,13 +22,15 @@ const UpdateNotification: React.FC = () => {
 
   if (isInstalling) {
     return (
-      <div style={styles.overlay}>
-        <div style={styles.card}>
-          <h3 style={styles.title}>
-            {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
-          </h3>
-          <p style={styles.text}>The app will relaunch shortly...</p>
-          <div style={styles.spinner} />
+      <div className="modal-overlay" style={{ zIndex: 10000 }}>
+        <div className="modal" style={{ maxWidth: '400px' }}>
+          <div className="modal-body" style={{ padding: '2.25rem', textAlign: 'center' }}>
+            <div style={styles.spinner} />
+            <h3 style={styles.title}>
+              {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
+            </h3>
+            <p style={styles.text}>The app will relaunch shortly...</p>
+          </div>
         </div>
       </div>
     );
@@ -88,40 +90,25 @@ const UpdateNotification: React.FC = () => {
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0, 0, 0, 0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10000,
-  },
-  card: {
-    background: 'var(--surface)',
-    borderRadius: '12px',
-    padding: '32px',
-    textAlign: 'center',
-    maxWidth: '400px',
-  },
   title: {
     margin: '0 0 8px',
-    fontSize: '20px',
+    fontSize: '18px',
+    fontWeight: 700,
+    letterSpacing: '-0.01em',
+    color: 'var(--dark)',
   },
   text: {
-    margin: '0 0 16px',
-    color: 'var(--gray-600)',
+    margin: 0,
+    fontSize: '14px',
+    color: 'var(--gray-500)',
   },
   spinner: {
-    width: '32px',
-    height: '32px',
+    width: '36px',
+    height: '36px',
     border: '3px solid var(--gray-300)',
-    borderTopColor: '#4f46e5',
+    borderTopColor: 'var(--primary)',
     borderRadius: '50%',
-    margin: '0 auto',
+    margin: '0 auto 16px',
     animation: 'spin 1s linear infinite',
   },
   banner: {
