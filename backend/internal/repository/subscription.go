@@ -279,8 +279,9 @@ func (r *SubscriptionRepository) GetCurrentForStore(ctx context.Context, storeID
 }
 
 // ProcessDue lazily advances the billing clock for active subscriptions whose
-// end_date has passed: auto-renewing subscriptions roll forward (one catch-up
-// 'renewed' event per subscription) and non-renewing ones are marked expired.
+// end_date has passed: auto-renewing subscriptions roll forward (one 'renewed'
+// event and one auto-recorded payment per elapsed cycle) and non-renewing
+// ones are marked expired.
 // Called on reads so statuses stay fresh without a background scheduler.
 func (r *SubscriptionRepository) ProcessDue(ctx context.Context) error {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -349,9 +350,16 @@ func (r *SubscriptionRepository) ProcessDue(ctx context.Context) error {
 				periodStart := newEnd
 				newEnd = addBillingPeriod(newEnd, d.recurringType)
 				periods++
-				// Each elapsed cycle gets an auto-recorded payment.
-				if err := insertPayment(ctx, tx, d.storeID, d.id, d.planPrice, "auto", "paid",
+				// Each elapsed cycle gets an auto-recorded payment and its own
+				// 'renewed' event so history lists every renewal separately.
+				if _, err := insertPayment(ctx, tx, d.storeID, d.id, d.planPrice, "auto", "paid",
 					&periodStart, &newEnd, nil, "Auto-recorded on renewal"); err != nil {
+					return err
+				}
+				if err := insertSubscriptionEvent(ctx, tx, d.storeID, d.id, "renewed",
+					d.planID, d.planName, d.planID, d.planName,
+					fmt.Sprintf("Auto-renewed; billing period %s to %s", periodStart.Format("2006-01-02"), newEnd.Format("2006-01-02")),
+					nil); err != nil {
 					return err
 				}
 			}
@@ -367,12 +375,6 @@ func (r *SubscriptionRepository) ProcessDue(ctx context.Context) error {
 				UPDATE subscription_requests SET effective_date = $2, updated_at = CURRENT_TIMESTAMP
 				WHERE subscription_id = $1 AND status = 'pending'
 			`, d.id, newEnd); err != nil {
-				return err
-			}
-			if err := insertSubscriptionEvent(ctx, tx, d.storeID, d.id, "renewed",
-				d.planID, d.planName, d.planID, d.planName,
-				fmt.Sprintf("Auto-renewed %d period(s); next renewal on %s", periods, newEnd.Format("2006-01-02")),
-				nil); err != nil {
 				return err
 			}
 		} else {
@@ -1134,13 +1136,14 @@ func scanPayment(row interface{ Scan(...interface{}) error }) (*models.Subscript
 	return p, nil
 }
 
-func insertPayment(ctx context.Context, ex execer, storeID, subID string, amount float64, method, status string, periodStart, periodEnd *time.Time, recordedBy *string, notes string) error {
+func insertPayment(ctx context.Context, ex execer, storeID, subID string, amount float64, method, status string, periodStart, periodEnd *time.Time, recordedBy *string, notes string) (string, error) {
+	id := uuid.New().String()
 	_, err := ex.ExecContext(ctx, `
 		INSERT INTO subscription_payments
 			(id, store_id, subscription_id, amount, method, status, period_start, period_end, recorded_by, notes)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, uuid.New().String(), storeID, subID, amount, method, status, periodStart, periodEnd, recordedBy, nullStr(notes))
-	return err
+	`, id, storeID, subID, amount, method, status, periodStart, periodEnd, recordedBy, nullStr(notes))
+	return id, err
 }
 
 // ListPayments returns the payment ledger, optionally filtered by store or
@@ -1219,7 +1222,7 @@ func (r *SubscriptionRepository) RecordPayment(ctx context.Context, subID string
 		}
 	}
 
-	if err := insertPayment(ctx, tx, l.storeID, subID, amount, method, "paid", &periodStart, &periodEnd, &userID, notes); err != nil {
+	if _, err := insertPayment(ctx, tx, l.storeID, subID, amount, method, "paid", &periodStart, &periodEnd, &userID, notes); err != nil {
 		return nil, err
 	}
 	if renew {

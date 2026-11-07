@@ -7,10 +7,12 @@ import (
 	"errors"
 	"net/http"
 
+	"cafe-backend/internal/cashfree"
 	"cafe-backend/internal/config"
 	"cafe-backend/internal/middleware"
 	"cafe-backend/internal/realtime"
 	"cafe-backend/internal/repository"
+	"cafe-backend/internal/security"
 	"cafe-backend/internal/session"
 )
 
@@ -20,10 +22,12 @@ type Handler struct {
 	Realtime *realtime.Hub
 	PrintHub *realtime.PrintHub
 	Sessions *session.Store
+	Cashfree *cashfree.Client
+	Secrets  *security.Encryptor
 }
 
-func NewHandler(repo *repository.Repository, cfg *config.Config, realtimeHub *realtime.Hub, printHub *realtime.PrintHub, sessions *session.Store) *Handler {
-	return &Handler{Repo: repo, Cfg: cfg, Realtime: realtimeHub, PrintHub: printHub, Sessions: sessions}
+func NewHandler(repo *repository.Repository, cfg *config.Config, realtimeHub *realtime.Hub, printHub *realtime.PrintHub, sessions *session.Store, cf *cashfree.Client, secrets *security.Encryptor) *Handler {
+	return &Handler{Repo: repo, Cfg: cfg, Realtime: realtimeHub, PrintHub: printHub, Sessions: sessions, Cashfree: cf, Secrets: secrets}
 }
 
 // JSON helpers to reduce boilerplate and guarantee standardized casing

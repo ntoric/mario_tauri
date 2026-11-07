@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"cafe-backend/internal/cashfree"
 	"cafe-backend/internal/config"
 	"cafe-backend/internal/db"
 	"cafe-backend/internal/handler"
@@ -16,6 +17,7 @@ import (
 	"cafe-backend/internal/queue"
 	"cafe-backend/internal/realtime"
 	"cafe-backend/internal/repository"
+	"cafe-backend/internal/security"
 	"cafe-backend/internal/session"
 
 	"github.com/go-chi/chi/v5"
@@ -83,7 +85,19 @@ func main() {
 	} else {
 		log.Println("WARNING: Redis unavailable — session store disabled; all authenticated requests will fail")
 	}
-	h := handler.NewHandler(repo, cfg, realtimeHub, printHub, sessionStore)
+	cashfreeClient := cashfree.NewClient(cfg.CashfreeAppID, cfg.CashfreeSecretKey, cfg.CashfreeEnv)
+	if !cashfreeClient.Enabled() {
+		log.Println("Cashfree credentials not configured — online plan payments disabled")
+	}
+	// Encryptor for credentials stored in global_settings. ENCRYPTION_KEY is
+	// preferred; JWT_SECRET is the fallback so existing deployments keep
+	// working without extra configuration.
+	encryptionKey := cfg.EncryptionKey
+	if encryptionKey == "" {
+		encryptionKey = cfg.JWTSecret
+	}
+	secrets := security.NewEncryptor(encryptionKey)
+	h := handler.NewHandler(repo, cfg, realtimeHub, printHub, sessionStore, cashfreeClient, secrets)
 
 	// 5. Setup Router & Middlewares
 	r := chi.NewRouter()
@@ -132,6 +146,10 @@ func main() {
 		r.Get("/api/app-update", h.GetAppUpdate)
 		r.Get("/api/app-updates", h.GetAllAppUpdates)
 		r.Get("/api/update/manifest", h.GetUpdateManifest)
+
+		// Cashfree webhook — signature-verified inside the handler (no JWT;
+		// Cashfree calls this server-to-server).
+		r.Post("/api/webhooks/cashfree", h.CashfreeWebhook)
 	})
 
 	// Protected Routes (JWT Auth required)
@@ -262,6 +280,11 @@ func main() {
 		r.Post("/api/subscriptions/my/requests", h.SubmitSubscriptionRequest)
 		r.Post("/api/subscriptions/my/requests/{id}/cancel", h.WithdrawSubscriptionRequest)
 
+		// My Plan — online payment (Cashfree checkout + verify)
+		r.Get("/api/subscriptions/my/payment-config", h.GetPaymentConfig)
+		r.Post("/api/subscriptions/my/pay", h.CreatePlanPaymentOrder)
+		r.Post("/api/subscriptions/my/pay/{orderId}/verify", h.VerifyPlanPayment)
+
 		// Subscription change requests (superadmin approval inbox)
 		r.Get("/api/subscription-requests", h.GetSubscriptionRequests)
 		r.Post("/api/subscription-requests/{id}/approve", h.ApproveSubscriptionRequest)
@@ -281,6 +304,10 @@ func main() {
 		// Update Repo Config (superadmin only)
 		r.Get("/api/system/update-config", h.GetUpdateRepoConfig)
 		r.Post("/api/system/update-config", h.UpdateUpdateRepoConfig)
+
+		// Cashfree Payment Config (superadmin only)
+		r.Get("/api/system/cashfree-config", h.GetCashfreeConfig)
+		r.Post("/api/system/cashfree-config", h.UpdateCashfreeConfig)
 
 		// Gemini Config & AI Menu Parsing (superadmin only)
 		r.Get("/api/system/gemini-config", h.GetGeminiConfig)

@@ -670,6 +670,33 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`CREATE INDEX IF NOT EXISTS idx_subscription_payments_sub ON subscription_payments (subscription_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_subscription_payments_store ON subscription_payments (store_id, created_at DESC)`,
 
+		// Payment orders — one row per Cashfree checkout session a store user
+		// starts from the My Plan page. Plan details are snapshotted so the
+		// fulfillment on payment success doesn't depend on plan/subscription
+		// state that may have changed while the customer was paying.
+		`CREATE TABLE IF NOT EXISTS payment_orders (
+			id VARCHAR(255) PRIMARY KEY,
+			gateway VARCHAR(30) NOT NULL DEFAULT 'cashfree',
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			subscription_id VARCHAR(255) REFERENCES store_subscriptions(id) ON DELETE SET NULL,
+			plan_id VARCHAR(255) REFERENCES subscription_plans(id) ON DELETE SET NULL,
+			plan_name VARCHAR(255) NOT NULL,
+			plan_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			recurring_type VARCHAR(20) NOT NULL,
+			amount DECIMAL(10, 2) NOT NULL,
+			currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+			status VARCHAR(20) NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'paid', 'failed', 'expired')),
+			payment_session_id VARCHAR(255),
+			cf_payment_id VARCHAR(255),
+			payment_id VARCHAR(255) REFERENCES subscription_payments(id) ON DELETE SET NULL,
+			created_by VARCHAR(255) REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_payment_orders_store ON payment_orders (store_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders (status)`,
+		`ALTER TABLE payment_orders ADD COLUMN IF NOT EXISTS payment_id VARCHAR(255)`,
+
 		// show_price hides the plan amount from the store's My Plan page when
 		// off (default). Superadmin-controlled per subscription.
 		`ALTER TABLE store_subscriptions ADD COLUMN IF NOT EXISTS show_price BOOLEAN NOT NULL DEFAULT false`,
@@ -826,7 +853,7 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		"item_expenses", "table_sections", "support_tickets", "support_messages",
 		"bill_lines", "doc_series", "credit_notes", "credit_note_lines",
 		"subscription_plans", "store_subscriptions", "subscription_events",
-		"subscription_requests", "subscription_payments",
+		"subscription_requests", "subscription_payments", "payment_orders",
 		"raw_materials", "raw_material_purchases", "raw_material_transactions",
 		"item_recipes",
 	}

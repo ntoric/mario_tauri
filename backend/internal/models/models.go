@@ -498,6 +498,37 @@ type GeminiConfigRequest struct {
 	Model  string `json:"model"`
 }
 
+// CashfreeConfig holds the Cashfree payment gateway settings managed from
+// Developer Settings. The secret key is only exposed to superadmin.
+type CashfreeConfig struct {
+	Enabled   bool   `json:"enabled"`
+	AppID     string `json:"appId"`
+	SecretKey string `json:"secretKey"`
+	Env       string `json:"env"` // "sandbox" | "production"
+	ReturnURL string `json:"returnUrl"`
+	NotifyURL string `json:"notifyUrl"`
+	// Source reports where the effective values come from: "settings" when
+	// the superadmin has saved them, "env" when only environment variables
+	// supply the credentials, "none" when unconfigured.
+	Source string `json:"source"`
+}
+
+type CashfreeConfigRequest struct {
+	Enabled   bool   `json:"enabled"`
+	AppID     string `json:"appId"`
+	SecretKey string `json:"secretKey"`
+	Env       string `json:"env"`
+	ReturnURL string `json:"returnUrl"`
+	NotifyURL string `json:"notifyUrl"`
+}
+
+// PaymentConfigResponse is the non-secret availability flag the My Plan page
+// consumes to decide whether to show online payment options.
+type PaymentConfigResponse struct {
+	Enabled bool   `json:"enabled"`
+	Mode    string `json:"mode"` // "sandbox" | "production"
+}
+
 // GeminiModel is a single entry returned by the Gemini "list models" endpoint.
 type GeminiModel struct {
 	Name                       string   `json:"name"`
@@ -1177,4 +1208,51 @@ type RawMaterialConsumptionByItem struct {
 	ItemName  string  `json:"itemName"`
 	TotalCost float64 `json:"totalCost"`
 	TxnCount  int     `json:"txnCount"`
+}
+
+// PaymentOrder tracks one checkout session created via the payment gateway
+// (Cashfree) for a store plan payment. Plan details are snapshotted so
+// fulfillment on payment success is independent of later plan edits.
+type PaymentOrder struct {
+	ID               string    `json:"id"` // our order id — also sent to Cashfree as order_id
+	Gateway          string    `json:"gateway"`
+	StoreID          string    `json:"storeId"`
+	StoreName        string    `json:"storeName,omitempty"`
+	SubscriptionID   string    `json:"subscriptionId,omitempty"`
+	PlanID           string    `json:"planId,omitempty"`
+	PlanName         string    `json:"planName"`
+	PlanPrice        float64   `json:"planPrice"`
+	RecurringType    string    `json:"recurringType"`
+	Amount           float64   `json:"amount"`
+	Currency         string    `json:"currency"`
+	Status           string    `json:"status"` // created | paid | failed | expired
+	PaymentSessionID string    `json:"paymentSessionId,omitempty"`
+	CFPaymentID      string    `json:"cfPaymentId,omitempty"`
+	CreatedBy        string    `json:"createdBy,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// CreatePaymentOrderPayload is the body for POST /api/subscriptions/my/pay.
+// PlanID is optional — empty renews the store's current plan.
+type CreatePaymentOrderPayload struct {
+	StoreID string `json:"storeId"`
+	PlanID  string `json:"planId"`
+}
+
+// CreatePaymentOrderResponse carries everything the frontend needs to open
+// the Cashfree checkout.
+type CreatePaymentOrderResponse struct {
+	Order            *PaymentOrder `json:"order"`
+	PaymentSessionID string        `json:"paymentSessionId"`
+	Mode             string        `json:"mode"` // sandbox | production — JS SDK mode
+}
+
+// VerifyPaymentOrderResponse is returned by the verify endpoint — status of
+// the order plus the resulting subscription/payment when paid.
+type VerifyPaymentOrderResponse struct {
+	Status       string               `json:"status"` // pending | paid | failed | expired
+	Order        *PaymentOrder        `json:"order"`
+	Subscription *StoreSubscription   `json:"subscription,omitempty"`
+	Payment      *SubscriptionPayment `json:"payment,omitempty"`
 }

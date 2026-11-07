@@ -83,6 +83,7 @@ type Repository struct {
 	SupportConfig   *SupportConfigRepository
 	UpdateRepo      *UpdateRepoRepository
 	Gemini          *GeminiConfigRepository
+	Cashfree        *CashfreeConfigRepository
 	Menu            *MenuRepository
 	ExpenseCategory *ExpenseCategoryRepository
 	Expense         *ExpenseRepository
@@ -112,6 +113,7 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		SupportConfig:   &SupportConfigRepository{db: db},
 		UpdateRepo:      &UpdateRepoRepository{db: db},
 		Gemini:          &GeminiConfigRepository{db: db},
+		Cashfree:        &CashfreeConfigRepository{db: db},
 		Menu:            &MenuRepository{db: db, redis: redisCache},
 		ExpenseCategory: &ExpenseCategoryRepository{db: db, redis: redisCache},
 		Expense:         &ExpenseRepository{db: db, redis: redisCache},
@@ -2637,6 +2639,85 @@ func (r *GeminiConfigRepository) Save(ctx context.Context, apiKey, model, modifi
 		return err
 	}
 
+	return tx.Commit()
+}
+
+// ==========================================
+// CASHFREE CONFIG REPOSITORY
+// ==========================================
+
+type CashfreeConfigRepository struct {
+	db *sql.DB
+}
+
+// Get returns the Cashfree settings saved in global_settings. hasEnabled
+// reports whether the enabled flag has been saved — when false the caller
+// should fall back to environment-derived defaults.
+func (r *CashfreeConfigRepository) Get(ctx context.Context) (cfg *models.CashfreeConfig, hasEnabled bool, err error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT key, value FROM global_settings
+		WHERE key IN ('cashfree_enabled', 'cashfree_app_id', 'cashfree_secret_key',
+		              'cashfree_env', 'cashfree_return_url', 'cashfree_notify_url')
+	`)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	cfg = &models.CashfreeConfig{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, false, err
+		}
+		switch k {
+		case "cashfree_enabled":
+			hasEnabled = true
+			cfg.Enabled = v == "true"
+		case "cashfree_app_id":
+			cfg.AppID = v
+		case "cashfree_secret_key":
+			cfg.SecretKey = v
+		case "cashfree_env":
+			cfg.Env = v
+		case "cashfree_return_url":
+			cfg.ReturnURL = v
+		case "cashfree_notify_url":
+			cfg.NotifyURL = v
+		}
+	}
+	return cfg, hasEnabled, rows.Err()
+}
+
+// Save persists all Cashfree settings in global_settings.
+func (r *CashfreeConfigRepository) Save(ctx context.Context, req models.CashfreeConfigRequest, modifiedBy string) error {
+	enabled := "false"
+	if req.Enabled {
+		enabled = "true"
+	}
+	values := map[string]string{
+		"cashfree_enabled":    enabled,
+		"cashfree_app_id":     req.AppID,
+		"cashfree_secret_key": req.SecretKey,
+		"cashfree_env":        req.Env,
+		"cashfree_return_url": req.ReturnURL,
+		"cashfree_notify_url": req.NotifyURL,
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for key, value := range values {
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO global_settings (key, value, modified_by) VALUES ($1, $2, $3)
+			ON CONFLICT (key) DO UPDATE SET value = $2, modified_by = $3, updated_at = CURRENT_TIMESTAMP
+		`, key, value, modifiedBy); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
