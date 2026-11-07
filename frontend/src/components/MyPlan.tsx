@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Crown, CheckCircle2, RefreshCw, Building2, CalendarClock,
   Infinity as InfinityIcon, AlertTriangle, CreditCard, Zap,
-  ArrowUpCircle, ArrowDownCircle, Repeat, X, Ban, Clock3, Send,
+  ArrowUpCircle, ArrowDownCircle, Repeat, X, Ban, Clock3, Send, LifeBuoy,
 } from 'lucide-react';
 import { useAuthStore, useDataStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -11,6 +11,8 @@ import { Button } from '../components/ui/Button';
 import { api } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 import notify from '../utils/toast';
+import { useConfirm } from '../hooks/useConfirm';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import type {
   MySubscription, MySubscriptionHistory, RecurringType, SubscriptionPlan,
 } from '../types';
@@ -42,6 +44,7 @@ const formatDate = (s?: string) =>
   s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const MyPlan: React.FC = () => {
+  const navigate = useNavigate();
   const { user, currentStoreId } = useAuthStore();
   const { stores } = useDataStore();
   const { setHeaderContent } = usePageHeader();
@@ -57,6 +60,7 @@ const MyPlan: React.FC = () => {
   const [showReqModal, setShowReqModal] = useState(false);
   const [reqPlanId, setReqPlanId] = useState('');
   const [isSubmittingReq, setIsSubmittingReq] = useState(false);
+  const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm();
 
   // Re-render the countdown every minute.
   useEffect(() => {
@@ -163,7 +167,13 @@ const MyPlan: React.FC = () => {
   };
 
   const handleRequestCancel = async () => {
-    if (!confirm('Request cancellation of your plan? It will remain active until the current cycle ends once approved by the admin.')) return;
+    const confirmed = await confirm({
+      title: 'Request Cancellation',
+      message: 'Request cancellation of your plan? It will remain active until the current cycle ends once approved by the admin.',
+      confirmLabel: 'Request Cancellation',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     setIsSubmittingReq(true);
     try {
       await api.submitSubscriptionRequest(currentStoreId || undefined, { action: 'cancel' });
@@ -178,7 +188,13 @@ const MyPlan: React.FC = () => {
 
   const handleWithdraw = async () => {
     if (!pending) return;
-    if (!confirm('Withdraw your pending change request?')) return;
+    const confirmed = await confirm({
+      title: 'Withdraw Request',
+      message: 'Withdraw your pending change request?',
+      confirmLabel: 'Withdraw',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
     setIsSubmittingReq(true);
     try {
       await api.withdrawSubscriptionRequest(pending.id);
@@ -428,9 +444,9 @@ const MyPlan: React.FC = () => {
           )}
 
           {/* request actions */}
-          {isActive && canRequest && !pending && (requestablePlans.length > 0 || true) && (
+          {isActive && canRequest && (
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
-              {requestablePlans.length > 0 && (
+              {!pending && requestablePlans.length > 0 && (
                 <Button
                   variant="outline"
                   leftIcon={<Repeat size={15} />}
@@ -439,15 +455,24 @@ const MyPlan: React.FC = () => {
                   Request Plan Change
                 </Button>
               )}
+              {!pending && (
+                <Button
+                  variant="outline"
+                  leftIcon={<Ban size={15} />}
+                  onClick={handleRequestCancel}
+                  isLoading={isSubmittingReq}
+                  loadingText="Submitting..."
+                  style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                >
+                  Request Cancellation
+                </Button>
+              )}
               <Button
                 variant="outline"
-                leftIcon={<Ban size={15} />}
-                onClick={handleRequestCancel}
-                isLoading={isSubmittingReq}
-                loadingText="Submitting..."
-                style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                leftIcon={<LifeBuoy size={15} />}
+                onClick={() => navigate('/business-settings?tab=support')}
               >
-                Request Cancellation
+                Support
               </Button>
             </div>
           )}
@@ -605,6 +630,17 @@ const MyPlan: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        cancelLabel={confirmState.cancelLabel}
+        variant={confirmState.variant}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 };

@@ -177,6 +177,10 @@ func main() {
 		r.Put("/api/item-expenses/{id}", h.UpdateItemExpense)
 		r.Delete("/api/item-expenses/{id}", h.DeleteItemExpense)
 
+		// Item Recipes — raw materials required to prepare one unit of an item
+		r.Get("/api/items/{itemId}/recipe", h.GetItemRecipe)
+		r.Put("/api/items/{itemId}/recipe", h.SetItemRecipe)
+
 		// Tables
 		r.Get("/api/tables", h.GetTables)
 		r.Get("/api/ws/tables-status", h.TableStatusWS)
@@ -301,6 +305,25 @@ func main() {
 		// Expense Reports
 		r.Get("/api/expenses/report/by-category", h.GetExpenseReportByCategory)
 		r.Get("/api/expenses/report/by-date", h.GetExpenseSummaryByDate)
+
+		// Raw Materials (store-scoped inventory)
+		r.Get("/api/raw-materials", h.GetRawMaterials)
+		r.Post("/api/raw-materials", h.CreateRawMaterial)
+		r.Put("/api/raw-materials/{id}", h.UpdateRawMaterial)
+		r.Delete("/api/raw-materials/{id}", h.DeleteRawMaterial)
+
+		// Raw Material Purchases (stock-in + cost tracking)
+		r.Get("/api/raw-material-purchases", h.GetRawMaterialPurchases)
+		r.Post("/api/raw-material-purchases", h.CreateRawMaterialPurchase)
+		r.Put("/api/raw-material-purchases/{id}", h.UpdateRawMaterialPurchase)
+		r.Delete("/api/raw-material-purchases/{id}", h.DeleteRawMaterialPurchase)
+		r.Get("/api/raw-material-purchases/report", h.GetRawMaterialPurchaseReport)
+		r.Get("/api/reports/raw-material-consumption", h.GetRawMaterialConsumptionReport)
+
+		// Raw Material Stock Transactions (usage / wastage / adjustment ledger)
+		r.Get("/api/raw-material-transactions", h.GetRawMaterialTransactions)
+		r.Post("/api/raw-material-transactions", h.CreateRawMaterialTransaction)
+		r.Delete("/api/raw-material-transactions/{id}", h.DeleteRawMaterialTransaction)
 
 		// Revenue Report
 		r.Get("/api/reports/revenue", h.GetRevenueReport)

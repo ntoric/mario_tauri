@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, ShoppingBag, Tag, TrendingUp, DollarSign, ArrowRight, PieChart } from 'lucide-react';
+import { BarChart2, ShoppingBag, Tag, TrendingUp, DollarSign, ArrowRight, PieChart , Boxes } from 'lucide-react';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { useTaxEnabled } from '../hooks/useTaxEnabled';
 
@@ -74,6 +74,13 @@ const ReportsIndex: React.FC = () => {
       icon: <DollarSign size={24} />,
       path: '/reports/gst',
       color: '#34c98e',
+    },
+    {
+      title: 'Raw Material Consumption',
+      description: 'Raw materials consumed by completed orders — per material and per menu item',
+      icon: <Boxes size={24} />,
+      color: '#e65100',
+      path: '/reports/raw-material-consumption',
     },
   ];
 

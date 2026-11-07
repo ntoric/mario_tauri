@@ -29,9 +29,11 @@ import OrderPage from './components/OrderPage';
 import ParcelOrderPage from './components/ParcelOrderPage';
 import Expenses from './components/Expenses';
 import ExpenseReports from './components/ExpenseReports';
+import Inventory from './components/Inventory';
 import RevenueReport from './components/RevenueReport';
 import ItemProfitReport from './components/ItemProfitReport';
 import GstReports from './components/GstReports';
+import RawMaterialConsumptionReportPage from './components/RawMaterialConsumptionReport';
 import { api } from './services/api';
 import { isQuietHours } from './utils/quietHours';
 import { updaterService } from './services/updater';
@@ -167,8 +169,10 @@ const AppRoutes: React.FC = () => {
         <Route path="reports/revenue" element={<RevenueReport />} />
         <Route path="reports/item-profit" element={<ItemProfitReport />} />
         <Route path="reports/gst" element={<GstReports />} />
+        <Route path="reports/raw-material-consumption" element={<RawMaterialConsumptionReportPage />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="expense-reports" element={<ExpenseReports />} />
+        <Route path="inventory" element={<Inventory />} />
       </Route>
     </Routes>
   );

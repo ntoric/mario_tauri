@@ -91,6 +91,7 @@ type Repository struct {
 	Report          *ReportRepository
 	SupportTicket   *SupportTicketRepository
 	Subscription    *SubscriptionRepository
+	Inventory       *InventoryRepository
 	Cache           *MemoryCache
 	db              *sql.DB
 }
@@ -119,6 +120,7 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		Report:          &ReportRepository{db: db},
 		SupportTicket:   &SupportTicketRepository{db: db},
 		Subscription:    &SubscriptionRepository{db: db},
+		Inventory:       &InventoryRepository{db: db, redis: redisCache},
 		Cache:           cache,
 	}
 }
@@ -137,6 +139,11 @@ var storeScopedTables = map[string]bool{
 	"expense_categories": true,
 	"item_expenses":      true,
 	"support_tickets":    true,
+
+	"raw_materials":             true,
+	"raw_material_purchases":    true,
+	"raw_material_transactions": true,
+	"item_recipes":              true,
 }
 
 // GetRecordStoreID returns the store_id of a record in a store-scoped table.
@@ -223,7 +230,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.GSTIN = gstin.String
 		s.FSSAINo = fssaiNo.String
 		s.Phone = phone.String
-	s.SecondaryPhone = secondaryPhone.String
+		s.SecondaryPhone = secondaryPhone.String
 		s.PrinterName = printerName.String
 		s.PrinterVendorID = printerVendor.String
 		s.PrinterProductID = printerProduct.String
@@ -751,15 +758,52 @@ func itemsCacheKey(storeID string, includeProfit bool) string {
 }
 
 func itemExpensesTableExists(ctx context.Context, db *sql.DB) bool {
+	return tableExists(ctx, db, "item_expenses")
+}
+
+func itemRecipesTableExists(ctx context.Context, db *sql.DB) bool {
+	return tableExists(ctx, db, "item_recipes")
+}
+
+func tableExists(ctx context.Context, db *sql.DB, name string) bool {
 	var exists bool
 	err := db.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.tables
-			WHERE table_schema = current_schema() AND table_name = 'item_expenses'
+			WHERE table_schema = current_schema() AND table_name = $1
 		)
-	`).Scan(&exists)
+	`, name).Scan(&exists)
 	return err == nil && exists
 }
+
+// itemCostTablesExist reports whether item cost data is available — either
+// recipes (preferred) or the legacy per-item expense entries.
+func itemCostTablesExist(ctx context.Context, db *sql.DB) bool {
+	return itemRecipesTableExists(ctx, db) || itemExpensesTableExists(ctx, db)
+}
+
+// itemTotalCostSQL is the recipe-first item cost expression used wherever an
+// item's preparation cost is aggregated: when the item has a recipe the cost
+// is sum(recipe qty x material weighted avg cost); otherwise the legacy
+// manual item_expenses amounts are used (items that have not been migrated).
+const itemTotalCostSQL = `COALESCE(
+	(SELECT SUM(rc.quantity * COALESCE(m.avg_cost, 0))
+	 FROM item_recipes rc JOIN raw_materials m ON m.id = rc.material_id
+	 WHERE rc.item_id = i.id AND rc.is_active = true),
+	(SELECT SUM(ie.amount) FROM item_expenses ie
+	 WHERE ie.item_id = i.id AND ie.is_active = true), 0)`
+
+// itemCostUnionSQL produces per-line item costs for GROUP BY joins: recipe
+// lines for recipe-backed items plus legacy expense rows for the rest.
+const itemCostUnionSQL = `
+	SELECT rc.item_id, (rc.quantity * COALESCE(m.avg_cost, 0)) AS amount
+	FROM item_recipes rc JOIN raw_materials m ON m.id = rc.material_id
+	WHERE rc.is_active = true
+	UNION ALL
+	SELECT ie.item_id, ie.amount
+	FROM item_expenses ie
+	WHERE ie.is_active = true
+	  AND NOT EXISTS (SELECT 1 FROM item_recipes r2 WHERE r2.item_id = ie.item_id AND r2.is_active = true)`
 
 func applyItemProfitFields(i *models.Item) {
 	if i.TotalCost <= 0 {
@@ -791,14 +835,14 @@ func (r *ItemRepository) GetAll(ctx context.Context, storeID string, includeProf
 		}
 	}
 
-	hasItemExpenses := includeProfit && itemExpensesTableExists(ctx, r.db)
+	hasItemExpenses := includeProfit && itemCostTablesExist(ctx, r.db)
 
 	var sqlStr string
 	if hasItemExpenses {
 		sqlStr = `
 			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, COALESCE(NULLIF(i.tax_category, ''), 'taxable'), i.is_active, i.enabled, i.is_favourite,
 			       c.name as category_name,
-			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			       ` + itemTotalCostSQL + ` as total_cost
 			FROM items i
 			LEFT JOIN categories c ON i.category_id = c.id
 			WHERE i.store_id = $1 AND i.is_active = true
@@ -987,14 +1031,14 @@ func (r *ItemExpenseRepository) Delete(ctx context.Context, id, storeID, modifie
 }
 
 func (r *ItemExpenseRepository) GetProfitReport(ctx context.Context, storeID string) (*models.ItemProfitReport, error) {
-	hasItemExpenses := r.tableExists(ctx)
+	hasItemExpenses := itemCostTablesExist(ctx, r.db)
 
 	var query string
 	if hasItemExpenses {
 		query = `
 			SELECT i.id, i.store_id, i.category_id, i.name, i.description, i.price, i.hsn_code, i.tax_percent, i.is_active,
 			       c.name as category_name,
-			       COALESCE((SELECT SUM(ie.amount) FROM item_expenses ie WHERE ie.item_id = i.id AND ie.is_active = true), 0) as total_cost
+			       ` + itemTotalCostSQL + ` as total_cost
 			FROM items i
 			LEFT JOIN categories c ON i.category_id = c.id
 			WHERE i.store_id = $1 AND i.is_active = true
@@ -1046,7 +1090,7 @@ func (r *ItemExpenseRepository) GetProfitReport(ctx context.Context, storeID str
 		item.CategoryName = catName.String
 		applyItemProfitFields(&item)
 
-		expenses, err := r.GetByItemID(ctx, item.ID)
+		expenses, err := itemCostLines(ctx, r.db, item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -1630,15 +1674,50 @@ func (r *OrderRepository) Update(ctx context.Context, id string, updates map[str
 		}
 	}
 
+	// Editing an already-completed order's items must re-sync the material
+	// consumption recorded at completion.
+	if hasItems {
+		var status string
+		if err := tx.QueryRowContext(ctx, "SELECT status FROM orders WHERE id = $1", id).Scan(&status); err == nil && status == "completed" {
+			inv := &InventoryRepository{db: r.db}
+			if err := inv.ReverseOrderConsumptionTx(ctx, tx, id, modifiedBy); err != nil {
+				return err
+			}
+			if err := inv.ConsumeOrderTx(ctx, tx, id, modifiedBy); err != nil {
+				return err
+			}
+		}
+	}
+
 	return tx.Commit()
 }
 
+// Complete marks the order paid/completed and, atomically in the same
+// transaction, deducts the raw materials required by each ordered item's
+// recipe (a 'consumption' ledger entry per material line).
 func (r *OrderRepository) Complete(ctx context.Context, id, paymentMethod, modifiedBy string) error {
-	_, err := r.db.ExecContext(ctx, `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var storeID string
+	err = tx.QueryRowContext(ctx, `
 		UPDATE orders SET status = 'completed', payment_status = 'paid', payment_method = $1, modified_by = $3, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $2
-	`, paymentMethod, id, modifiedBy)
-	return err
+		RETURNING store_id
+	`, paymentMethod, id, modifiedBy).Scan(&storeID)
+	if err != nil {
+		return err
+	}
+
+	inv := &InventoryRepository{db: r.db}
+	if err := inv.ConsumeOrderTx(ctx, tx, id, modifiedBy); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy, reason string) error {
@@ -1659,6 +1738,13 @@ func (r *OrderRepository) Cancel(ctx context.Context, id, modifiedBy, reason str
 		UPDATE bills SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancel_reason = NULLIF($3, ''), modified_by = $2 WHERE order_id = $1 AND (status IS NULL OR status = 'active')
 	`, id, modifiedBy, reason)
 	if err != nil {
+		return err
+	}
+
+	// If the order had already completed, restore the raw materials that
+	// were consumed for it.
+	inv := &InventoryRepository{db: r.db}
+	if err := inv.ReverseOrderConsumptionTx(ctx, tx, id, modifiedBy); err != nil {
 		return err
 	}
 
@@ -3710,9 +3796,8 @@ func salesProfitGroupedSQL(source, storeID string, f ReportFilter, hasCosts bool
 	unitCost := "0::float8"
 	if hasCosts {
 		costJoin = `LEFT JOIN (
-			SELECT item_id, SUM(amount) AS total_cost
-			FROM item_expenses WHERE is_active = true
-			GROUP BY item_id
+			SELECT item_id, SUM(amount) AS total_cost FROM (` + itemCostUnionSQL + `
+			) cost_lines GROUP BY item_id
 		) ic ON ic.item_id = i.id AND i.is_active = true`
 		groupBy += ", ic.total_cost"
 		unitCost = "COALESCE(ic.total_cost, 0)"
@@ -3754,7 +3839,7 @@ func salesProfitGroupedSQL(source, storeID string, f ReportFilter, hasCosts bool
 }
 
 func (r *ReportRepository) GetSalesProfit(ctx context.Context, storeID string, f ReportFilter) (*models.SalesProfitReport, error) {
-	hasCosts := itemExpensesTableExists(ctx, r.db)
+	hasCosts := itemCostTablesExist(ctx, r.db)
 	grouped, args := salesProfitGroupedSQL("bills", storeID, f, hasCosts)
 
 	// Same fallback rule as the other sales reports: completed orders are
@@ -3863,7 +3948,7 @@ func (r *ReportRepository) GetSalesProfit(ctx context.Context, storeID string, f
 }
 
 func (r *ReportRepository) GetMenuProfit(ctx context.Context, storeID string, f ReportFilter) (*models.MenuProfitReport, error) {
-	hasCosts := itemExpensesTableExists(ctx, r.db)
+	hasCosts := itemCostTablesExist(ctx, r.db)
 
 	costExpr := "0::float8"
 	costJoin := ""
@@ -3872,17 +3957,27 @@ func (r *ReportRepository) GetMenuProfit(ctx context.Context, storeID string, f 
 	if hasCosts {
 		costExpr = "COALESCE(ic.total_cost, 0)"
 		costJoin = `LEFT JOIN (
-			SELECT item_id, SUM(amount) AS total_cost
-			FROM item_expenses WHERE is_active = true
-			GROUP BY item_id
+			SELECT item_id, SUM(amount) AS total_cost FROM (` + itemCostUnionSQL + `
+			) cost_lines GROUP BY item_id
 		) ic ON ic.item_id = i.id`
 		expensesExpr = `COALESCE((
 			SELECT json_agg(json_build_object(
-				'id', e.id, 'itemId', e.item_id, 'name', e.name,
-				'description', COALESCE(e.description, ''), 'amount', e.amount
-			) ORDER BY e.name)
-			FROM item_expenses e
-			WHERE e.item_id = t.item_id AND e.is_active = true
+				'id', x.id, 'itemId', x.item_id, 'name', x.name,
+				'description', x.description, 'amount', x.amount
+			) ORDER BY x.name)
+			FROM (
+				SELECT rc.id, rc.item_id, m.name,
+				       (rc.quantity || ' ' || m.unit || ' @ ' || ROUND(COALESCE(m.avg_cost,0)::numeric, 2) || '/' || m.unit) AS description,
+				       (rc.quantity * COALESCE(m.avg_cost, 0)) AS amount
+				FROM item_recipes rc
+				JOIN raw_materials m ON m.id = rc.material_id
+				WHERE rc.item_id = t.item_id AND rc.is_active = true
+				UNION ALL
+				SELECT e.id, e.item_id, e.name, COALESCE(e.description, ''), e.amount
+				FROM item_expenses e
+				WHERE e.item_id = t.item_id AND e.is_active = true
+				  AND NOT EXISTS (SELECT 1 FROM item_recipes r2 WHERE r2.item_id = e.item_id AND r2.is_active = true)
+			) x
 		), '[]'::json)`
 	}
 

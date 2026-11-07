@@ -673,6 +673,137 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// show_price hides the plan amount from the store's My Plan page when
 		// off (default). Superadmin-controlled per subscription.
 		`ALTER TABLE store_subscriptions ADD COLUMN IF NOT EXISTS show_price BOOLEAN NOT NULL DEFAULT false`,
+
+		// Raw materials — store-scoped ingredient/supply catalog. current_stock
+		// is maintained by the transaction ledger (raw_material_transactions).
+		`CREATE TABLE IF NOT EXISTS raw_materials (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			unit VARCHAR(30) NOT NULL DEFAULT 'pcs',
+			description TEXT,
+			current_stock DECIMAL(12,3) NOT NULL DEFAULT 0,
+			min_stock DECIMAL(12,3) NOT NULL DEFAULT 0,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_materials_store ON raw_materials (store_id)`,
+
+		// Raw material purchases — each row is a stock-in event with cost
+		// details; creating/updating/deleting one writes/adjusts the matching
+		// 'purchase' transaction in the ledger.
+		`CREATE TABLE IF NOT EXISTS raw_material_purchases (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			material_id VARCHAR(255) REFERENCES raw_materials(id) ON DELETE CASCADE,
+			quantity DECIMAL(12,3) NOT NULL,
+			unit_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+			total_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+			vendor VARCHAR(255),
+			invoice_number VARCHAR(100),
+			purchase_date TIMESTAMP NOT NULL,
+			payment_method VARCHAR(50),
+			notes TEXT,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_purchases_store ON raw_material_purchases (store_id, purchase_date DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_purchases_material ON raw_material_purchases (material_id)`,
+
+		// Raw material stock ledger — signed quantity per event
+		// ('purchase' adds, 'usage'/'wastage' subtract, 'adjustment' either).
+		// stock_after snapshots the running balance for display; both it and
+		// raw_materials.current_stock are recomputed whenever the ledger
+		// changes so edits/deletes stay consistent.
+		`CREATE TABLE IF NOT EXISTS raw_material_transactions (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			material_id VARCHAR(255) REFERENCES raw_materials(id) ON DELETE CASCADE,
+			type VARCHAR(20) NOT NULL CHECK (type IN ('purchase', 'usage', 'wastage', 'adjustment')),
+			quantity DECIMAL(12,3) NOT NULL,
+			stock_after DECIMAL(12,3),
+			reference_id VARCHAR(255),
+			notes TEXT,
+			transaction_date TIMESTAMP NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_by VARCHAR(255) REFERENCES users(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_txns_store ON raw_material_transactions (store_id, transaction_date DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_txns_material ON raw_material_transactions (material_id, transaction_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_txns_ref ON raw_material_transactions (reference_id) WHERE reference_id IS NOT NULL`,
+
+		// Item recipes — raw materials (and their quantities) needed to
+		// prepare one unit of a menu item. Replaces the manual preparation
+		// cost entries for items that have a recipe; items without a recipe
+		// keep using item_expenses for cost tracking.
+		`CREATE TABLE IF NOT EXISTS item_recipes (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) REFERENCES stores(id) ON DELETE CASCADE,
+			item_id VARCHAR(255) REFERENCES items(id) ON DELETE CASCADE,
+			material_id VARCHAR(255) REFERENCES raw_materials(id) ON DELETE CASCADE,
+			quantity DECIMAL(12,3) NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(item_id, material_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_item_recipes_store ON item_recipes (store_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_item_recipes_item ON item_recipes (item_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_item_recipes_material ON item_recipes (material_id)`,
+
+		// Weighted-average purchase cost per material — drives recipe/item
+		// cost calculations and the unit_cost snapshot on consumption rows.
+		`ALTER TABLE raw_materials ADD COLUMN IF NOT EXISTS avg_cost DECIMAL(12,4) DEFAULT 0`,
+		`UPDATE raw_materials m SET avg_cost = COALESCE((
+			SELECT SUM(p.total_cost) / NULLIF(SUM(p.quantity), 0)
+			FROM raw_material_purchases p
+			WHERE p.material_id = m.id AND p.is_active = true), 0)
+		 WHERE m.avg_cost IS NULL OR m.avg_cost = 0`,
+
+		// Consumption ledger rows: link back to the menu item that consumed
+		// the material and snapshot the unit cost at write time.
+		`ALTER TABLE raw_material_transactions ADD COLUMN IF NOT EXISTS item_id VARCHAR(255)`,
+		`ALTER TABLE raw_material_transactions ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(12,4) DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_raw_material_txns_item ON raw_material_transactions (item_id) WHERE item_id IS NOT NULL`,
+		// Order-driven stock deduction uses the dedicated 'consumption' type —
+		// re-create the type check so it is allowed alongside the manual types.
+		`ALTER TABLE raw_material_transactions DROP CONSTRAINT IF EXISTS raw_material_transactions_type_check`,
+		`ALTER TABLE raw_material_transactions ADD CONSTRAINT raw_material_transactions_type_check CHECK (type IN ('purchase', 'usage', 'wastage', 'adjustment', 'consumption'))`,
+
+		// Batch tracking — a purchase row doubles as a stock batch: buys at
+		// the same unit cost merge into the oldest open batch, different
+		// prices stay separate. remaining_qty is what's left of the batch;
+		// stock-outs drain batches oldest-first (FIFO).
+		`ALTER TABLE raw_material_purchases ADD COLUMN IF NOT EXISTS remaining_qty DECIMAL(12,3)`,
+		// Optional expiry date on the batch. Batches are keyed by
+		// (material, unit_cost, expiry_date): same price but different
+		// expiry means a different batch.
+		`ALTER TABLE raw_material_purchases ADD COLUMN IF NOT EXISTS expiry_date DATE`,
+		// Prefer bill invoice numbers in consumption notes over the raw order id.
+		`UPDATE raw_material_transactions t
+		 SET notes = regexp_replace(t.notes, '\(order [^)]*\)', '(order ' || b.invoice_no || ')')
+		 FROM bills b
+		 WHERE t.type = 'consumption' AND t.reference_id = b.order_id
+		   AND b.invoice_no IS NOT NULL AND b.invoice_no <> ''`,
+		`UPDATE raw_material_purchases SET remaining_qty = quantity WHERE remaining_qty IS NULL`,
+		// Backfill: allocate existing stock-outs FIFO per material.
+		`WITH outs AS (
+			SELECT material_id, -SUM(quantity) AS out_qty
+			FROM raw_material_transactions
+			WHERE is_active = true AND quantity < 0 GROUP BY material_id),
+		b AS (
+			SELECT p.id,
+				SUM(p.quantity) OVER (PARTITION BY p.material_id ORDER BY p.purchase_date, p.created_at, p.id) - p.quantity AS prior,
+				o.out_qty
+			FROM raw_material_purchases p JOIN outs o ON o.material_id = p.material_id
+			WHERE p.is_active = true)
+		UPDATE raw_material_purchases p
+		SET remaining_qty = p.quantity - GREATEST(0, LEAST(p.quantity, b.out_qty - b.prior))
+		FROM b WHERE p.id = b.id`,
 	}
 
 	for _, q := range alterQueries {
@@ -696,6 +827,8 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		"bill_lines", "doc_series", "credit_notes", "credit_note_lines",
 		"subscription_plans", "store_subscriptions", "subscription_events",
 		"subscription_requests", "subscription_payments",
+		"raw_materials", "raw_material_purchases", "raw_material_transactions",
+		"item_recipes",
 	}
 	for _, t := range auditTables {
 		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", t)); err != nil {

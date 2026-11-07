@@ -453,17 +453,6 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
           <ChevronRight size={18} className="channel-chevron" />
         </a>
 
-        {/* Support hours card */}
-        <div className="support-hours-card">
-          <div className="hours-header">
-            <Clock size={16} /> Support Availability
-          </div>
-          <p className="hours-line">Monday – Saturday</p>
-          <p className="hours-sub">9:00 AM – 9:00 PM IST</p>
-          <div className="hours-footnote">
-            Urgent billing / operational blockers are monitored 24/7.
-          </div>
-        </div>
       </div>
     </div>
   );

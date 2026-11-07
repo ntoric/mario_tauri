@@ -614,3 +614,112 @@ export interface SubscriptionEvent {
   createdByName?: string;
   createdAt: string;
 }
+
+export interface RawMaterial {
+  id: string;
+  storeId: string;
+  name: string;
+  unit: string;
+  description?: string;
+  currentStock: number;
+  minStock: number;
+  avgCost?: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
+export interface RawMaterialPurchase {
+  id: string;
+  storeId: string;
+  materialId: string;
+  materialName?: string;
+  materialUnit?: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  remainingQty?: number;
+  expiryDate?: string;
+  vendor?: string;
+  invoiceNumber?: string;
+  purchaseDate: string;
+  paymentMethod?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy: string;
+}
+
+export type RawMaterialTransactionType = 'purchase' | 'usage' | 'wastage' | 'adjustment' | 'consumption';
+
+export interface RawMaterialTransaction {
+  id: string;
+  storeId: string;
+  materialId: string;
+  materialName?: string;
+  materialUnit?: string;
+  type: RawMaterialTransactionType;
+  quantity: number;
+  stockAfter: number;
+  referenceId?: string;
+  itemId?: string;
+  itemName?: string;
+  unitCost?: number;
+  notes?: string;
+  transactionDate: string;
+  isActive: boolean;
+  createdAt?: string;
+  createdBy: string;
+}
+
+export interface RawMaterialPurchaseReport {
+  totalCost: number;
+  totalCount: number;
+  byMaterial: {
+    materialId: string;
+    materialName: string;
+    materialUnit: string;
+    quantity: number;
+    totalCost: number;
+    purchaseCount: number;
+  }[];
+  byDate: {
+    date: string;
+    totalCost: number;
+    purchaseCount: number;
+  }[];
+}
+
+export interface ItemRecipeLine {
+  id: string;
+  storeId: string;
+  itemId: string;
+  materialId: string;
+  materialName?: string;
+  materialUnit?: string;
+  materialAvgCost?: number;
+  quantity: number;
+  lineCost?: number;
+  isActive: boolean;
+}
+
+export interface RawMaterialConsumptionReport {
+  totalCost: number;
+  totalCount: number;
+  byMaterial: {
+    materialId: string;
+    materialName: string;
+    materialUnit: string;
+    quantity: number;
+    totalCost: number;
+    txnCount: number;
+  }[];
+  byItem: {
+    itemId: string;
+    itemName: string;
+    totalCost: number;
+    txnCount: number;
+  }[];
+}

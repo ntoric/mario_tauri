@@ -809,6 +809,118 @@ class ApiService {
     return this.fetch(`/reports/expenses-by-date?${qs.toString()}`);
   }
 
+  // Raw Materials (store-scoped inventory)
+  async getRawMaterials(storeId: string) {
+    return this.fetch(`/raw-materials?storeId=${storeId}`);
+  }
+
+  async createRawMaterial(material: any) {
+    return this.fetch('/raw-materials', {
+      method: 'POST',
+      body: JSON.stringify(material),
+    });
+  }
+
+  async updateRawMaterial(id: string, material: any) {
+    return this.fetch(`/raw-materials/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(material),
+    });
+  }
+
+  async deleteRawMaterial(id: string) {
+    return this.fetch(`/raw-materials/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Raw Material Purchases
+  async getRawMaterialPurchases(storeId: string, params: {
+    materialId?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.materialId) qs.set('materialId', params.materialId);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    return this.fetch(`/raw-material-purchases?${qs.toString()}`);
+  }
+
+  async createRawMaterialPurchase(purchase: any) {
+    return this.fetch('/raw-material-purchases', {
+      method: 'POST',
+      body: JSON.stringify(purchase),
+    });
+  }
+
+  async updateRawMaterialPurchase(id: string, purchase: any) {
+    return this.fetch(`/raw-material-purchases/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(purchase),
+    });
+  }
+
+  async deleteRawMaterialPurchase(id: string) {
+    return this.fetch(`/raw-material-purchases/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getRawMaterialPurchaseReport(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/raw-material-purchases/report?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
+  // Raw Material Stock Transactions
+  async getRawMaterialTransactions(storeId: string, params: {
+    materialId?: string;
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}) {
+    const qs = new URLSearchParams({ storeId });
+    if (params.materialId) qs.set('materialId', params.materialId);
+    if (params.type) qs.set('type', params.type);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    return this.fetch(`/raw-material-transactions?${qs.toString()}`);
+  }
+
+  async createRawMaterialTransaction(txn: any) {
+    return this.fetch('/raw-material-transactions', {
+      method: 'POST',
+      body: JSON.stringify(txn),
+    });
+  }
+
+  async deleteRawMaterialTransaction(id: string) {
+    return this.fetch(`/raw-material-transactions/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Item Recipes — raw materials required per menu item (bulk replace)
+  async getItemRecipe(itemId: string) {
+    return this.fetch(`/items/${itemId}/recipe`);
+  }
+
+  async setItemRecipe(itemId: string, storeId: string, lines: { materialId: string; quantity: number }[]) {
+    return this.fetch(`/items/${itemId}/recipe`, {
+      method: 'PUT',
+      body: JSON.stringify({ storeId, lines }),
+    });
+  }
+
+  async getRawMaterialConsumptionReport(storeId: string, startDate?: string, endDate?: string) {
+    let url = `/reports/raw-material-consumption?storeId=${storeId}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+    return this.fetch(url);
+  }
+
   // Revenue Report
   async getRevenueReport(storeId: string, startDate?: string, endDate?: string, summaryOnly?: boolean) {
     let url = `/reports/revenue?storeId=${storeId}`;

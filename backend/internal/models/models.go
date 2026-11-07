@@ -1033,3 +1033,148 @@ type MySubscriptionHistoryResponse struct {
 	Events   []SubscriptionEvent   `json:"events"`
 	Payments []SubscriptionPayment `json:"payments"`
 }
+
+// RawMaterial represents a store-scoped raw material / ingredient catalog row.
+// CurrentStock is derived from the raw_material_transactions ledger.
+type RawMaterial struct {
+	ID           string    `json:"id"`
+	StoreID      string    `json:"storeId"`
+	Name         string    `json:"name"`
+	Unit         string    `json:"unit"`
+	Description  string    `json:"description"`
+	CurrentStock float64   `json:"currentStock"`
+	MinStock     float64   `json:"minStock"`
+	AvgCost      float64   `json:"avgCost"`
+	IsActive     bool      `json:"isActive"`
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt,omitempty"`
+	CreatedBy    string    `json:"createdBy"`
+	ModifiedBy   string    `json:"modifiedBy,omitempty"`
+
+	// OpeningStock is a create-only input: when > 0 an 'adjustment' ledger
+	// entry is written so the opening balance is auditable.
+	OpeningStock float64 `json:"openingStock,omitempty"`
+}
+
+// RawMaterialPurchase records a stock-in event with cost details.
+type RawMaterialPurchase struct {
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	MaterialID    string    `json:"materialId"`
+	MaterialName  string    `json:"materialName,omitempty"`
+	MaterialUnit  string    `json:"materialUnit,omitempty"`
+	Quantity      float64   `json:"quantity"`
+	UnitCost      float64   `json:"unitCost"`
+	TotalCost     float64   `json:"totalCost"`
+	RemainingQty  float64   `json:"remainingQty"`
+	ExpiryDate    string    `json:"expiryDate,omitempty"`
+	Vendor        string    `json:"vendor"`
+	InvoiceNumber string    `json:"invoiceNumber"`
+	PurchaseDate  time.Time `json:"purchaseDate"`
+	PaymentMethod string    `json:"paymentMethod"`
+	Notes         string    `json:"notes"`
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt,omitempty"`
+	UpdatedAt     time.Time `json:"updatedAt,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
+	ModifiedBy    string    `json:"modifiedBy,omitempty"`
+}
+
+// RawMaterialTransaction is one signed ledger entry. Quantity is positive
+// for stock-in ('purchase', positive 'adjustment') and negative for
+// stock-out ('usage', 'wastage', negative 'adjustment').
+type RawMaterialTransaction struct {
+	ID              string    `json:"id"`
+	StoreID         string    `json:"storeId"`
+	MaterialID      string    `json:"materialId"`
+	MaterialName    string    `json:"materialName,omitempty"`
+	MaterialUnit    string    `json:"materialUnit,omitempty"`
+	Type            string    `json:"type"`
+	Quantity        float64   `json:"quantity"`
+	StockAfter      float64   `json:"stockAfter"`
+	ReferenceID     string    `json:"referenceId,omitempty"`
+	ItemID          string    `json:"itemId,omitempty"`
+	ItemName        string    `json:"itemName,omitempty"`
+	UnitCost        float64   `json:"unitCost"`
+	Notes           string    `json:"notes"`
+	TransactionDate time.Time `json:"transactionDate"`
+	IsActive        bool      `json:"isActive"`
+	CreatedAt       time.Time `json:"createdAt,omitempty"`
+	CreatedBy       string    `json:"createdBy"`
+}
+
+// RawMaterialPurchaseReport aggregates purchase spend per material and per date.
+type RawMaterialPurchaseReport struct {
+	TotalCost  float64                         `json:"totalCost"`
+	TotalCount int                             `json:"totalCount"`
+	ByMaterial []RawMaterialPurchaseByMaterial `json:"byMaterial"`
+	ByDate     []RawMaterialPurchaseByDate     `json:"byDate"`
+}
+
+type RawMaterialPurchaseByMaterial struct {
+	MaterialID    string  `json:"materialId"`
+	MaterialName  string  `json:"materialName"`
+	MaterialUnit  string  `json:"materialUnit"`
+	Quantity      float64 `json:"quantity"`
+	TotalCost     float64 `json:"totalCost"`
+	PurchaseCount int     `json:"purchaseCount"`
+}
+
+type RawMaterialPurchaseByDate struct {
+	Date          string  `json:"date"`
+	TotalCost     float64 `json:"totalCost"`
+	PurchaseCount int     `json:"purchaseCount"`
+}
+
+// ItemRecipe is one raw-material line in a menu item's recipe — the quantity
+// of the material consumed per single unit of the item. MaterialAvgCost and
+// LineCost are computed read-side for display (qty x weighted avg cost).
+type ItemRecipe struct {
+	ID              string    `json:"id"`
+	StoreID         string    `json:"storeId"`
+	ItemID          string    `json:"itemId"`
+	MaterialID      string    `json:"materialId"`
+	MaterialName    string    `json:"materialName,omitempty"`
+	MaterialUnit    string    `json:"materialUnit,omitempty"`
+	MaterialAvgCost float64   `json:"materialAvgCost"`
+	Quantity        float64   `json:"quantity"`
+	LineCost        float64   `json:"lineCost"`
+	IsActive        bool      `json:"isActive"`
+	CreatedAt       time.Time `json:"createdAt,omitempty"`
+}
+
+// SetItemRecipeRequest is the body for PUT /api/items/{itemId}/recipe —
+// replaces the item's full recipe atomically.
+type SetItemRecipeRequest struct {
+	StoreID string                `json:"storeId"`
+	Lines   []ItemRecipeLineInput `json:"lines"`
+}
+
+type ItemRecipeLineInput struct {
+	MaterialID string  `json:"materialId"`
+	Quantity   float64 `json:"quantity"`
+}
+
+// RawMaterialConsumptionReport aggregates order-driven material consumption.
+type RawMaterialConsumptionReport struct {
+	TotalCost  float64                            `json:"totalCost"`
+	TotalCount int                                `json:"totalCount"`
+	ByMaterial []RawMaterialConsumptionByMaterial `json:"byMaterial"`
+	ByItem     []RawMaterialConsumptionByItem     `json:"byItem"`
+}
+
+type RawMaterialConsumptionByMaterial struct {
+	MaterialID   string  `json:"materialId"`
+	MaterialName string  `json:"materialName"`
+	MaterialUnit string  `json:"materialUnit"`
+	Quantity     float64 `json:"quantity"`
+	TotalCost    float64 `json:"totalCost"`
+	TxnCount     int     `json:"txnCount"`
+}
+
+type RawMaterialConsumptionByItem struct {
+	ItemID    string  `json:"itemId"`
+	ItemName  string  `json:"itemName"`
+	TotalCost float64 `json:"totalCost"`
+	TxnCount  int     `json:"txnCount"`
+}

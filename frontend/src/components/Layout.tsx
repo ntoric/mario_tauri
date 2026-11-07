@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox, CreditCard, Crown } from 'lucide-react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox, CreditCard, Crown, Boxes } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import StoreSelector from './StoreSelector';
@@ -18,6 +18,9 @@ const LayoutContent: React.FC = () => {
   const { isDark } = useTheme();
   const { headerContent } = usePageHeader();
   const navigate = useNavigate();
+  const location = useLocation();
+  const inventoryTab = new URLSearchParams(location.search).get('tab') || 'stock';
+  const isInventoryPath = location.pathname === '/inventory';
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -116,31 +119,9 @@ const LayoutContent: React.FC = () => {
               <span className="nav-icon"><History size={18} /></span>
               {sidebarExpanded && <span className="nav-label">Order History</span>}
             </NavLink>
-          </div>
-
-          <div className="nav-section">
-            {sidebarExpanded && <div className="nav-section-title">Settings</div>}
-            <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
-              <span className="nav-icon"><Users size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Users</span>}
-            </NavLink>
             <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
               <span className="nav-icon"><BarChart2 size={18} /></span>
               {sidebarExpanded && <span className="nav-label">Reports</span>}
-            </NavLink>
-            {showMyPlan && (
-              <NavLink to="/my-plan" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="My Plan">
-                <span className="nav-icon"><Crown size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">My Plan</span>}
-              </NavLink>
-            )}
-            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
-              <span className="nav-icon"><Settings size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Business Settings</span>}
-            </NavLink>
-            <NavLink to="/business-settings?tab=support" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support">
-              <span className="nav-icon"><LifeBuoy size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Support</span>}
             </NavLink>
           </div>
 
@@ -150,6 +131,26 @@ const LayoutContent: React.FC = () => {
               <span className="nav-icon"><DollarSign size={18} /></span>
               {sidebarExpanded && <span className="nav-label">Expenses</span>}
             </NavLink>
+            <NavLink to="/inventory" className={`nav-item ${isInventoryPath ? 'active' : ''}`} title="Raw Materials">
+              <span className="nav-icon"><Boxes size={18} /></span>
+              {sidebarExpanded && <span className="nav-label">Raw Materials</span>}
+            </NavLink>
+            {sidebarExpanded && isInventoryPath && (
+              <div className="nav-submenu">
+                <NavLink to="/inventory?tab=purchases" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'purchases' ? 'active' : ''}`} title="Purchases">
+                  <span className="nav-label">Purchases</span>
+                </NavLink>
+                <NavLink to="/inventory?tab=transactions" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'transactions' ? 'active' : ''}`} title="Transactions">
+                  <span className="nav-label">Transactions</span>
+                </NavLink>
+                <NavLink to="/inventory?tab=consumption" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'consumption' ? 'active' : ''}`} title="Consumption">
+                  <span className="nav-label">Consumption</span>
+                </NavLink>
+                <NavLink to="/inventory?tab=stock" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'stock' ? 'active' : ''}`} title="Stock">
+                  <span className="nav-label">Stock</span>
+                </NavLink>
+              </div>
+            )}
           </div>
 
           {isSuperAdmin && (
@@ -189,6 +190,29 @@ const LayoutContent: React.FC = () => {
               </NavLink>
             </div>
           )}
+
+          <div className="nav-section">
+            {sidebarExpanded && <div className="nav-section-title">Settings</div>}
+            <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
+              <span className="nav-icon"><Users size={18} /></span>
+              {sidebarExpanded && <span className="nav-label">Users</span>}
+            </NavLink>
+            {showMyPlan && (
+              <NavLink to="/my-plan" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="My Plan">
+                <span className="nav-icon"><Crown size={18} /></span>
+                {sidebarExpanded && <span className="nav-label">My Plan</span>}
+              </NavLink>
+            )}
+            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
+              <span className="nav-icon"><Settings size={18} /></span>
+              {sidebarExpanded && <span className="nav-label">Business Settings</span>}
+            </NavLink>
+            <NavLink to="/business-settings?tab=support" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support">
+              <span className="nav-icon"><LifeBuoy size={18} /></span>
+              {sidebarExpanded && <span className="nav-label">Support</span>}
+            </NavLink>
+          </div>
+
         </nav>
 
         <div className="sidebar-footer">

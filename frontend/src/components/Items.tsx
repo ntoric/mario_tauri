@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Edit2, Trash2, X, Loader2, Search, Coffee, FolderOpen, Receipt, Package, Power, Star, ArrowUpDown, GripVertical } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -11,23 +12,25 @@ import { isTaxEnabled, getDefaultTaxPercent } from '../utils/tax';
 import { sortCategories } from '../utils/category';
 import { api } from '../services/api';
 import notify from '../utils/toast';
-import type { Category, Item, ItemExpense } from '../types';
+import type { Category, Item, ItemRecipeLine } from '../types';
 
-type ItemModalTab = 'details' | 'expenses';
+type ItemModalTab = 'details' | 'recipe';
 
-interface DraftExpense {
-  id: string;
-  name: string;
-  description: string;
-  amount: number;
+interface DraftRecipeLine {
+  key: string;
+  materialId: string;
+  quantity: string;
+  name?: string;
+  unit?: string;
+  avgCost?: number;
 }
 
 const newDraftId = () => `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-const emptyExpenseForm = () => ({ name: '', description: '', amount: '' });
+const emptyLineForm = () => ({ materialId: '', quantity: '' });
 
 const Items: React.FC = () => {
-  const { categories, items, stores, createCategory, updateCategory, deleteCategory, reorderCategories, createItem, updateItem, deleteItem, fetchCategories, fetchItems, gstMeta, fetchGstMeta } = useDataStore();
+  const { categories, items, stores, rawMaterials, createCategory, updateCategory, deleteCategory, reorderCategories, createItem, updateItem, deleteItem, fetchCategories, fetchItems, fetchRawMaterials, setItemRecipe, gstMeta, fetchGstMeta } = useDataStore();
   const { currentStoreId } = useAuthStore();
   const currentStore = stores.find(s => s.id === currentStoreId);
   const taxEnabled = isTaxEnabled(currentStore);
@@ -42,20 +45,23 @@ const Items: React.FC = () => {
   const [categoryPage, setCategoryPage] = useState(1);
   const PAGE_SIZE = 10;
   const [itemModalTab, setItemModalTab] = useState<ItemModalTab>('details');
-  const [itemExpenses, setItemExpenses] = useState<ItemExpense[]>([]);
-  const [draftExpenses, setDraftExpenses] = useState<DraftExpense[]>([]);
-  const [loadingExpenses, setLoadingExpenses] = useState(false);
-  const [expenseForm, setExpenseForm] = useState(emptyExpenseForm());
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [isExpenseSubmitting, setIsExpenseSubmitting] = useState(false);
-  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
-  const [expenseFormError, setExpenseFormError] = useState('');
+  const [recipeLines, setRecipeLines] = useState<DraftRecipeLine[]>([]);
+  const [loadingRecipe, setLoadingRecipe] = useState(false);
+  const [lineForm, setLineForm] = useState(emptyLineForm());
+  const [materialSearch, setMaterialSearch] = useState('');
+  const [materialDropOpen, setMaterialDropOpen] = useState(false);
+  const [newMaterialUnit, setNewMaterialUnit] = useState('kg');
+  const [creatingMaterial, setCreatingMaterial] = useState(false);
+  const [isRecipeSubmitting, setIsRecipeSubmitting] = useState(false);
+  const [lineFormError, setLineFormError] = useState('');
+  const [recipeDirty, setRecipeDirty] = useState(false);
 
   useEffect(() => {
     fetchCategories();
     fetchGstMeta().catch(() => {});
     fetchItems({ includeProfit: true });
-  }, [fetchCategories, fetchItems]);
+    fetchRawMaterials();
+  }, [fetchCategories, fetchItems, fetchRawMaterials]);
 
   const [itemForm, setItemForm] = useState({
     name: '',
@@ -100,35 +106,40 @@ const Items: React.FC = () => {
   useEffect(() => {
     setHeaderContent({
       title: 'Menu Management',
-      subtitle: 'Manage items, categories, and preparation costs',
+      subtitle: 'Manage items, categories, and recipes',
       actions: null,
     });
   }, [setHeaderContent]);
 
-  const loadItemExpenses = useCallback(async (itemId: string) => {
-    setLoadingExpenses(true);
+  const loadItemRecipe = useCallback(async (itemId: string) => {
+    setLoadingRecipe(true);
     try {
-      const expenses = await api.getItemExpenses(itemId);
-      setItemExpenses(expenses);
+      const lines: ItemRecipeLine[] = await api.getItemRecipe(itemId);
+      setRecipeLines((lines || []).map(l => ({
+        key: l.id, materialId: l.materialId, quantity: String(l.quantity),
+        name: l.materialName, unit: l.materialUnit, avgCost: l.materialAvgCost,
+      })));
     } catch {
-      setItemExpenses([]);
+      setRecipeLines([]);
     } finally {
-      setLoadingExpenses(false);
+      setLoadingRecipe(false);
+      setRecipeDirty(false);
     }
   }, []);
 
-  const resetExpenseForm = () => {
-    setExpenseForm(emptyExpenseForm());
-    setEditingExpenseId(null);
-    setExpenseFormError('');
+  const resetLineForm = () => {
+    setLineForm(emptyLineForm());
+    setMaterialSearch('');
+    setMaterialDropOpen(false);
+    setLineFormError('');
   };
 
   const resetItemModal = () => {
     setItemModalTab('details');
     setItemForm({ name: '', description: '', price: '', categoryId: '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false, taxCategory: 'taxable' });
-    resetExpenseForm();
-    setItemExpenses([]);
-    setDraftExpenses([]);
+    resetLineForm();
+    setRecipeLines([]);
+    setRecipeDirty(false);
   };
 
   const openItemForm = (item?: Item) => {
@@ -144,23 +155,20 @@ const Items: React.FC = () => {
         isFavourite: !!item.isFavourite,
         taxCategory: item.taxCategory || 'taxable',
       });
-      loadItemExpenses(item.id);
+      loadItemRecipe(item.id);
     } else {
       setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', hsnCode: '', taxPercent: defaultTaxPercent.toString(), isFavourite: false, taxCategory: 'taxable' });
     }
     openItemModal(item);
   };
 
-  const persistDraftExpenses = async (itemId: string) => {
-    if (!currentStoreId || draftExpenses.length === 0) return;
-    for (const expense of draftExpenses) {
-      await api.createItemExpense(itemId, {
-        name: expense.name,
-        description: expense.description || undefined,
-        amount: expense.amount,
-        storeId: currentStoreId,
-      });
-    }
+  const persistDraftRecipe = async (itemId: string) => {
+    if (!currentStoreId || recipeLines.length === 0) return;
+    const lines = recipeLines
+      .filter(l => parseFloat(l.quantity) > 0)
+      .map(l => ({ materialId: l.materialId, quantity: parseFloat(l.quantity) }));
+    if (lines.length === 0) return;
+    await api.setItemRecipe(itemId, currentStoreId, lines);
   };
 
   const handleItemSubmit = async (e?: React.FormEvent) => {
@@ -198,10 +206,10 @@ const Items: React.FC = () => {
         await updateItem(editingItem.id, itemData);
         notify.success(`Item "${itemData.name}" updated`);
       } else {
-        const hasDraftExpenses = draftExpenses.length > 0;
-        const created = await createItem(itemData, { skipRefresh: hasDraftExpenses });
-        await persistDraftExpenses(created.id);
-        if (hasDraftExpenses) {
+        const hasDraftLines = recipeLines.filter(l => parseFloat(l.quantity) > 0).length > 0;
+        const created = await createItem(itemData, { skipRefresh: hasDraftLines });
+        await persistDraftRecipe(created.id);
+        if (hasDraftLines) {
           await fetchItems({ includeProfit: true });
         }
         notify.success(`Item "${itemData.name}" created`);
@@ -215,105 +223,91 @@ const Items: React.FC = () => {
     }
   };
 
-  const handleExpenseFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setExpenseFormError('');
+  const materialById = useMemo(() => {
+    const map: Record<string, typeof rawMaterials[number]> = {};
+    rawMaterials.forEach(m => { map[m.id] = m; });
+    return map;
+  }, [rawMaterials]);
 
-    const name = expenseForm.name.trim();
-    const amount = parseFloat(expenseForm.amount);
+  const filteredMaterialOptions = rawMaterials.filter(m =>
+    m.name.toLowerCase().includes(materialSearch.trim().toLowerCase()) &&
+    !recipeLines.some(l => l.materialId === m.id)
+  );
+  const materialExactMatch = rawMaterials.some(
+    m => m.name.trim().toLowerCase() === materialSearch.trim().toLowerCase()
+  );
 
-    if (!name) {
-      setExpenseFormError('Expense name is required when adding a cost.');
-      return;
-    }
-    if (!expenseForm.amount || Number.isNaN(amount) || amount < 0) {
-      setExpenseFormError('Enter a valid amount (0 or greater).');
-      return;
-    }
+  const selectMaterialOption = (m: { id: string; name: string }) => {
+    setLineForm(prev => ({ ...prev, materialId: m.id }));
+    setMaterialSearch(m.name);
+    setMaterialDropOpen(false);
+    setLineFormError('');
+  };
 
-    setIsExpenseSubmitting(true);
+  const handleCreateMaterial = async () => {
+    const name = materialSearch.trim();
+    if (!name || creatingMaterial) return;
+    setCreatingMaterial(true);
     try {
-      if (isCreating) {
-        if (editingExpenseId) {
-          setDraftExpenses(prev =>
-            prev.map(exp =>
-              exp.id === editingExpenseId
-                ? { ...exp, name, description: expenseForm.description.trim(), amount }
-                : exp
-            )
-          );
-        } else {
-          setDraftExpenses(prev => [
-            ...prev,
-            { id: newDraftId(), name, description: expenseForm.description.trim(), amount },
-          ]);
-        }
-        resetExpenseForm();
-        return;
-      }
-
-      if (!editingItem || !currentStoreId) return;
-
-      const payload = {
-        name,
-        description: expenseForm.description.trim() || undefined,
-        amount,
-        storeId: currentStoreId,
-      };
-
-      if (editingExpenseId) {
-        await api.updateItemExpense(editingExpenseId, payload);
-      } else {
-        await api.createItemExpense(editingItem.id, payload);
-      }
-      await loadItemExpenses(editingItem.id);
-      await fetchItems({ includeProfit: true });
-      notify.success(`Expense "${name}" saved`);
-      resetExpenseForm();
+      const created = await api.createRawMaterial({ name, unit: newMaterialUnit, storeId: currentStoreId });
+      await fetchRawMaterials();
+      selectMaterialOption({ id: created.id, name: created.name || name });
+      notify.success(`Material "${name}" created`);
     } catch (err: any) {
-      notify.error(err.message || 'Failed to save expense');
+      setLineFormError(err.message || 'Failed to create material');
     } finally {
-      setIsExpenseSubmitting(false);
+      setCreatingMaterial(false);
     }
   };
 
-  const handleEditExpense = (expense: { id: string; name: string; description?: string; amount: number }) => {
-    setEditingExpenseId(expense.id);
-    setExpenseForm({
-      name: expense.name,
-      description: expense.description || '',
-      amount: expense.amount.toString(),
-    });
-    setExpenseFormError('');
+  const handleAddLine = () => {
+    setLineFormError('');
+    const qty = parseFloat(lineForm.quantity);
+    if (!lineForm.materialId) {
+      setLineFormError('Select a raw material.');
+      return;
+    }
+    if (!lineForm.quantity || Number.isNaN(qty) || qty <= 0) {
+      setLineFormError('Enter a quantity greater than zero.');
+      return;
+    }
+    if (recipeLines.some(l => l.materialId === lineForm.materialId)) {
+      setLineFormError('Material already in the recipe — edit its quantity below.');
+      return;
+    }
+    const mat = materialById[lineForm.materialId];
+    setRecipeLines(prev => [...prev, {
+      key: newDraftId(), materialId: lineForm.materialId, quantity: lineForm.quantity,
+      name: mat?.name, unit: mat?.unit, avgCost: mat?.avgCost,
+    }]);
+    resetLineForm();
+    setRecipeDirty(true);
   };
 
-  const handleDeleteExpense = async (expense: { id: string; name: string; amount: number }) => {
-    const confirmed = await confirm({
-      title: 'Delete Expense',
-      message: `Remove "${expense.name}" (${formatCurrency(expense.amount)}) from this item?`,
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+  const handleRemoveLine = (key: string) => {
+    setRecipeLines(prev => prev.filter(l => l.key !== key));
+    setRecipeDirty(true);
+  };
 
-    setDeletingExpenseId(expense.id);
+  const handleLineQtyChange = (key: string, quantity: string) => {
+    setRecipeLines(prev => prev.map(l => l.key === key ? { ...l, quantity } : l));
+    setRecipeDirty(true);
+  };
+
+  const handleSaveRecipe = async () => {
+    if (!editingItem) return;
+    setIsRecipeSubmitting(true);
     try {
-      if (isCreating) {
-        setDraftExpenses(prev => prev.filter(e => e.id !== expense.id));
-        if (editingExpenseId === expense.id) resetExpenseForm();
-        return;
-      }
-
-      if (!editingItem || !currentStoreId) return;
-      await api.deleteItemExpense(expense.id, currentStoreId);
-      await loadItemExpenses(editingItem.id);
-      await fetchItems({ includeProfit: true });
-      notify.success(`Expense "${expense.name}" deleted`);
-      if (editingExpenseId === expense.id) resetExpenseForm();
+      const lines = recipeLines
+        .filter(l => parseFloat(l.quantity) > 0)
+        .map(l => ({ materialId: l.materialId, quantity: parseFloat(l.quantity) }));
+      await setItemRecipe(editingItem.id, lines);
+      setRecipeDirty(false);
+      notify.success('Recipe saved');
     } catch (err: any) {
-      notify.error(err.message || 'Failed to delete expense');
+      notify.error(err.message || 'Failed to save recipe');
     } finally {
-      setDeletingExpenseId(null);
+      setIsRecipeSubmitting(false);
     }
   };
 
@@ -406,12 +400,12 @@ const Items: React.FC = () => {
     return filteredCategories.slice(start, start + PAGE_SIZE);
   }, [filteredCategories, categoryPage]);
 
-  const modalExpenses = useMemo(() => {
-    if (isCreating) return draftExpenses;
-    return itemExpenses;
-  }, [isCreating, draftExpenses, itemExpenses]);
+  const lineCost = (l: DraftRecipeLine) => {
+    const avg = l.avgCost ?? materialById[l.materialId]?.avgCost ?? 0;
+    return (parseFloat(l.quantity) || 0) * avg;
+  };
 
-  const modalTotalCost = modalExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const modalTotalCost = recipeLines.reduce((sum, l) => sum + lineCost(l), 0);
   const modalPrice = parseFloat(itemForm.price) || 0;
   const modalProfit = modalPrice - modalTotalCost;
   const modalProfitPercent = modalPrice > 0 && modalTotalCost > 0 ? (modalProfit / modalPrice) * 100 : 0;
@@ -579,41 +573,54 @@ const Items: React.FC = () => {
 
   const renderExpenseSummary = () => (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
+      display: 'flex',
+      alignItems: 'center',
       gap: '0.75rem',
       marginBottom: '1.25rem',
-      padding: '0.75rem',
+      padding: '0.75rem 1rem',
       background: 'var(--gray-50)',
       borderRadius: '8px',
       fontSize: '0.85rem',
     }}>
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{ color: 'var(--gray-500)' }}>Total Cost</div>
         <strong>{formatCurrency(modalTotalCost)}</strong>
       </div>
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{ color: 'var(--gray-500)' }}>Profit</div>
         <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
           {modalTotalCost > 0 ? formatCurrency(modalProfit) : '—'}
         </strong>
       </div>
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{ color: 'var(--gray-500)' }}>Profit %</div>
         <strong style={{ color: modalTotalCost > 0 ? (modalProfit >= 0 ? '#2ba54a' : '#c62828') : 'var(--gray-600)' }}>
           {modalTotalCost > 0 && modalPrice > 0 ? `${modalProfitPercent.toFixed(1)}%` : '—'}
         </strong>
       </div>
+      {!isCreating && (
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          onClick={handleSaveRecipe}
+          isLoading={isRecipeSubmitting}
+          loadingText="Saving..."
+          disabled={!recipeDirty}
+        >
+          Save Recipe
+        </Button>
+      )}
     </div>
   );
 
-  const renderExpensesTab = () => (
+  const renderRecipeTab = () => (
     <div className="modal-body">
       <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--gray-600)' }}>
-        Optionally add ingredient and preparation costs. Description is optional. Leave this tab empty if you do not track costs for this item.
+        Pick the raw materials needed to prepare one unit of this item. Stock is deducted automatically when orders are completed, and the recipe drives the item's cost.
       </p>
 
-      {loadingExpenses && !isCreating ? (
+      {loadingRecipe && !isCreating ? (
         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
           <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} />
         </div>
@@ -621,111 +628,205 @@ const Items: React.FC = () => {
         <>
           {renderExpenseSummary()}
 
-          {modalExpenses.length > 0 && (
-            <div style={{ marginBottom: '1.25rem', border: '1px solid var(--gray-200)', borderRadius: '8px', overflow: 'hidden' }}>
-              <table className="items-table" style={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Expense</th>
-                    <th>Amount</th>
-                    <th style={{ width: '80px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {modalExpenses.map(expense => (
-                    <tr key={expense.id}>
-                      <td>
-                        <strong>{expense.name}</strong>
-                        {expense.description && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{expense.description}</div>
-                        )}
-                      </td>
-                      <td>{formatCurrency(expense.amount)}</td>
-                      <td>
-                        <div className="action-btns">
-                          <button
-                            type="button"
-                            className="action-btn edit"
-                            onClick={() => handleEditExpense(expense)}
-                            title="Edit expense"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            type="button"
-                            className="action-btn delete"
-                            onClick={() => handleDeleteExpense(expense)}
-                            disabled={deletingExpenseId === expense.id}
-                            title="Delete expense"
-                          >
-                            {deletingExpenseId === expense.id ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={12} />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {recipeLines.length > 0 && (
+            <div style={{
+              marginBottom: '1.25rem',
+              border: '1px solid var(--gray-200)',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(10,15,22,0.06)',
+              background: 'var(--white, #fff)',
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 150px 90px 44px',
+                gap: '0.5rem',
+                alignItems: 'center',
+                padding: '0.6rem 1rem',
+                background: 'var(--gray-50)',
+                borderBottom: '1px solid var(--gray-200)',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: 'var(--gray-500)',
+              }}>
+                <span>Material</span>
+                <span>Qty / unit</span>
+                <span style={{ textAlign: 'right' }}>Est. Cost</span>
+                <span />
+              </div>
+              {recipeLines.map((line, idx) => {
+                const mat = materialById[line.materialId];
+                const unit = line.unit || mat?.unit || '';
+                const lowStock = mat && mat.currentStock < (parseFloat(line.quantity) || 0);
+                return (
+                <div
+                  key={line.key}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 150px 90px 44px',
+                    gap: '0.5rem',
+                    alignItems: 'center',
+                    padding: '0.65rem 1rem',
+                    borderTop: idx > 0 ? '1px solid var(--gray-100)' : 'none',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--gray-50)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{line.name || mat?.name || 'Unknown material'}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.1rem' }}>
+                      avg {formatCurrency(line.avgCost ?? mat?.avgCost ?? 0)}/{unit}
+                      {lowStock && (
+                        <span style={{ color: '#c62828', fontWeight: 600 }}> · low stock ({mat.currentStock} {unit})</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center',
+                    border: '1px solid var(--gray-300)', borderRadius: '8px',
+                    overflow: 'hidden', background: '#fff',
+                  }}>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.001"
+                      value={line.quantity}
+                      onChange={e => handleLineQtyChange(line.key, e.target.value)}
+                      style={{
+                        width: '100%', border: 'none', outline: 'none',
+                        padding: '0.4rem 0.5rem', fontSize: '0.9rem', fontWeight: 600,
+                      }}
+                    />
+                    <span style={{
+                      padding: '0.4rem 0.55rem',
+                      fontSize: '0.75rem', fontWeight: 600,
+                      color: 'var(--gray-500)', background: 'var(--gray-100)',
+                      borderLeft: '1px solid var(--gray-200)',
+                    }}>{unit}</span>
+                  </div>
+                  <div style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.9rem', color: lineCost(line) > 0 ? 'var(--primary)' : 'var(--gray-400)' }}>
+                    {lineCost(line) > 0 ? formatCurrency(lineCost(line)) : '—'}
+                  </div>
+                  <button
+                    type="button"
+                    className="action-btn delete"
+                    onClick={() => handleRemoveLine(line.key)}
+                    title="Remove material"
+                    style={{ justifySelf: 'center' }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                );
+              })}
             </div>
           )}
 
-          <form onSubmit={handleExpenseFormSubmit} style={{ border: '1px solid var(--gray-200)', borderRadius: '8px', padding: '1rem', background: 'var(--gray-50)' }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
-              {editingExpenseId ? 'Edit Expense' : 'Add Expense'}
-            </div>
-            {expenseFormError && (
-              <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{expenseFormError}</div>
+          <div style={{ border: '1px solid var(--gray-200)', borderRadius: '8px', padding: '1rem', background: 'var(--gray-50)' }}>
+            <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Add Material</div>
+            {rawMaterials.length === 0 && (
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#c62828' }}>
+                No raw materials yet —{' '}
+                <Link to="/inventory" onClick={closeItemModal} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                  add them on the Raw Materials page
+                </Link>{' '}
+                first.
+              </p>
+            )}
+            {lineFormError && (
+              <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{lineFormError}</div>
             )}
             <div className="form-row">
-              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                <label>Expense Name</label>
+              <div className="form-group" style={{ marginBottom: '0.75rem', position: 'relative' }}>
+                <label>Material</label>
                 <input
                   type="text"
-                  value={expenseForm.name}
-                  onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })}
-                  placeholder="e.g. Coffee beans, Milk"
+                  value={materialSearch}
+                  placeholder="Search or add material..."
+                  onFocus={() => setMaterialDropOpen(true)}
+                  onBlur={() => setTimeout(() => setMaterialDropOpen(false), 150)}
+                  onChange={e => {
+                    setMaterialSearch(e.target.value);
+                    setMaterialDropOpen(true);
+                    setLineForm(prev => ({ ...prev, materialId: '' }));
+                  }}
                 />
+                {materialDropOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                    background: 'var(--white, #fff)', border: '1px solid var(--gray-200)',
+                    borderRadius: '8px', maxHeight: '200px', overflowY: 'auto',
+                    boxShadow: '0 8px 20px rgba(10,15,22,0.15)',
+                  }}>
+                    {filteredMaterialOptions.map(m => (
+                      <div
+                        key={m.id}
+                        onMouseDown={() => selectMaterialOption(m)}
+                        style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--gray-100)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {m.name} <span style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>({m.unit})</span>
+                      </div>
+                    ))}
+                    {filteredMaterialOptions.length === 0 && materialSearch.trim() && !materialExactMatch && (
+                      <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                        No existing material matches
+                      </div>
+                    )}
+                    {materialSearch.trim() && !materialExactMatch && (
+                      <div
+                        onMouseDown={handleCreateMaterial}
+                        style={{
+                          padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.9rem',
+                          color: 'var(--primary)', fontWeight: 600,
+                          borderTop: filteredMaterialOptions.length ? '1px solid var(--gray-200)' : undefined,
+                          display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        }}
+                      >
+                        {creatingMaterial ? <Loader2 size={13} className="animate-spin" style={{ flexShrink: 0 }} /> : <Plus size={13} style={{ flexShrink: 0 }} />}
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Add "{materialSearch.trim()}" as new material
+                        </span>
+                        <select
+                          value={newMaterialUnit}
+                          onMouseDown={e => e.stopPropagation()}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setNewMaterialUnit(e.target.value)}
+                          style={{ padding: '0.15rem 0.2rem', fontSize: '0.8rem', width: '64px', flexShrink: 0 }}
+                        >
+                          {['pcs','kg','g','mg','l','ml','packet','box','dozen','tray'].map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                <label>Amount (₹)</label>
+                <label>Qty per item</label>
                 <input
                   type="number"
-                  step="0.01"
-                  min="0"
-                  value={expenseForm.amount}
-                  onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                  placeholder="0.00"
+                  step="0.001"
+                  min="0.001"
+                  value={lineForm.quantity}
+                  onChange={e => setLineForm({ ...lineForm, quantity: e.target.value })}
+                  placeholder="e.g. 0.02"
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddLine(); } }}
                 />
               </div>
             </div>
-            <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-              <label>Description <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
-              <input
-                type="text"
-                value={expenseForm.description}
-                onChange={e => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                placeholder="Additional notes"
-              />
-            </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button type="submit" variant="primary" size="sm" isLoading={isExpenseSubmitting} loadingText="Saving...">
-                {editingExpenseId ? 'Update Expense' : 'Add Expense'}
+              <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} disabled={rawMaterials.length === 0}>
+                <Plus size={14} /> Add to Recipe
               </Button>
-              {editingExpenseId && (
-                <Button type="button" variant="secondary" size="sm" onClick={resetExpenseForm}>
-                  Cancel
-                </Button>
-              )}
             </div>
-          </form>
+          </div>
 
-          {isCreating && draftExpenses.length > 0 && (
+          {isCreating && recipeLines.length > 0 && (
             <p style={{ margin: '1rem 0 0', fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-              {draftExpenses.length} expense{draftExpenses.length !== 1 ? 's' : ''} will be saved when you create the item.
+              {recipeLines.length} material{recipeLines.length !== 1 ? 's' : ''} will be saved as the recipe when you create the item.
             </p>
           )}
         </>
@@ -1164,20 +1265,20 @@ const Items: React.FC = () => {
               </button>
               <button
                 type="button"
-                className={`tab ${itemModalTab === 'expenses' ? 'active' : ''}`}
-                onClick={() => setItemModalTab('expenses')}
+                className={`tab ${itemModalTab === 'recipe' ? 'active' : ''}`}
+                onClick={() => setItemModalTab('recipe')}
               >
                 <Receipt size={16} />
-                Preparation Expenses
-                {(isCreating ? draftExpenses.length : itemExpenses.length) > 0 && (
-                  <span className="tab-badge">{isCreating ? draftExpenses.length : itemExpenses.length}</span>
+                Recipe
+                {recipeLines.length > 0 && (
+                  <span className="tab-badge">{recipeLines.length}</span>
                 )}
               </button>
             </div>
 
             {itemModalTab === 'details' ? renderDetailsTab() : (
               <>
-                {renderExpensesTab()}
+                {renderRecipeTab()}
                 <div className="modal-footer">
                   <Button type="button" variant="secondary" onClick={closeItemModal} disabled={isItemSubmitting}>
                     Cancel

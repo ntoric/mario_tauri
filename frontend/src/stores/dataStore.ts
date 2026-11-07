@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from '../services/api';
 import { useAuthStore } from './authStore';
 import { cache, cacheKeys } from '../utils/cache';
-import type { Category, Item, Table, TableSection, Order, Bill, Store, ExpenseCategory, Expense } from '../types';
+import type { Category, Item, Table, TableSection, Order, Bill, Store, ExpenseCategory, Expense, RawMaterial, RawMaterialPurchase, RawMaterialTransaction } from '../types';
 
 interface DataState {
   // Data
@@ -16,6 +16,9 @@ interface DataState {
   users: any[];
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
+  rawMaterials: RawMaterial[];
+  rawMaterialPurchases: RawMaterialPurchase[];
+  rawMaterialTransactions: RawMaterialTransaction[];
   
   // Loading states
   isLoading: boolean;
@@ -98,6 +101,26 @@ interface DataState {
   createExpense: (expense: Omit<Expense, 'id' | 'storeId' | 'isActive' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<void>;
   updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
+
+  // Raw Materials (inventory)
+  fetchRawMaterials: () => Promise<void>;
+  createRawMaterial: (material: Partial<RawMaterial> & { openingStock?: number }) => Promise<void>;
+  updateRawMaterial: (id: string, material: Partial<RawMaterial>) => Promise<void>;
+  deleteRawMaterial: (id: string) => Promise<void>;
+
+  // Raw Material Purchases
+  fetchRawMaterialPurchases: (params?: { materialId?: string; startDate?: string; endDate?: string }) => Promise<void>;
+  createRawMaterialPurchase: (purchase: Partial<RawMaterialPurchase>) => Promise<void>;
+  updateRawMaterialPurchase: (id: string, purchase: Partial<RawMaterialPurchase>) => Promise<void>;
+  deleteRawMaterialPurchase: (id: string) => Promise<void>;
+
+  // Raw Material Stock Transactions
+  fetchRawMaterialTransactions: (params?: { materialId?: string; type?: string; startDate?: string; endDate?: string }) => Promise<void>;
+  createRawMaterialTransaction: (txn: Partial<RawMaterialTransaction>) => Promise<void>;
+  deleteRawMaterialTransaction: (id: string) => Promise<void>;
+
+  // Item Recipes — replaces an item's recipe and refreshes cost/profit data
+  setItemRecipe: (itemId: string, lines: { materialId: string; quantity: number }[]) => Promise<void>;
 }
 
 const BILLS_CACHE_TTL = 3 * 60 * 1000;
@@ -121,6 +144,9 @@ export const useDataStore = create<DataState>((set, get) => ({
   users: [],
   expenseCategories: [],
   expenses: [],
+  rawMaterials: [],
+  rawMaterialPurchases: [],
+  rawMaterialTransactions: [],
   isLoading: false,
   isInitialized: false,
 
@@ -230,6 +256,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       bills: [],
       expenseCategories: [],
       expenses: [],
+      rawMaterials: [],
+      rawMaterialPurchases: [],
+      rawMaterialTransactions: [],
     });
 
     // Clear store-specific cache when switching stores
@@ -814,5 +843,109 @@ export const useDataStore = create<DataState>((set, get) => ({
   deleteExpense: async (id) => {
     await api.deleteExpense(id);
     await get().fetchExpenses();
+  },
+
+  // Raw Materials (inventory)
+  fetchRawMaterials: async () => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const rawMaterials = await api.getRawMaterials(currentStoreId);
+      set({ rawMaterials: rawMaterials || [] });
+    } catch (error) {
+      console.error('Failed to fetch raw materials:', error);
+    }
+  },
+
+  createRawMaterial: async (material) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.createRawMaterial({ ...material, storeId: currentStoreId, createdBy: currentUser.id });
+    await get().fetchRawMaterials();
+  },
+
+  updateRawMaterial: async (id, material) => {
+    await api.updateRawMaterial(id, material);
+    await get().fetchRawMaterials();
+  },
+
+  deleteRawMaterial: async (id) => {
+    await api.deleteRawMaterial(id);
+    await get().fetchRawMaterials();
+  },
+
+  // Raw Material Purchases — writes affect stock, so materials are refreshed too
+  fetchRawMaterialPurchases: async (params) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const rawMaterialPurchases = await api.getRawMaterialPurchases(currentStoreId, params);
+      set({ rawMaterialPurchases: rawMaterialPurchases || [] });
+    } catch (error) {
+      console.error('Failed to fetch raw material purchases:', error);
+    }
+  },
+
+  createRawMaterialPurchase: async (purchase) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.createRawMaterialPurchase({ ...purchase, storeId: currentStoreId, createdBy: currentUser.id });
+    await Promise.all([get().fetchRawMaterialPurchases(), get().fetchRawMaterials()]);
+  },
+
+  updateRawMaterialPurchase: async (id, purchase) => {
+    await api.updateRawMaterialPurchase(id, purchase);
+    await Promise.all([get().fetchRawMaterialPurchases(), get().fetchRawMaterials()]);
+  },
+
+  deleteRawMaterialPurchase: async (id) => {
+    await api.deleteRawMaterialPurchase(id);
+    await Promise.all([get().fetchRawMaterialPurchases(), get().fetchRawMaterials()]);
+  },
+
+  // Raw Material Stock Transactions
+  fetchRawMaterialTransactions: async (params) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) return;
+    try {
+      const rawMaterialTransactions = await api.getRawMaterialTransactions(currentStoreId, params);
+      set({ rawMaterialTransactions: rawMaterialTransactions || [] });
+    } catch (error) {
+      console.error('Failed to fetch raw material transactions:', error);
+    }
+  },
+
+  createRawMaterialTransaction: async (txn) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentStoreId || !currentUser) {
+      throw new Error('User or store not authenticated');
+    }
+    await api.createRawMaterialTransaction({ ...txn, storeId: currentStoreId, createdBy: currentUser.id });
+    await Promise.all([get().fetchRawMaterialTransactions(), get().fetchRawMaterials()]);
+  },
+
+  deleteRawMaterialTransaction: async (id) => {
+    await api.deleteRawMaterialTransaction(id);
+    await Promise.all([get().fetchRawMaterialTransactions(), get().fetchRawMaterials()]);
+  },
+
+  setItemRecipe: async (itemId, lines) => {
+    const currentStoreId = useAuthStore.getState().currentStoreId;
+    if (!currentStoreId) {
+      throw new Error('Store not selected');
+    }
+    await api.setItemRecipe(itemId, currentStoreId, lines);
+    // Item cost/profit derives from recipes — bust the items cache so the
+    // list and profit columns reflect the new recipe immediately.
+    cache.delete(cacheKeys.items(currentStoreId, false));
+    cache.delete(cacheKeys.items(currentStoreId, true));
+    await get().fetchItems({ includeProfit: true });
   },
 }));
