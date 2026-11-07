@@ -951,6 +951,172 @@ class ApiService {
     return this.fetch(`/reports/menu-profit?${qs.toString()}`);
   }
 
+  // Subscription Plans (superadmin only)
+  async getSubscriptionPlans() {
+    return this.fetch('/subscription-plans');
+  }
+
+  async createSubscriptionPlan(plan: {
+    name: string;
+    price: number;
+    features?: string[];
+    recurringType: string;
+    isActive?: boolean;
+  }) {
+    return this.fetch('/subscription-plans', {
+      method: 'POST',
+      body: JSON.stringify(plan),
+    });
+  }
+
+  async updateSubscriptionPlan(id: string, plan: {
+    name: string;
+    price: number;
+    features?: string[];
+    recurringType: string;
+    isActive?: boolean;
+  }) {
+    return this.fetch(`/subscription-plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(plan),
+    });
+  }
+
+  async deleteSubscriptionPlan(id: string) {
+    return this.fetch(`/subscription-plans/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // My Plan — the caller's own store subscription (any authenticated role)
+  async getMySubscription(storeId?: string) {
+    let url = '/subscriptions/my';
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url);
+  }
+
+  async getMySubscriptionHistory(storeId?: string) {
+    let url = '/subscriptions/my/history';
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url);
+  }
+
+  // My Plan — change requests (store users file them; superadmin approves)
+  async submitSubscriptionRequest(storeId: string | undefined, data: { action: 'change_plan' | 'cancel'; planId?: string }) {
+    return this.fetch('/subscriptions/my/requests', {
+      method: 'POST',
+      body: JSON.stringify({ storeId, ...data }),
+    });
+  }
+
+  async withdrawSubscriptionRequest(requestId: string) {
+    return this.fetch(`/subscriptions/my/requests/${requestId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  // Subscription change requests (superadmin approval inbox)
+  async getSubscriptionRequests(params: { storeId?: string; status?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.storeId) qs.set('storeId', params.storeId);
+    if (params.status && params.status !== 'all') qs.set('status', params.status);
+    const query = qs.toString();
+    return this.fetch(`/subscription-requests${query ? `?${query}` : ''}`);
+  }
+
+  async approveSubscriptionRequest(requestId: string) {
+    return this.fetch(`/subscription-requests/${requestId}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectSubscriptionRequest(requestId: string, note?: string) {
+    return this.fetch(`/subscription-requests/${requestId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  // Store Subscriptions (superadmin only)
+  async getSubscriptions(params: { storeId?: string; status?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.storeId) qs.set('storeId', params.storeId);
+    if (params.status && params.status !== 'all') qs.set('status', params.status);
+    const query = qs.toString();
+    return this.fetch(`/subscriptions${query ? `?${query}` : ''}`);
+  }
+
+  async createSubscription(data: {
+    storeId: string;
+    planId: string;
+    startDate?: string;
+    autoRenew?: boolean;
+    showPrice?: boolean;
+  }) {
+    return this.fetch('/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSubscription(id: string, data: { autoRenew?: boolean; showPrice?: boolean }) {
+    return this.fetch(`/subscriptions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelSubscription(id: string) {
+    return this.fetch(`/subscriptions/${id}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async renewSubscription(id: string) {
+    return this.fetch(`/subscriptions/${id}/renew`, {
+      method: 'POST',
+    });
+  }
+
+  async changeSubscriptionPlan(id: string, data: {
+    planId: string;
+    startDate?: string;
+    autoRenew?: boolean;
+    showPrice?: boolean;
+  }) {
+    return this.fetch(`/subscriptions/${id}/change-plan`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Subscription payments (superadmin ledger + manual recording)
+  async getSubscriptionPayments(params: { storeId?: string; subscriptionId?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.storeId) qs.set('storeId', params.storeId);
+    if (params.subscriptionId) qs.set('subscriptionId', params.subscriptionId);
+    const query = qs.toString();
+    return this.fetch(`/subscription-payments${query ? `?${query}` : ''}`);
+  }
+
+  async recordSubscriptionPayment(subscriptionId: string, data: {
+    amount: number;
+    method: string;
+    notes?: string;
+    renew?: boolean;
+  }) {
+    return this.fetch(`/subscriptions/${subscriptionId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSubscriptionHistory(storeId?: string) {
+    let url = '/subscriptions/history';
+    if (storeId) url += `?storeId=${storeId}`;
+    return this.fetch(url);
+  }
+
 }
 
 export const api = new ApiService();

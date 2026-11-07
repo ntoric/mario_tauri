@@ -19,6 +19,7 @@ type Store struct {
 	GSTIN                 string  `json:"gstin"`
 	FSSAINo               string  `json:"fssaiNo"`
 	Phone                 string  `json:"phone"`
+	SecondaryPhone        string  `json:"secondaryPhone"`
 	PrinterName           string  `json:"printerName"`
 	PrinterVendorID       string  `json:"printerVendorId"`
 	PrinterProductID      string  `json:"printerProductId"`
@@ -44,11 +45,14 @@ type Store struct {
 	// DataRetentionDays hides orders, bills, sales/profit reports and
 	// expenses older than N days from non-superadmin roles. The rows are
 	// kept in the database and remain visible to superadmin. 0 = unlimited.
-	DataRetentionDays int        `json:"dataRetentionDays"`
-	IsActive          bool       `json:"isActive"`
-	AppVersion        string     `json:"appVersion,omitempty"`
-	AppVersionSeenAt  *time.Time `json:"appVersionSeenAt,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt"`
+	DataRetentionDays int `json:"dataRetentionDays"`
+	// MyPlanEnabled controls whether the "My Plan" menu/page is visible to
+	// this store's users (superadmin always sees it). Superadmin-only setting.
+	MyPlanEnabled    bool       `json:"myPlanEnabled"`
+	IsActive         bool       `json:"isActive"`
+	AppVersion       string     `json:"appVersion,omitempty"`
+	AppVersionSeenAt *time.Time `json:"appVersionSeenAt,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 // User represents user table schema and json dto
@@ -848,4 +852,184 @@ type CreateSupportMessageRequest struct {
 // UpdateSupportTicketStatusRequest is the payload for PATCH /api/support/tickets/{id}/status.
 type UpdateSupportTicketStatusRequest struct {
 	Status string `json:"status"`
+}
+
+// SubscriptionPlan is a recurring pricing package that superadmin can assign
+// to stores. Features is a free-form list of included capabilities shown to
+// the store admin (purely informational).
+type SubscriptionPlan struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Price         float64   `json:"price"`
+	Features      []string  `json:"features"`
+	RecurringType string    `json:"recurringType"` // monthly | quarterly | biannually | yearly
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+// StoreSubscription is one billing period of a store on a subscription plan.
+// Plan fields are snapshotted at assignment time so history stays accurate
+// when the plan is later edited or deleted. EndDate is the next renewal date
+// (auto-renew on) or the expiry date (auto-renew off).
+type StoreSubscription struct {
+	ID            string    `json:"id"`
+	StoreID       string    `json:"storeId"`
+	StoreName     string    `json:"storeName,omitempty"`
+	StoreBranch   string    `json:"storeBranch,omitempty"`
+	PlanID        string    `json:"planId"`
+	PlanName      string    `json:"planName"`
+	PlanPrice     float64   `json:"planPrice"`
+	RecurringType string    `json:"recurringType"`
+	Status        string    `json:"status"` // active | expired | cancelled | replaced
+	StartDate     time.Time `json:"startDate"`
+	EndDate       time.Time `json:"endDate"`
+	AutoRenew     bool      `json:"autoRenew"`
+	// ShowPrice controls whether the plan amount is visible to store users on
+	// the My Plan page (off = prices hidden). Superadmin-set per subscription.
+	ShowPrice    bool      `json:"showPrice"`
+	RenewalCount int       `json:"renewalCount"`
+	CreatedBy    string    `json:"createdBy,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// SubscriptionEvent is one audit entry in a store's subscription history
+// (created / renewed / expired / upgraded / downgraded / cancelled / ...).
+type SubscriptionEvent struct {
+	ID             int64     `json:"id"`
+	StoreID        string    `json:"storeId"`
+	StoreName      string    `json:"storeName,omitempty"`
+	SubscriptionID string    `json:"subscriptionId"`
+	Action         string    `json:"action"`
+	FromPlanID     string    `json:"fromPlanId,omitempty"`
+	FromPlanName   string    `json:"fromPlanName,omitempty"`
+	ToPlanID       string    `json:"toPlanId,omitempty"`
+	ToPlanName     string    `json:"toPlanName,omitempty"`
+	Notes          string    `json:"notes,omitempty"`
+	CreatedBy      string    `json:"createdBy,omitempty"`
+	CreatedByName  string    `json:"createdByName,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+// SubscriptionPlanRequest is the payload for POST/PUT /api/subscription-plans.
+type SubscriptionPlanRequest struct {
+	Name          string   `json:"name"`
+	Price         float64  `json:"price"`
+	Features      []string `json:"features"`
+	RecurringType string   `json:"recurringType"`
+	IsActive      *bool    `json:"isActive"`
+}
+
+// CreateSubscriptionRequest is the payload for POST /api/subscriptions.
+type CreateSubscriptionRequest struct {
+	StoreID   string `json:"storeId"`
+	PlanID    string `json:"planId"`
+	StartDate string `json:"startDate"` // YYYY-MM-DD or RFC3339; empty = now
+	AutoRenew *bool  `json:"autoRenew"`
+	ShowPrice *bool  `json:"showPrice"`
+}
+
+// ChangePlanRequest is the payload for POST /api/subscriptions/{id}/change-plan.
+type ChangePlanRequest struct {
+	PlanID    string `json:"planId"`
+	StartDate string `json:"startDate"` // optional; empty = now
+	AutoRenew *bool  `json:"autoRenew"` // optional; nil = keep current setting
+	ShowPrice *bool  `json:"showPrice"` // optional; nil = keep current setting
+}
+
+// UpdateSubscriptionRequest is the payload for PATCH /api/subscriptions/{id}.
+type UpdateSubscriptionRequest struct {
+	AutoRenew *bool `json:"autoRenew"`
+	ShowPrice *bool `json:"showPrice"`
+}
+
+// SubscriptionChangeRequest is a store user's request to upgrade, downgrade
+// or cancel their plan. Superadmin approves it and the change is applied
+// when the current billing cycle ends (see repository.ProcessDue).
+type SubscriptionChangeRequest struct {
+	ID                     string     `json:"id"`
+	StoreID                string     `json:"storeId"`
+	StoreName              string     `json:"storeName,omitempty"`
+	StoreBranch            string     `json:"storeBranch,omitempty"`
+	SubscriptionID         string     `json:"subscriptionId"`
+	Type                   string     `json:"type"` // upgrade | downgrade | plan_change | cancel
+	CurrentPlanName        string     `json:"currentPlanName,omitempty"`
+	RequestedPlanID        string     `json:"requestedPlanId,omitempty"`
+	RequestedPlanName      string     `json:"requestedPlanName,omitempty"`
+	RequestedPlanPrice     float64    `json:"requestedPlanPrice"`
+	RequestedRecurringType string     `json:"requestedRecurringType,omitempty"`
+	EffectiveDate          *time.Time `json:"effectiveDate,omitempty"`
+	Status                 string     `json:"status"` // pending | approved | rejected | cancelled | applied
+	Note                   string     `json:"note,omitempty"`
+	RequestedBy            string     `json:"requestedBy"`
+	RequestedByName        string     `json:"requestedByName,omitempty"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	ResolvedBy             string     `json:"resolvedBy,omitempty"`
+	ResolvedByName         string     `json:"resolvedByName,omitempty"`
+	ResolvedAt             *time.Time `json:"resolvedAt,omitempty"`
+}
+
+// SubmitChangeRequestPayload is the body for POST /api/subscriptions/my/requests.
+// Action "change_plan" requires planId (upgrade/downgrade is classified
+// server-side by price); Action "cancel" schedules a cancellation.
+type SubmitChangeRequestPayload struct {
+	Action string `json:"action"` // change_plan | cancel
+	PlanID string `json:"planId"`
+}
+
+// RejectChangeRequestPayload is the optional body for POST .../reject.
+type RejectChangeRequestPayload struct {
+	Note string `json:"note"`
+}
+
+// MySubscriptionResponse is returned by GET /api/subscriptions/my — the
+// caller's store's current subscription (active, or the latest ended period)
+// plus the live plan for display details like the feature list.
+// PendingRequest is the open change request (pending or approved-awaiting-apply).
+type MySubscriptionResponse struct {
+	Subscription   *StoreSubscription         `json:"subscription"`
+	Plan           *SubscriptionPlan          `json:"plan,omitempty"`
+	PendingRequest *SubscriptionChangeRequest `json:"pendingRequest,omitempty"`
+}
+
+// SubscriptionPayment is one billing ledger entry for a subscription. Method
+// 'auto' marks payments recorded automatically at an auto-renewal boundary;
+// other methods are recorded manually by superadmin. PeriodStart/End identify
+// the cycle the payment covers.
+type SubscriptionPayment struct {
+	ID             string     `json:"id"`
+	StoreID        string     `json:"storeId"`
+	StoreName      string     `json:"storeName,omitempty"`
+	StoreBranch    string     `json:"storeBranch,omitempty"`
+	SubscriptionID string     `json:"subscriptionId"`
+	PlanName       string     `json:"planName,omitempty"`
+	Amount         float64    `json:"amount"`
+	Method         string     `json:"method"` // auto | cash | upi | bank_transfer | card | other
+	Status         string     `json:"status"` // paid | pending | failed | refunded
+	PeriodStart    *time.Time `json:"periodStart,omitempty"`
+	PeriodEnd      *time.Time `json:"periodEnd,omitempty"`
+	PaidAt         time.Time  `json:"paidAt"`
+	RecordedBy     string     `json:"recordedBy,omitempty"`
+	RecordedByName string     `json:"recordedByName,omitempty"`
+	Notes          string     `json:"notes,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+// RecordPaymentPayload is the body for POST /api/subscriptions/{id}/payments.
+// Renew=true additionally extends the subscription by one billing period —
+// this is the only way a non-auto-renewing subscription renews.
+type RecordPaymentPayload struct {
+	Amount float64 `json:"amount"`
+	Method string  `json:"method"`
+	Notes  string  `json:"notes"`
+	Renew  bool    `json:"renew"`
+}
+
+// MySubscriptionHistoryResponse is returned by GET /api/subscriptions/my/history
+// — every billing period, audit event and payment for the caller's store.
+type MySubscriptionHistoryResponse struct {
+	Periods  []StoreSubscription   `json:"periods"`
+	Events   []SubscriptionEvent   `json:"events"`
+	Payments []SubscriptionPayment `json:"payments"`
 }

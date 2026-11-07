@@ -21,6 +21,7 @@ export interface Store {
   gstin?: string;
   fssaiNo?: string;
   phone?: string;
+  secondaryPhone?: string;
   printerName?: string;
   printerVendorId?: string;
   printerProductId?: string;
@@ -44,6 +45,9 @@ export interface Store {
   /** Hide orders/bills/reports/expenses older than this many days from
    *  store users (superadmin keeps full history). 0 = unlimited. */
   dataRetentionDays?: number;
+  /** Show the "My Plan" subscription page to this store's users
+   *  (superadmin always sees it). Superadmin-only setting. */
+  myPlanEnabled?: boolean;
   isActive: boolean;
   appVersion?: string;
   appVersionSeenAt?: string;
@@ -501,4 +505,112 @@ export interface RevenueReport {
   averageOrderValue: number;
   bills: Bill[];
   expenses: Expense[];
+}
+
+export type RecurringType = 'monthly' | 'quarterly' | 'biannually' | 'yearly';
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  features: string[];
+  recurringType: RecurringType;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'replaced';
+
+export interface StoreSubscription {
+  id: string;
+  storeId: string;
+  storeName?: string;
+  storeBranch?: string;
+  planId: string;
+  planName: string;
+  planPrice: number;
+  recurringType: RecurringType;
+  status: SubscriptionStatus;
+  startDate: string;
+  endDate: string;
+  autoRenew: boolean;
+  showPrice?: boolean;
+  renewalCount: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type ChangeRequestType = 'upgrade' | 'downgrade' | 'plan_change' | 'cancel';
+export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'applied';
+
+export interface SubscriptionChangeRequest {
+  id: string;
+  storeId: string;
+  storeName?: string;
+  storeBranch?: string;
+  subscriptionId: string;
+  type: ChangeRequestType;
+  currentPlanName?: string;
+  requestedPlanId?: string;
+  requestedPlanName?: string;
+  requestedPlanPrice: number;
+  requestedRecurringType?: RecurringType;
+  effectiveDate?: string;
+  status: ChangeRequestStatus;
+  note?: string;
+  requestedBy: string;
+  requestedByName?: string;
+  createdAt: string;
+  resolvedBy?: string;
+  resolvedByName?: string;
+  resolvedAt?: string;
+}
+
+export interface MySubscription {
+  subscription: StoreSubscription | null;
+  plan?: SubscriptionPlan | null;
+  pendingRequest?: SubscriptionChangeRequest | null;
+}
+
+export interface SubscriptionPayment {
+  id: string;
+  storeId: string;
+  storeName?: string;
+  storeBranch?: string;
+  subscriptionId: string;
+  planName?: string;
+  amount: number;
+  method: string;
+  status: 'paid' | 'pending' | 'failed' | 'refunded';
+  periodStart?: string;
+  periodEnd?: string;
+  paidAt: string;
+  recordedBy?: string;
+  recordedByName?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface MySubscriptionHistory {
+  periods: StoreSubscription[];
+  events: SubscriptionEvent[];
+  payments: SubscriptionPayment[];
+}
+
+export interface SubscriptionEvent {
+  id: number;
+  storeId: string;
+  storeName?: string;
+  subscriptionId: string;
+  action: string;
+  fromPlanId?: string;
+  fromPlanName?: string;
+  toPlanId?: string;
+  toPlanName?: string;
+  notes?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
 }

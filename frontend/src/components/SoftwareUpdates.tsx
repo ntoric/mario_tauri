@@ -17,6 +17,7 @@ const SoftwareUpdates: React.FC = () => {
     isCheckingDowngrade,
     isDownloading,
     isInstalling,
+    installKind,
     downloadProgress,
     error,
     checkForUpdates,
@@ -30,7 +31,6 @@ const SoftwareUpdates: React.FC = () => {
   const [hasChecked, setHasChecked] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [isDowngrading, setIsDowngrading] = useState(false);
 
   // Show the real desktop app version (from the Tauri binary) on mount.
   useEffect(() => {
@@ -77,12 +77,10 @@ const SoftwareUpdates: React.FC = () => {
     if (!accepted) return;
 
     setInstallError(null);
-    setIsDowngrading(true);
     try {
       await downgrade();
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : 'Failed to install downgrade');
-      setIsDowngrading(false);
     }
   };
 
@@ -161,7 +159,7 @@ const SoftwareUpdates: React.FC = () => {
         <div className="card-body">
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <Loader2 size={40} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem' }}>{isDowngrading ? 'Installing Previous Version' : 'Installing Update'}</h3>
+            <h3 style={{ margin: '0 0 0.5rem' }}>{installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}</h3>
             <p style={{ color: 'var(--gray-500)', margin: 0 }}>The application will relaunch shortly. Please do not close the window.</p>
           </div>
         </div>

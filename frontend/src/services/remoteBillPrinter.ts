@@ -87,6 +87,7 @@ class RemoteBillPrinterService {
       s.gstin,
       s.fssaiNo,
       s.phone,
+      s.secondaryPhone,
     ].join('|');
   }
 

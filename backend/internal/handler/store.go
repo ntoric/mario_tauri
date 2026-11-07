@@ -148,10 +148,11 @@ func (h *Handler) CreateStore(w http.ResponseWriter, r *http.Request) {
 		req.GSTRegistrationType = "regular"
 	}
 
-	// Data retention is configured by superadmin only — a store role must
-	// not be able to set (or clear) the period its own history is hidden.
+	// Data retention and the My Plan page flag are configured by superadmin
+	// only — a store role must not be able to set either.
 	if claims.Role != "superadmin" {
 		req.DataRetentionDays = 0
+		req.MyPlanEnabled = false
 	} else if req.DataRetentionDays < 0 {
 		h.writeError(w, http.StatusBadRequest, "dataRetentionDays must be a non-negative integer")
 		return
@@ -241,6 +242,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 		"gstin":                 "gstin",
 		"fssaiNo":               "fssai_no",
 		"phone":                 "phone",
+		"secondaryPhone":        "secondary_phone",
 		"printerName":           "printer_name",
 		"printerVendorId":       "printer_vendor_id",
 		"printerProductId":      "printer_product_id",
@@ -262,6 +264,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 		"zomatoGstin":           "zomato_gstin",
 		"otherEcoGstin":         "other_eco_gstin",
 		"dataRetentionDays":     "data_retention_days",
+		"myPlanEnabled":         "my_plan_enabled",
 	}
 
 	// Data retention is configured by superadmin only. Dropping the key for
@@ -269,6 +272,7 @@ func (h *Handler) UpdateStore(w http.ResponseWriter, r *http.Request) {
 	// that echo the full store object working unchanged.
 	if claims.Role != "superadmin" {
 		delete(raw, "dataRetentionDays")
+		delete(raw, "myPlanEnabled")
 	} else if v, exists := raw["dataRetentionDays"]; exists {
 		n, ok := v.(float64)
 		if !ok || n < 0 || n != math.Trunc(n) {

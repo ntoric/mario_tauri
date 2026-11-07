@@ -33,14 +33,24 @@ export interface UpdateInfo {
   date?: string;
 }
 
+export type InstallKind = 'upgrade' | 'downgrade';
+
 export interface UpdateProgress {
   status: DesktopUpdateProgressStatus;
+  kind: InstallKind;
   total: number;
   downloaded: number;
   percentage: number;
 }
 
 class UpdaterService {
+  /**
+   * Which install flow is in flight. Progress events don't identify the
+   * flow themselves, so consumers rely on this to label upgrade vs
+   * rollback UI correctly.
+   */
+  private installKind: InstallKind = 'upgrade';
+
   /**
    * Check for available updates
    */
@@ -95,6 +105,7 @@ class UpdaterService {
     if (!isTauri()) {
       throw new Error('Updates are only available in the desktop app.');
     }
+    this.installKind = 'upgrade';
     try {
       await invoke('download_and_install_update');
     } catch (error) {
@@ -111,6 +122,7 @@ class UpdaterService {
     if (!isTauri()) {
       throw new Error('Downgrades are only available in the desktop app.');
     }
+    this.installKind = 'downgrade';
     try {
       await invoke('download_and_install_downgrade');
     } catch (error) {
@@ -137,6 +149,7 @@ class UpdaterService {
             : 0;
       onProgress({
         status: p.status,
+        kind: this.installKind,
         total,
         downloaded: p.downloaded,
         percentage,

@@ -23,9 +23,11 @@ const Stores: React.FC = () => {
     branch: '',
     location: '',
     phone: '',
+    secondaryPhone: '',
     gstin: '',
     fssaiNo: '',
     dataRetentionDays: 0,
+    myPlanEnabled: false,
   });
 
   // Loading states
@@ -40,13 +42,15 @@ const Stores: React.FC = () => {
         branch: store.branch || '',
         location: store.location || '',
         phone: store.phone || '',
+        secondaryPhone: store.secondaryPhone || '',
         gstin: store.gstin || '',
         fssaiNo: store.fssaiNo || '',
         dataRetentionDays: store.dataRetentionDays || 0,
+        myPlanEnabled: !!store.myPlanEnabled,
       });
     } else {
       setEditingStore(null);
-      setForm({ name: '', branch: '', location: '', phone: '', gstin: '', fssaiNo: '', dataRetentionDays: 0 });
+      setForm({ name: '', branch: '', location: '', phone: '', secondaryPhone: '', gstin: '', fssaiNo: '', dataRetentionDays: 0, myPlanEnabled: false });
     }
     setShowModal(true);
   };
@@ -203,10 +207,12 @@ const Stores: React.FC = () => {
                     <span style={{ color: 'var(--gray-700)', fontSize: '0.9rem' }}>{store.location}</span>
                   </div>
                 )}
-                {store.phone && (
+                {(store.phone || store.secondaryPhone) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Phone size={16} style={{ color: 'var(--gray-400)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--gray-700)', fontSize: '0.9rem' }}>{store.phone}</span>
+                    <span style={{ color: 'var(--gray-700)', fontSize: '0.9rem' }}>
+                      {[store.phone, store.secondaryPhone].filter(Boolean).join(' / ')}
+                    </span>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--gray-200)' }}>
@@ -312,18 +318,28 @@ const Stores: React.FC = () => {
                       placeholder="Contact number"
                     />
                   </div>
-                  {(!editingStore || isTaxEnabled(editingStore)) && (
-                    <div className="form-group">
-                      <label>GSTIN</label>
-                      <input
-                        type="text"
-                        value={form.gstin}
-                        onChange={e => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
-                        placeholder="e.g., 32AAIFJ6501F1ZS"
-                      />
-                    </div>
-                  )}
+                  <div className="form-group">
+                    <label>Secondary Phone</label>
+                    <input
+                      type="text"
+                      value={form.secondaryPhone}
+                      onChange={e => setForm({ ...form, secondaryPhone: e.target.value })}
+                      placeholder="Alternate contact number"
+                    />
+                  </div>
                 </div>
+
+                {(!editingStore || isTaxEnabled(editingStore)) && (
+                  <div className="form-group">
+                    <label>GSTIN</label>
+                    <input
+                      type="text"
+                      value={form.gstin}
+                      onChange={e => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
+                      placeholder="e.g., 32AAIFJ6501F1ZS"
+                    />
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label>FSSAI Number</label>
@@ -349,6 +365,23 @@ const Stores: React.FC = () => {
                       Orders, bills, sales/profit reports and expenses older than this many days are
                       hidden from store users. Nothing is deleted — the data stays visible to
                       superadmin for analytics. 0 = unlimited.
+                    </small>
+                  </div>
+                )}
+
+                {user?.role === 'superadmin' && (
+                  <div className="form-group">
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.myPlanEnabled}
+                        onChange={e => setForm({ ...form, myPlanEnabled: e.target.checked })}
+                      />
+                      Show "My Plan" page to this store's users
+                    </label>
+                    <small style={{ color: 'var(--gray-500)', fontSize: '0.8rem' }}>
+                      Lets the store view their subscription plan, request upgrades/downgrades
+                      and cancellations, and see billing history from the My Plan menu.
                     </small>
                   </div>
                 )}

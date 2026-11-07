@@ -90,6 +90,7 @@ type Repository struct {
 	RevenueReport   *RevenueReportRepository
 	Report          *ReportRepository
 	SupportTicket   *SupportTicketRepository
+	Subscription    *SubscriptionRepository
 	Cache           *MemoryCache
 	db              *sql.DB
 }
@@ -117,6 +118,7 @@ func NewRepository(db *sql.DB, redisCache *RedisCache) *Repository {
 		RevenueReport:   &RevenueReportRepository{db: db},
 		Report:          &ReportRepository{db: db},
 		SupportTicket:   &SupportTicketRepository{db: db},
+		Subscription:    &SubscriptionRepository{db: db},
 		Cache:           cache,
 	}
 }
@@ -183,13 +185,13 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var args []interface{}
 
 	if role == "superadmin" {
-		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days FROM stores ORDER BY name"
+		sqlStr = "SELECT id, name, branch, location, gstin, fssai_no, phone, secondary_phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days, my_plan_enabled FROM stores ORDER BY name"
 	} else if role == "business_owner" {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, secondary_phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days, my_plan_enabled
 		          FROM stores WHERE id IN (SELECT store_id FROM user_stores WHERE user_id = $1) ORDER BY name`
 		args = append(args, userID)
 	} else {
-		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days
+		sqlStr = `SELECT id, name, branch, location, gstin, fssai_no, phone, secondary_phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days, my_plan_enabled
 		          FROM stores WHERE id = $1 ORDER BY name`
 		args = append(args, storeID)
 	}
@@ -203,15 +205,15 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 	var stores []models.Store
 	for rows.Next() {
 		var s models.Store
-		var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
+		var branch, location, gstin, fssaiNo, phone, secondaryPhone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
 		var gstRegType, stateCode, invoicePrefix, creditNotePrefix, defaultSacCode, swiggyGSTIN, zomatoGSTIN, otherEcoGSTIN sql.NullString
 		var pricesIncludeTax sql.NullBool
 		var appVersionSeenAt sql.NullTime
 		err := rows.Scan(
-			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
+			&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone, &secondaryPhone,
 			&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
 			&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &gstRegType, &stateCode, &pricesIncludeTax, &invoicePrefix, &creditNotePrefix, &defaultSacCode, &swiggyGSTIN, &zomatoGSTIN, &otherEcoGSTIN, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
-			&s.DataRetentionDays,
+			&s.DataRetentionDays, &s.MyPlanEnabled,
 		)
 		if err != nil {
 			return nil, err
@@ -221,6 +223,7 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 		s.GSTIN = gstin.String
 		s.FSSAINo = fssaiNo.String
 		s.Phone = phone.String
+	s.SecondaryPhone = secondaryPhone.String
 		s.PrinterName = printerName.String
 		s.PrinterVendorID = printerVendor.String
 		s.PrinterProductID = printerProduct.String
@@ -258,19 +261,19 @@ func (r *StoreRepository) GetAll(ctx context.Context, role, userID, storeID stri
 }
 
 func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store, error) {
-	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days FROM stores WHERE id = $1"
+	sqlStr := "SELECT id, name, branch, location, gstin, fssai_no, phone, secondary_phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, remote_printer_device_id, logo_url, theme_color, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, swiggy_gstin, zomato_gstin, other_eco_gstin, is_active, app_version, app_version_seen_at, created_at, data_retention_days, my_plan_enabled FROM stores WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, sqlStr, id)
 
 	var s models.Store
-	var branch, location, gstin, fssaiNo, phone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
+	var branch, location, gstin, fssaiNo, phone, secondaryPhone, printerName, printerVendor, printerProduct, remotePrinterDevice, logoURL, themeColor, appVersion sql.NullString
 	var gstRegType, stateCode, invoicePrefix, creditNotePrefix, defaultSacCode, swiggyGSTIN, zomatoGSTIN, otherEcoGSTIN sql.NullString
 	var pricesIncludeTax sql.NullBool
 	var appVersionSeenAt sql.NullTime
 	err := row.Scan(
-		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone,
+		&s.ID, &s.Name, &branch, &location, &gstin, &fssaiNo, &phone, &secondaryPhone,
 		&printerName, &printerVendor, &printerProduct, &s.InvoiceSize, &s.KOTPrintEnabled, &s.RemoteBillingEnabled,
 		&remotePrinterDevice, &logoURL, &themeColor, &s.TaxEnabled, &s.DefaultTaxPercent, &gstRegType, &stateCode, &pricesIncludeTax, &invoicePrefix, &creditNotePrefix, &defaultSacCode, &swiggyGSTIN, &zomatoGSTIN, &otherEcoGSTIN, &s.IsActive, &appVersion, &appVersionSeenAt, &s.CreatedAt,
-		&s.DataRetentionDays,
+		&s.DataRetentionDays, &s.MyPlanEnabled,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -283,6 +286,7 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 	s.GSTIN = gstin.String
 	s.FSSAINo = fssaiNo.String
 	s.Phone = phone.String
+	s.SecondaryPhone = secondaryPhone.String
 	s.PrinterName = printerName.String
 	s.PrinterVendorID = printerVendor.String
 	s.PrinterProductID = printerProduct.String
@@ -318,10 +322,10 @@ func (r *StoreRepository) GetByID(ctx context.Context, id string) (*models.Store
 }
 
 func (r *StoreRepository) Create(ctx context.Context, s models.Store) error {
-	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, data_retention_days, is_active)
-	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE(NULLIF($16, ''), 'regular'), NULLIF($17, ''), COALESCE($18, false), COALESCE(NULLIF($19, ''), 'INV'), COALESCE(NULLIF($20, ''), 'CN'), COALESCE(NULLIF($21, ''), '996331'), $22, true)`
+	sqlStr := `INSERT INTO stores (id, name, branch, location, gstin, fssai_no, phone, secondary_phone, printer_name, printer_vendor_id, printer_product_id, invoice_size, kot_print_enabled, remote_billing_enabled, tax_enabled, default_tax_percent, gst_registration_type, state_code, prices_include_tax, invoice_prefix, credit_note_prefix, default_sac_code, data_retention_days, is_active)
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, COALESCE(NULLIF($17, ''), 'regular'), NULLIF($18, ''), COALESCE($19, false), COALESCE(NULLIF($20, ''), 'INV'), COALESCE(NULLIF($21, ''), 'CN'), COALESCE(NULLIF($22, ''), '996331'), $23, true)`
 	_, err := r.db.ExecContext(ctx, sqlStr,
-		s.ID, s.Name, s.Branch, s.Location, s.GSTIN, s.FSSAINo, s.Phone,
+		s.ID, s.Name, s.Branch, s.Location, s.GSTIN, s.FSSAINo, s.Phone, s.SecondaryPhone,
 		s.PrinterName, s.PrinterVendorID, s.PrinterProductID, s.InvoiceSize, s.KOTPrintEnabled, s.RemoteBillingEnabled,
 		s.TaxEnabled, s.DefaultTaxPercent,
 		s.GSTRegistrationType, s.StateCode, s.PricesIncludeTax, s.InvoicePrefix, s.CreditNotePrefix, s.DefaultSACCode,

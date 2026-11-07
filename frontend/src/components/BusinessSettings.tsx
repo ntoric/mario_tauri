@@ -66,6 +66,7 @@ const BusinessSettings: React.FC = () => {
     location: '',
     fssaiNo: '',
     phone: '',
+    secondaryPhone: '',
   });
 
   // Superadmin-only: days after which a store's sales history is hidden.
@@ -120,6 +121,7 @@ const BusinessSettings: React.FC = () => {
         location: currentStore.location || '',
         fssaiNo: currentStore.fssaiNo || '',
         phone: currentStore.phone || '',
+        secondaryPhone: currentStore.secondaryPhone || '',
       });
       setDataRetentionDays(currentStore.dataRetentionDays ?? 0);
       setPrinterSettings({
@@ -564,14 +566,25 @@ const BusinessSettings: React.FC = () => {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>Contact Phone</label>
-                <input
-                  type="text"
-                  value={generalSettings.phone}
-                  onChange={e => setGeneralSettings({ ...generalSettings, phone: e.target.value })}
-                  placeholder="Contact number"
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Contact Phone</label>
+                  <input
+                    type="text"
+                    value={generalSettings.phone}
+                    onChange={e => setGeneralSettings({ ...generalSettings, phone: e.target.value })}
+                    placeholder="Contact number"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Secondary Phone</label>
+                  <input
+                    type="text"
+                    value={generalSettings.secondaryPhone}
+                    onChange={e => setGeneralSettings({ ...generalSettings, secondaryPhone: e.target.value })}
+                    placeholder="Alternate contact number"
+                  />
+                </div>
               </div>
 
               {user?.role === 'superadmin' && (

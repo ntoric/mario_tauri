@@ -6,6 +6,7 @@ class Store {
   final String branch;
   final String location;
   final String phone;
+  final String secondaryPhone;
   final String gstin;
   final String fssaiNo;
   final String logoUrl;
@@ -23,6 +24,7 @@ class Store {
     this.branch = '',
     this.location = '',
     this.phone = '',
+    this.secondaryPhone = '',
     this.gstin = '',
     this.fssaiNo = '',
     this.logoUrl = '',
@@ -41,6 +43,7 @@ class Store {
         branch: jStr(j, 'branch'),
         location: jStr(j, 'location'),
         phone: jStr(j, 'phone'),
+        secondaryPhone: jStr(j, 'secondaryPhone'),
         gstin: jStr(j, 'gstin'),
         fssaiNo: jStr(j, 'fssaiNo'),
         logoUrl: jStr(j, 'logoUrl'),

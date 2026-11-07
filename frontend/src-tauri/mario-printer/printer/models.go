@@ -16,6 +16,7 @@ type Store struct {
 	GSTNumber  string `json:"gst_number"`
 	FSSAILicNo string `json:"fssai_lic_no"`
 	Phone      string `json:"phone"`
+	PhoneSecondary string `json:"phone_secondary"`
 	Address    string `json:"address"`
 }
 

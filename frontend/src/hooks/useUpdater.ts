@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { updaterService, UpdateInfo, UpdateProgress } from '../services/updater';
+import { updaterService, InstallKind, UpdateInfo, UpdateProgress } from '../services/updater';
 import { isQuietHours } from '../utils/quietHours';
 
 export interface UseUpdaterReturn {
@@ -9,6 +9,7 @@ export interface UseUpdaterReturn {
   isCheckingDowngrade: boolean;
   isDownloading: boolean;
   isInstalling: boolean;
+  installKind: InstallKind;
   downloadProgress: UpdateProgress | null;
   error: string | null;
   checkForUpdates: () => Promise<void>;
@@ -25,6 +26,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
   const [isCheckingDowngrade, setIsCheckingDowngrade] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [installKind, setInstallKind] = useState<InstallKind>('upgrade');
   const [downloadProgress, setDownloadProgress] = useState<UpdateProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +43,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
           setIsInstalling(true);
         }
         setDownloadProgress(progress);
+        setInstallKind(progress.kind);
       })
       .then((u) => {
         unlisten = u;
@@ -81,6 +84,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
   const downloadAndInstall = useCallback(async () => {
     setIsDownloading(true);
     setIsInstalling(false);
+    setInstallKind('upgrade');
     setError(null);
     setDownloadProgress(null);
 
@@ -102,6 +106,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
   const downgrade = useCallback(async () => {
     setIsDownloading(true);
     setIsInstalling(false);
+    setInstallKind('downgrade');
     setError(null);
     setDownloadProgress(null);
 
@@ -151,6 +156,7 @@ export const useUpdater = (autoCheck = true, checkInterval = 3600000): UseUpdate
     isCheckingDowngrade,
     isDownloading,
     isInstalling,
+    installKind,
     downloadProgress,
     error,
     checkForUpdates,

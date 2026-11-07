@@ -65,6 +65,11 @@ fn render_invoice(invoice: &Invoice, width: &str) -> Vec<u8> {
     if let Some(phone) = &invoice.store.phone {
         data.extend_from_slice(format!("MOB : {}\n", phone).as_bytes());
     }
+    if let Some(phone2) = &invoice.store.phone_secondary {
+        if !phone2.is_empty() {
+            data.extend_from_slice(format!("MOB : {}\n", phone2).as_bytes());
+        }
+    }
     if let Some(gst) = &invoice.store.gst_number {
         if !gst.is_empty() {
             data.extend_from_slice(format!("GSTIN : {}\n", gst).as_bytes());
@@ -465,6 +470,7 @@ mod tests {
                 gst_number: Some("27ABCDE1234F1Z0".into()),
                 fssai_lic_no: None,
                 phone: None,
+                phone_secondary: None,
                 address: None,
             },
             customer: Customer { name: "Walk-in".into(), mobile: None },

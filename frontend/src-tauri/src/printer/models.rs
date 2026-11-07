@@ -34,6 +34,9 @@ pub struct Store {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "phone_secondary")]
+    pub phone_secondary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
 }
 

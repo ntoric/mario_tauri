@@ -25,6 +25,7 @@ const AppContextMenu: React.FC = () => {
     isCheckingDowngrade,
     isDownloading,
     isInstalling,
+    installKind,
     downloadProgress,
     checkForDowngrade,
     downgrade,
@@ -254,7 +255,9 @@ const AppContextMenu: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--gray-800)' }}>
-            Downloading version {downgradeInfo?.latestVersion || ''}...
+            {installKind === 'downgrade'
+              ? `Downloading version ${downgradeInfo?.latestVersion || ''}...`
+              : 'Downloading update...'}
           </div>
           <div
             style={{
@@ -302,7 +305,9 @@ const AppContextMenu: React.FC = () => {
             }}
           >
             <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '12px' }} />
-            <h3 style={{ margin: '0 0 8px', fontSize: '20px' }}>Installing Previous Version</h3>
+            <h3 style={{ margin: '0 0 8px', fontSize: '20px' }}>
+              {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
+            </h3>
             <p style={{ margin: 0, color: 'var(--gray-600)' }}>The app will relaunch shortly...</p>
           </div>
         </div>

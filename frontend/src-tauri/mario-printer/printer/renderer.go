@@ -56,6 +56,9 @@ func RenderInvoice(invoice Invoice, width string) []byte {
 	if strings.TrimSpace(invoice.Store.Phone) != "" {
 		data = append(data, []byte("MOB : "+invoice.Store.Phone+"\n")...)
 	}
+	if strings.TrimSpace(invoice.Store.PhoneSecondary) != "" {
+		data = append(data, []byte("MOB : "+invoice.Store.PhoneSecondary+"\n")...)
+	}
 	if strings.TrimSpace(invoice.Store.GSTNumber) != "" {
 		data = append(data, []byte("GSTIN : "+invoice.Store.GSTNumber+"\n")...)
 	}

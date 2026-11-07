@@ -35,6 +35,7 @@ class PrinterService {
         gst_number?: string;
         fssai_lic_no?: string;
         phone?: string;
+        phone_secondary?: string;
         address?: string;
       };
       customer: {

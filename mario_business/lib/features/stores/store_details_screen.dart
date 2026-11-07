@@ -48,6 +48,7 @@ class StoreDetailsScreen extends StatelessWidget {
             child: Column(children: [
               InfoRow('Location', s.location.isEmpty ? '—' : s.location),
               InfoRow('Phone', s.phone.isEmpty ? '—' : s.phone),
+              if (s.secondaryPhone.isNotEmpty) InfoRow('Secondary phone', s.secondaryPhone),
               if (s.createdAt != null) InfoRow('On Mario since', Fmt.date(s.createdAt!)),
             ]),
           ),

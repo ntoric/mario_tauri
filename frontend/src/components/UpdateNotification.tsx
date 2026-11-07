@@ -10,6 +10,7 @@ const UpdateNotification: React.FC = () => {
     updateInfo,
     isDownloading,
     isInstalling,
+    installKind,
     downloadProgress,
     downloadAndInstall,
     dismissUpdate,
@@ -23,7 +24,9 @@ const UpdateNotification: React.FC = () => {
     return (
       <div style={styles.overlay}>
         <div style={styles.card}>
-          <h3 style={styles.title}>Installing Update</h3>
+          <h3 style={styles.title}>
+            {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
+          </h3>
           <p style={styles.text}>The app will relaunch shortly...</p>
           <div style={styles.spinner} />
         </div>

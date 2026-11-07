@@ -114,6 +114,7 @@ const History: React.FC = () => {
             // carry the GSTIN (it would look like a tax invoice).
             ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
             ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
+            ...(currentStore?.secondaryPhone ? { phone_secondary: currentStore.secondaryPhone } : {}),
             address: currentStore?.location || '',
           },
           customer: {
@@ -751,7 +752,9 @@ const History: React.FC = () => {
                 <div className="bill-header">
                   <h2>{currentStore?.name || 'Restaurant'}</h2>
                   {currentStore?.location && <p>{currentStore.location}</p>}
-                  {currentStore?.phone && <p>Tel: {currentStore.phone}</p>}
+                  {(currentStore?.phone || currentStore?.secondaryPhone) && (
+                    <p>Tel: {[currentStore.phone, currentStore.secondaryPhone].filter(Boolean).join(' / ')}</p>
+                  )}
                   {taxEnabled && viewingGstBill && currentStore?.gstin && <p>GSTIN: {currentStore.gstin}</p>}
                 </div>
 

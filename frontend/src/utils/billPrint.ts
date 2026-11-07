@@ -105,6 +105,7 @@ export const buildInvoiceFromBillData = (
         ...(store.gstin ? { gst_number: store.gstin } : {}),
         ...(store.fssaiNo ? { fssai_lic_no: store.fssaiNo } : {}),
         ...(store.phone ? { phone: store.phone } : {}),
+        ...(store.secondaryPhone ? { phone_secondary: store.secondaryPhone } : {}),
         address: store.location || '',
       },
       customer: {

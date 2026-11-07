@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox } from 'lucide-react';
+import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox, CreditCard, Crown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import StoreSelector from './StoreSelector';
@@ -70,6 +70,8 @@ const LayoutContent: React.FC = () => {
   const isBusinessAdmin = user?.role === 'business_admin';
   const isStaff = user?.role === 'staff';
   const canManageStore = isSuperAdmin || isBusinessOwner || isBusinessAdmin;
+  // My Plan is a superadmin-toggled per-store page.
+  const showMyPlan = isSuperAdmin || !!currentStore?.myPlanEnabled;
 
   return (
     <div className="layout">
@@ -126,6 +128,12 @@ const LayoutContent: React.FC = () => {
               <span className="nav-icon"><BarChart2 size={18} /></span>
               {sidebarExpanded && <span className="nav-label">Reports</span>}
             </NavLink>
+            {showMyPlan && (
+              <NavLink to="/my-plan" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="My Plan">
+                <span className="nav-icon"><Crown size={18} /></span>
+                {sidebarExpanded && <span className="nav-label">My Plan</span>}
+              </NavLink>
+            )}
             <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
               <span className="nav-icon"><Settings size={18} /></span>
               {sidebarExpanded && <span className="nav-label">Business Settings</span>}
@@ -150,6 +158,10 @@ const LayoutContent: React.FC = () => {
               <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
                 <span className="nav-icon"><Building2 size={18} /></span>
                 {sidebarExpanded && <span className="nav-label">Manage Stores</span>}
+              </NavLink>
+              <NavLink to="/subscriptions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Subscriptions">
+                <span className="nav-icon"><CreditCard size={18} /></span>
+                {sidebarExpanded && <span className="nav-label">Subscriptions</span>}
               </NavLink>
               <NavLink to="/menu-upload" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="AI Menu Upload">
                 <span className="nav-icon"><Sparkles size={18} /></span>

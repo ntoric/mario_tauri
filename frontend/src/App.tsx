@@ -16,6 +16,8 @@ import SystemReset from './components/SystemReset';
 import UpdateManagement from './components/UpdateManagement';
 import SupportSettings from './components/SupportSettings';
 import SupportTickets from './components/SupportTickets';
+import Subscriptions from './components/Subscriptions';
+import MyPlan from './components/MyPlan';
 import DeveloperSettings from './components/DeveloperSettings';
 import MenuUpload from './components/MenuUpload';
 import SupportPage from './components/SupportPage';
@@ -149,6 +151,8 @@ const AppRoutes: React.FC = () => {
         <Route path="history" element={<History />} />
         <Route path="users" element={<Users />} />
         <Route path="stores" element={<Stores />} />
+        <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="my-plan" element={<MyPlan />} />
         <Route path="business-settings" element={<BusinessSettings />} />
         <Route path="support-tickets" element={<SupportTickets />} />
         <Route path="support-settings" element={<SupportSettings />} />

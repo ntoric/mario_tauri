@@ -536,6 +536,12 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		// days are hidden from non-superadmin roles. Rows are never deleted;
 		// superadmin (and analytics) keep the full history. 0 = unlimited.
 		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS data_retention_days INTEGER NOT NULL DEFAULT 0`,
+		// My Plan page visibility per store — superadmin controls whether a
+		// store's users see the subscription menu/page.
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS my_plan_enabled BOOLEAN DEFAULT false`,
+		// Optional second contact number — printed on the bill under the
+		// primary phone.
+		`ALTER TABLE stores ADD COLUMN IF NOT EXISTS secondary_phone VARCHAR(50)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_notes_store_no ON credit_notes (store_id, credit_note_no)`,
 		`CREATE TABLE IF NOT EXISTS credit_note_lines (
 			id SERIAL PRIMARY KEY,
@@ -558,6 +564,115 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		`CREATE INDEX IF NOT EXISTS idx_credit_note_lines_bill_line ON credit_note_lines (bill_line_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_credit_notes_bill ON credit_notes (bill_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_credit_notes_store_issued ON credit_notes (store_id, issued_at)`,
+
+		// Subscription plans — recurring pricing packages superadmin assigns
+		// to stores (monthly / quarterly / bi-annually / yearly).
+		`CREATE TABLE IF NOT EXISTS subscription_plans (
+			id VARCHAR(255) PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			features JSONB DEFAULT '[]'::jsonb,
+			recurring_type VARCHAR(20) NOT NULL CHECK (recurring_type IN ('monthly', 'quarterly', 'biannually', 'yearly')),
+			is_active BOOLEAN DEFAULT true,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// Store subscriptions — one row per billing period. Plan details are
+		// snapshotted (plan_name/plan_price/recurring_type) so history stays
+		// accurate when a plan is edited or deleted. end_date is the next
+		// renewal date (auto_renew on) or expiry date (auto_renew off).
+		`CREATE TABLE IF NOT EXISTS store_subscriptions (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			plan_id VARCHAR(255) REFERENCES subscription_plans(id) ON DELETE SET NULL,
+			plan_name VARCHAR(255) NOT NULL,
+			plan_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			recurring_type VARCHAR(20) NOT NULL CHECK (recurring_type IN ('monthly', 'quarterly', 'biannually', 'yearly')),
+			status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled', 'replaced')),
+			start_date TIMESTAMP NOT NULL,
+			end_date TIMESTAMP NOT NULL,
+			auto_renew BOOLEAN DEFAULT true,
+			renewal_count INTEGER NOT NULL DEFAULT 0,
+			created_by VARCHAR(255) REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// At most one active subscription per store.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_subscriptions_one_active ON store_subscriptions (store_id) WHERE status = 'active'`,
+		`CREATE INDEX IF NOT EXISTS idx_store_subscriptions_store ON store_subscriptions (store_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_store_subscriptions_status_end ON store_subscriptions (status, end_date)`,
+
+		// Subscription events — append-only audit log powering the history view
+		// (created / renewed / expired / upgraded / downgraded / cancelled ...).
+		`CREATE TABLE IF NOT EXISTS subscription_events (
+			id SERIAL PRIMARY KEY,
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			subscription_id VARCHAR(255) REFERENCES store_subscriptions(id) ON DELETE CASCADE,
+			action VARCHAR(30) NOT NULL,
+			from_plan_id VARCHAR(255),
+			from_plan_name VARCHAR(255),
+			to_plan_id VARCHAR(255),
+			to_plan_name VARCHAR(255),
+			notes TEXT,
+			created_by VARCHAR(255) REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_events_store ON subscription_events (store_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_events_sub ON subscription_events (subscription_id)`,
+
+		// Subscription change requests — store users ask to upgrade/downgrade
+		// or cancel; superadmin approves and the change is applied when the
+		// current billing cycle ends (see ProcessDue). Plan details are
+		// snapshotted so applying later doesn't depend on the plan's state.
+		`CREATE TABLE IF NOT EXISTS subscription_requests (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			subscription_id VARCHAR(255) NOT NULL REFERENCES store_subscriptions(id) ON DELETE CASCADE,
+			type VARCHAR(20) NOT NULL CHECK (type IN ('upgrade', 'downgrade', 'plan_change', 'cancel')),
+			current_plan_name VARCHAR(255),
+			requested_plan_id VARCHAR(255) REFERENCES subscription_plans(id) ON DELETE SET NULL,
+			requested_plan_name VARCHAR(255),
+			requested_plan_price DECIMAL(10, 2),
+			requested_recurring_type VARCHAR(20),
+			effective_date TIMESTAMP,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled', 'applied')),
+			note TEXT,
+			requested_by VARCHAR(255) REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			resolved_by VARCHAR(255) REFERENCES users(id),
+			resolved_at TIMESTAMP,
+			updated_at TIMESTAMP
+		)`,
+		`ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`,
+		// One open (pending or approved-awaiting-apply) request per subscription.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_requests_open ON subscription_requests (subscription_id) WHERE status IN ('pending', 'approved')`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_requests_store ON subscription_requests (store_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_requests_status ON subscription_requests (status)`,
+
+		// Subscription payments — billing ledger per subscription. Auto-renew
+		// writes a 'auto'-method payment each cycle; non-renewing subscriptions
+		// only roll forward when a payment is recorded for the next period.
+		`CREATE TABLE IF NOT EXISTS subscription_payments (
+			id VARCHAR(255) PRIMARY KEY,
+			store_id VARCHAR(255) NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+			subscription_id VARCHAR(255) NOT NULL REFERENCES store_subscriptions(id) ON DELETE CASCADE,
+			amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			method VARCHAR(30) NOT NULL DEFAULT 'manual',
+			status VARCHAR(20) NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'pending', 'failed', 'refunded')),
+			period_start TIMESTAMP,
+			period_end TIMESTAMP,
+			paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			recorded_by VARCHAR(255) REFERENCES users(id),
+			notes TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_payments_sub ON subscription_payments (subscription_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_subscription_payments_store ON subscription_payments (store_id, created_at DESC)`,
+
+		// show_price hides the plan amount from the store's My Plan page when
+		// off (default). Superadmin-controlled per subscription.
+		`ALTER TABLE store_subscriptions ADD COLUMN IF NOT EXISTS show_price BOOLEAN NOT NULL DEFAULT false`,
 	}
 
 	for _, q := range alterQueries {
@@ -579,6 +694,8 @@ func runMigrations(db *sql.DB, cfg *config.Config) error {
 		"global_settings", "app_updates", "expense_categories", "expenses",
 		"item_expenses", "table_sections", "support_tickets", "support_messages",
 		"bill_lines", "doc_series", "credit_notes", "credit_note_lines",
+		"subscription_plans", "store_subscriptions", "subscription_events",
+		"subscription_requests", "subscription_payments",
 	}
 	for _, t := range auditTables {
 		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", t)); err != nil {
