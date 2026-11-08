@@ -3649,7 +3649,7 @@ body {
 
 .items-grid-scrollable .item-card {
   padding: 0.5rem;
-  min-height: 80px;
+  min-height: 96px;
   height: auto;
   width: 100%;
   display: flex;
@@ -3761,7 +3761,7 @@ body {
 
 .item-category {
   width: 100%;
-  font-size: 0.62rem;
+  font-size: 0.55rem;
   font-weight: 500;
   color: var(--gray-500);
   text-transform: uppercase;

@@ -556,7 +556,15 @@ const Inventory: React.FC = () => {
             <form onSubmit={handlePurchaseSubmit}>
               <div className="modal-body">
                 <div className="form-row">
-                  <div className="form-group" style={{ position: 'relative' }}>
+                  <div
+                    className="form-group"
+                    style={{ position: 'relative' }}
+                    onBlur={e => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                        setTimeout(() => setPurchaseMatDropOpen(false), 150);
+                      }
+                    }}
+                  >
                     <label>Material *</label>
                     <input
                       type="text"
@@ -564,7 +572,6 @@ const Inventory: React.FC = () => {
                       placeholder="Search or add material..."
                       required={!purchaseForm.materialId}
                       onFocus={() => setPurchaseMatDropOpen(true)}
-                      onBlur={() => setTimeout(() => setPurchaseMatDropOpen(false), 150)}
                       onChange={e => {
                         setPurchaseMatSearch(e.target.value);
                         setPurchaseMatDropOpen(true);

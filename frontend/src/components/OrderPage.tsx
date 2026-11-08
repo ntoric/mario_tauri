@@ -747,8 +747,8 @@ const OrderPage: React.FC = () => {
                 {item.isFavourite && (
                   <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
                 )}
-                <div className="item-name">{item.name}</div>
                 <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
+                <div className="item-name">{item.name}</div>
                 <div className="item-price">{formatCurrency(item.price)}</div>
               </div>
             ))}
