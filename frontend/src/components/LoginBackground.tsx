@@ -29,8 +29,6 @@ const LoginBackground: React.FC<LoginBackgroundProps> = ({ isDark }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let raf = 0;
     let w = 0;
     let h = 0;
 
@@ -47,6 +45,7 @@ const LoginBackground: React.FC<LoginBackgroundProps> = ({ isDark }) => {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render(0);
     };
 
     const ribbonEdge = (r: Ribbon, x: number, t: number) =>
@@ -87,22 +86,10 @@ const LoginBackground: React.FC<LoginBackgroundProps> = ({ isDark }) => {
       }
     };
 
-    const step = (ms: number) => {
-      render(ms * 0.001);
-      raf = requestAnimationFrame(step);
-    };
-
     resize();
     window.addEventListener('resize', resize);
 
-    if (reducedMotion) {
-      render(0);
-    } else {
-      raf = requestAnimationFrame(step);
-    }
-
     return () => {
-      cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
     };
   }, []);

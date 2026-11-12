@@ -539,7 +539,7 @@ const Subscriptions: React.FC = () => {
               />
             </div>
             <button type="button" className="btn btn-secondary btn-sm" onClick={loadData} disabled={isLoading}>
-              <RefreshCw size={14} style={{ animation: isLoading ? 'spin 1s linear infinite' : 'none' }} />
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
               Refresh
             </button>
           </div>
@@ -559,7 +559,7 @@ const Subscriptions: React.FC = () => {
               <option value="cancelled">Withdrawn</option>
             </select>
             <button type="button" className="btn btn-secondary btn-sm" onClick={loadRequests} disabled={isReqLoading}>
-              <RefreshCw size={14} style={{ animation: isReqLoading ? 'spin 1s linear infinite' : 'none' }} />
+              <RefreshCw size={14} className={isReqLoading ? 'animate-spin' : undefined} />
               Refresh
             </button>
           </div>
@@ -577,7 +577,7 @@ const Subscriptions: React.FC = () => {
               ))}
             </select>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadHistory(historyStoreId)} disabled={isHistoryLoading}>
-              <RefreshCw size={14} style={{ animation: isHistoryLoading ? 'spin 1s linear infinite' : 'none' }} />
+              <RefreshCw size={14} className={isHistoryLoading ? 'animate-spin' : undefined} />
               Refresh
             </button>
           </div>

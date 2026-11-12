@@ -10171,3 +10171,49 @@ input[type="checkbox"]:disabled {
   -webkit-user-select: none;
   touch-action: none;
 }
+
+/* ==========================================================================
+   Performance mode (low-end hardware)
+   - All CSS animations and transitions are disabled globally so every state
+     change renders in a single frame instead of compositing dozens of layers.
+   - backdrop-filter, fixed backgrounds and decorative blur layers are removed
+     (they force the webview to re-sample the GPU surface every frame/scroll).
+   - Only cheap transform-only loading indicators keep animating so busy
+     states never look frozen.
+   ========================================================================== */
+*, *::before, *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+  background-attachment: scroll !important;
+}
+
+/* Cheap GPU-composited spinners: the only animation kept */
+.spinner,
+.animate-spin,
+.spin,
+.btn-loading::after {
+  animation: spin 0.8s linear infinite !important;
+}
+
+/* Decorative login background layers: dropped entirely.
+   The static canvas frame + gradient base still render behind them. */
+.login-visual::before,
+.login-vortex,
+.login-rings,
+.login-aurora,
+.login-rays,
+.login-streaks {
+  display: none !important;
+}
+
+/* Low-alpha surfaces that relied on backdrop blur for readability */
+.tabs,
+.stat-card,
+.order-search-input,
+.login-feature {
+  background: rgba(var(--surface-rgb), 0.92) !important;
+}

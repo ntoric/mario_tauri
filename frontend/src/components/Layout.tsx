@@ -9,6 +9,30 @@ import UpdateBanner from './UpdateBanner';
 import { PageHeaderProvider, usePageHeader } from '../contexts/PageHeaderContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
+// Isolated so the 1s tick only re-renders the clock, not the whole layout tree.
+const NavbarClock: React.FC = () => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="navbar-datetime">
+      <Clock size={16} style={{ color: 'var(--primary)' }} />
+      <div className="navbar-datetime-text">
+        <span className="navbar-time">
+          {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </span>
+        <span className="navbar-date">
+          {now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
   const { stores } = useDataStore();
@@ -24,14 +48,7 @@ const LayoutContent: React.FC = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [now, setNow] = useState(new Date());
   const userMenuRef = useRef<HTMLDivElement>(null);
-
-  // Live clock (Petpooja-style date/time in top bar)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Ensure store is selected on mount (for business_admin and staff)
   useEffect(() => {
@@ -424,17 +441,7 @@ const LayoutContent: React.FC = () => {
             {showStoreSelector ? (
               <StoreSelector />
             ) : (
-              <div className="navbar-datetime">
-                <Clock size={16} style={{ color: 'var(--primary)' }} />
-                <div className="navbar-datetime-text">
-                  <span className="navbar-time">
-                    {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                  <span className="navbar-date">
-                    {now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
-              </div>
+              <NavbarClock />
             )}
           </div>
           

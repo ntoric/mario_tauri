@@ -352,7 +352,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                   onClick={loadTickets}
                   disabled={isLoading}
                 >
-                  <RefreshCw size={14} style={{ animation: isLoading ? 'spin 1s linear infinite' : 'none' }} />
+                  <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
                   Refresh
                 </button>
               </div>

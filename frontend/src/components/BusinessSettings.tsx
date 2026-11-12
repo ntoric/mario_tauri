@@ -1039,7 +1039,7 @@ const BusinessSettings: React.FC = () => {
                 onClick={fetchPrinters}
                 disabled={isLoadingPrinters}
               >
-                <RefreshCw size={14} style={{ animation: isLoadingPrinters ? 'spin 1s linear infinite' : 'none' }} />
+                <RefreshCw size={14} className={isLoadingPrinters ? 'animate-spin' : undefined} />
                 Refresh
               </button>
             </div>

@@ -35,3 +35,10 @@ tokio = { version = "1", features = ["time"] }
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 rusb = "0.9"
 
+
+# Smaller, faster release binary for low-end machines.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

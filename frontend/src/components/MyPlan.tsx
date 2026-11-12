@@ -148,7 +148,7 @@ const MyPlan: React.FC = () => {
           onClick={activeTab === 'history' ? loadHistory : load}
           disabled={refreshing}
         >
-          <RefreshCw size={16} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
           Refresh
         </button>
       ),

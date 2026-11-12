@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useDataStore } from './stores';
 import UpdateNotification from './components/UpdateNotification';
@@ -7,37 +7,46 @@ import OnScreenKeyboard from './components/OnScreenKeyboard';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Tables from './components/Tables';
-import Items from './components/Items';
-import History from './components/History';
-import Users from './components/Users';
-import Stores from './components/Stores';
-import BusinessSettings from './components/BusinessSettings';
-import SystemReset from './components/SystemReset';
-import UpdateManagement from './components/UpdateManagement';
-import SupportSettings from './components/SupportSettings';
-import SupportTickets from './components/SupportTickets';
-import Subscriptions from './components/Subscriptions';
-import MyPlan from './components/MyPlan';
-import DeveloperSettings from './components/DeveloperSettings';
-import MenuUpload from './components/MenuUpload';
 import SupportPage from './components/SupportPage';
-import Reports from './components/Reports';
-import ReportsIndex from './components/ReportsIndex';
-import TopSellingItemsReport from './components/TopSellingItemsReport';
-import TopSellingCategoriesReport from './components/TopSellingCategoriesReport';
-import OrderPage from './components/OrderPage';
-import ParcelOrderPage from './components/ParcelOrderPage';
-import Expenses from './components/Expenses';
-import ExpenseReports from './components/ExpenseReports';
-import Inventory from './components/Inventory';
-import RevenueReport from './components/RevenueReport';
-import ItemProfitReport from './components/ItemProfitReport';
-import GstReports from './components/GstReports';
-import RawMaterialConsumptionReportPage from './components/RawMaterialConsumptionReport';
 import { api } from './services/api';
 import { isQuietHours } from './utils/quietHours';
 import { updaterService } from './services/updater';
 import { remoteBillPrinter } from './services/remoteBillPrinter';
+
+// Code-split secondary routes so the initial bundle (and app startup) stays
+// small on low-end hardware. Only the POS core is loaded eagerly.
+const Items = React.lazy(() => import('./components/Items'));
+const History = React.lazy(() => import('./components/History'));
+const Users = React.lazy(() => import('./components/Users'));
+const Stores = React.lazy(() => import('./components/Stores'));
+const BusinessSettings = React.lazy(() => import('./components/BusinessSettings'));
+const SystemReset = React.lazy(() => import('./components/SystemReset'));
+const UpdateManagement = React.lazy(() => import('./components/UpdateManagement'));
+const SupportSettings = React.lazy(() => import('./components/SupportSettings'));
+const SupportTickets = React.lazy(() => import('./components/SupportTickets'));
+const Subscriptions = React.lazy(() => import('./components/Subscriptions'));
+const MyPlan = React.lazy(() => import('./components/MyPlan'));
+const DeveloperSettings = React.lazy(() => import('./components/DeveloperSettings'));
+const MenuUpload = React.lazy(() => import('./components/MenuUpload'));
+const Reports = React.lazy(() => import('./components/Reports'));
+const ReportsIndex = React.lazy(() => import('./components/ReportsIndex'));
+const TopSellingItemsReport = React.lazy(() => import('./components/TopSellingItemsReport'));
+const TopSellingCategoriesReport = React.lazy(() => import('./components/TopSellingCategoriesReport'));
+const OrderPage = React.lazy(() => import('./components/OrderPage'));
+const ParcelOrderPage = React.lazy(() => import('./components/ParcelOrderPage'));
+const Expenses = React.lazy(() => import('./components/Expenses'));
+const ExpenseReports = React.lazy(() => import('./components/ExpenseReports'));
+const Inventory = React.lazy(() => import('./components/Inventory'));
+const RevenueReport = React.lazy(() => import('./components/RevenueReport'));
+const ItemProfitReport = React.lazy(() => import('./components/ItemProfitReport'));
+const GstReports = React.lazy(() => import('./components/GstReports'));
+const RawMaterialConsumptionReportPage = React.lazy(() => import('./components/RawMaterialConsumptionReport'));
+
+const routeFallback = (
+  <div className="loading-container">
+    <div className="spinner"></div>
+  </div>
+);
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -136,6 +145,7 @@ const AppRoutes: React.FC = () => {
   }
 
   return (
+    <Suspense fallback={routeFallback}>
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
       <Route
@@ -175,6 +185,7 @@ const AppRoutes: React.FC = () => {
         <Route path="inventory" element={<Inventory />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 };
 

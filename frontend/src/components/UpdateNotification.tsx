@@ -25,7 +25,7 @@ const UpdateNotification: React.FC = () => {
       <div className="modal-overlay" style={{ zIndex: 10000 }}>
         <div className="modal" style={{ maxWidth: '400px' }}>
           <div className="modal-body" style={{ padding: '2.25rem', textAlign: 'center' }}>
-            <div style={styles.spinner} />
+            <div style={styles.spinner} className="animate-spin" />
             <h3 style={styles.title}>
               {installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}
             </h3>
@@ -109,7 +109,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderTopColor: 'var(--primary)',
     borderRadius: '50%',
     margin: '0 auto 16px',
-    animation: 'spin 1s linear infinite',
   },
   banner: {
     position: 'fixed',
