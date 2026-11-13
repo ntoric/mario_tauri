@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine, FileText, Minus, Plus } from 'lucide-react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine, FileText, Minus, Plus, SlidersHorizontal } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
@@ -9,6 +9,7 @@ import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { buildInvoicePrintJob, buildCreditNotePrintJob } from '../utils/gstInvoice';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import { ConfirmDialog } from './ConfirmDialog';
 import Pagination from './ui/Pagination';
 import type { Order, Bill, BillLine, CreditNote } from '../types';
@@ -24,6 +25,9 @@ const History: React.FC = () => {
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [viewingBill, setViewingBill] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const toolbarSearchRef = useRef<HTMLInputElement>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isPrinting, setIsPrinting] = useState<string | null>(null);
   const [periodFilter, setPeriodFilter] = useState<string>('all');
@@ -452,91 +456,130 @@ const History: React.FC = () => {
   return (
     <div className="history-page">
       <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon success">
+        <div className="gr-card pos-stat">
+          <div className="gr-well success">
             <Receipt size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{completedCount}</div>
-            <div className="stat-label">Completed Orders</div>
+            <div className="gr-stat__value">{completedCount}</div>
+            <div className="gr-caption">Completed Orders</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon warning">
+        <div className="gr-card pos-stat">
+          <div className="gr-well warning">
             <Calendar size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{activeCount}</div>
-            <div className="stat-label">Active Orders</div>
+            <div className="gr-stat__value">{activeCount}</div>
+            <div className="gr-caption">Active Orders</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon primary">
+        <div className="gr-card pos-stat">
+          <div className="gr-well primary">
             <Receipt size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(totalRevenue)}</div>
-            <div className="stat-label">Total Revenue</div>
+            <div className="gr-stat__value">{formatCurrency(totalRevenue)}</div>
+            <div className="gr-caption">Total Revenue</div>
           </div>
         </div>
       </div>
 
       <div className="history-toolbar">
-        <div className="history-search">
-          <Search size={18} color="var(--gray-500)" />
-          <input
-            type="text"
-            placeholder="Search by table or item..."
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-          />
-        </div>
-        <select className="history-filter-select" value={periodFilter} onChange={e => { setPeriodFilter(e.target.value); setCurrentPage(1); }}>
-          <option value="all">All Time</option>
-          <option value="today">Today</option>
-          <option value="yesterday">Yesterday</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="custom">Custom Range</option>
-        </select>
-        {periodFilter === 'custom' && (
-          <div className="history-date-range">
+        <div className="inv-spacer" />
+        {searchOpen && (
+          <div className="history-search">
+            <Search size={16} />
             <input
-              type="date"
-              className="history-date-input"
-              value={customDateFrom}
-              onChange={e => setCustomDateFrom(e.target.value)}
-              placeholder="From"
-            />
-            <span className="history-date-sep">to</span>
-            <input
-              type="date"
-              className="history-date-input"
-              value={customDateTo}
-              onChange={e => setCustomDateTo(e.target.value)}
-              placeholder="To"
+              ref={toolbarSearchRef}
+              type="text"
+              placeholder="Search by table or item..."
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             />
           </div>
         )}
-        <select className="history-filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="active">Active</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="merged">Merged</option>
-        </select>
+        <button
+          className="gr-iconbtn"
+          onClick={() => {
+            setSearchOpen(o => {
+              if (o) setSearchTerm('');
+              else setTimeout(() => toolbarSearchRef.current?.focus(), 0);
+              return !o;
+            });
+          }}
+          title={searchOpen ? 'Close search' : 'Search'}
+        >
+          {searchOpen ? <X size={18} /> : <Search size={18} />}
+        </button>
+        <div className="filter-pop">
+          <button
+            className={`gr-iconbtn ${periodFilter !== 'all' || statusFilter !== 'all' ? 'has-active-filters' : ''}`}
+            onClick={() => setFilterOpen(o => !o)}
+            title="Filters"
+          >
+            <SlidersHorizontal size={18} />
+          </button>
+          {filterOpen && (
+            <>
+              <div className="filter-overlay" onClick={() => setFilterOpen(false)} />
+              <div className="filter-popover">
+                <div className="gr-field">
+                  <label>Period</label>
+                  <select value={periodFilter} onChange={e => { setPeriodFilter(e.target.value); setCurrentPage(1); }}>
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+                {periodFilter === 'custom' && (
+                  <div className="gr-field">
+                    <label>Date Range</label>
+                    <div className="history-date-range">
+                      <input type="date" value={customDateFrom} onChange={e => setCustomDateFrom(e.target.value)} />
+                      <span className="history-date-sep">to</span>
+                      <input type="date" value={customDateTo} onChange={e => setCustomDateTo(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+                <div className="gr-field">
+                  <label>Status</label>
+                  <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
+                    <option value="all">All Status</option>
+                    <option value="completed">Completed</option>
+                    <option value="active">Active</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="merged">Merged</option>
+                  </select>
+                </div>
+                {(periodFilter !== 'all' || statusFilter !== 'all') && (
+                  <button
+                    className="gr-btn gr-btn--soft gr-btn--sm"
+                    style={{ alignSelf: 'flex-end' }}
+                    onClick={() => { setPeriodFilter('all'); setStatusFilter('all'); setCurrentPage(1); }}
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {filteredOrders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
-          <Calendar size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
-          <p style={{ fontSize: '1.125rem' }}>No orders found</p>
-          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Try adjusting your search or filters</p>
-        </div>
+        <Empty
+          icon={<Calendar />}
+          title="No orders found"
+          text="Try adjusting your search or filters"
+        />
       ) : (
-        <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div className="table-scroll-container">
-            <table className="items-table">
+        <div className="gr-card gr-card--flush" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="gr-tablewrap">
+            <table className="gr-table">
               <thead>
                 <tr>
                   <th>Order #</th>
@@ -585,7 +628,7 @@ const History: React.FC = () => {
                     <td style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{formatDate(order.createdAt)}</td>
                     <td style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
                       <button
-                        className="action-btn"
+                        className="gr-iconbtn gr-iconbtn--sm"
                         onClick={() => setViewingOrder(order)}
                         title="View Details"
                       >
@@ -594,14 +637,14 @@ const History: React.FC = () => {
                       {order.status !== 'merged' && (
                         <>
                           <button
-                            className="action-btn"
+                            className="gr-iconbtn gr-iconbtn--sm"
                             onClick={() => setViewingBill(order)}
                             title="View Bill"
                           >
                             <Receipt size={14} />
                           </button>
                           <button
-                            className="action-btn"
+                            className="gr-iconbtn gr-iconbtn--sm"
                             onClick={() => handlePrintBill(order)}
                             disabled={isPrinting === order.id}
                             title="Print Bill"
@@ -612,7 +655,7 @@ const History: React.FC = () => {
                       )}
                       {order.status === 'completed' && (
                         <button
-                          className="action-btn delete"
+                          className="gr-iconbtn gr-iconbtn--sm delete"
                           onClick={() => setCancelTarget(order)}
                           title="Cancel Order"
                         >
@@ -625,21 +668,23 @@ const History: React.FC = () => {
               </tbody>
             </table>
           </div>
-          <Pagination
-            currentPage={currentPage}
-            totalPages={Math.ceil(filteredOrders.length / PAGE_SIZE)}
-            totalItems={filteredOrders.length}
-            pageSize={PAGE_SIZE}
-            onPageChange={setCurrentPage}
-          />
+          <div className="gr-card__foot table-foot">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(filteredOrders.length / PAGE_SIZE)}
+              totalItems={filteredOrders.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
+          </div>
         </div>
       )}
 
       {/* View Order Modal */}
       {viewingOrder && (
-        <div className="modal-overlay" onClick={() => setViewingOrder(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setViewingOrder(null)}>
+          <div className="gr-modal" onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>
                 {isParcel(viewingOrder) ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -651,11 +696,11 @@ const History: React.FC = () => {
                   `Order Details - Table ${viewingOrder.tableName || viewingOrder.tableNumber}`
                 )}
               </h2>
-              <button className="close-btn" onClick={() => setViewingOrder(null)}>
+              <button className="gr-iconbtn" onClick={() => setViewingOrder(null)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="order-sidebar">
                 {viewingOrder.status === 'merged' && (
                   <div style={{
@@ -700,19 +745,19 @@ const History: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+            <div className="gr-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 {viewingOrder.status !== 'merged' && (
                   <>
                     <button
-                      className="btn btn-secondary"
+                      className="gr-btn gr-btn--secondary"
                       onClick={() => { setViewingOrder(null); setViewingBill(viewingOrder); }}
                     >
                       <Receipt size={16} />
                       View Bill
                     </button>
                     <button
-                      className="btn btn-primary"
+                      className="gr-btn gr-btn--primary"
                       onClick={() => handlePrintBill(viewingOrder)}
                       disabled={isPrinting === viewingOrder.id}
                     >
@@ -722,7 +767,7 @@ const History: React.FC = () => {
                   </>
                 )}
               </div>
-              <button className="btn btn-secondary" onClick={() => setViewingOrder(null)}>Close</button>
+              <button className="gr-btn gr-btn--secondary" onClick={() => setViewingOrder(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -730,9 +775,9 @@ const History: React.FC = () => {
 
       {/* View Bill Modal */}
       {viewingBill && (
-        <div className="modal-overlay" onClick={() => setViewingBill(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setViewingBill(null)}>
+          <div className="gr-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="gr-modal__head">
               <h2>
                 {isParcel(viewingBill) ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -743,11 +788,11 @@ const History: React.FC = () => {
                   `Bill - Table ${viewingBill.tableName || viewingBill.tableNumber}`
                 )}
               </h2>
-              <button className="close-btn" onClick={() => setViewingBill(null)}>
+              <button className="gr-iconbtn" onClick={() => setViewingBill(null)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="bill-container">
                 <div className="bill-header">
                   <h2>{currentStore?.name || 'Restaurant'}</h2>
@@ -782,7 +827,7 @@ const History: React.FC = () => {
                       )}
                     </div>
 
-                    <table className="items-table" style={{ margin: '0.5rem 0' }}>
+                    <table className="gr-table" style={{ margin: '0.5rem 0' }}>
                       <thead>
                         <tr>
                           <th>Item</th>
@@ -884,7 +929,7 @@ const History: React.FC = () => {
                             </div>
                             <div style={{ fontWeight: 600 }}>{formatCurrency(cn.total)}</div>
                             <button
-                              className="action-btn"
+                              className="gr-iconbtn gr-iconbtn--sm"
                               title="Reprint credit note"
                               disabled={printingCnId === cn.id}
                               onClick={() => handleReprintCreditNote(cn)}
@@ -908,7 +953,7 @@ const History: React.FC = () => {
                       <p>Order #{viewingBill.id.slice(-6).toUpperCase()}</p>
                       <p>{formatDate(viewingBill.createdAt)}</p>
                       {taxEnabled && (
-                        <p style={{ fontSize: '0.8rem', color: 'var(--warning-dark, #b7791f)', marginTop: '0.35rem' }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--warning-dark, var(--primary-strong))', marginTop: '0.35rem' }}>
                           Order summary — no GST invoice found for this order
                         </p>
                       )}
@@ -960,10 +1005,10 @@ const History: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+            <div className="gr-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
-                  className="btn btn-primary"
+                  className="gr-btn gr-btn--primary"
                   onClick={() => handlePrintBill(viewingBill)}
                   disabled={isPrinting === viewingBill.id}
                 >
@@ -972,7 +1017,7 @@ const History: React.FC = () => {
                 </button>
                 {taxEnabled && viewingGstBill && viewingGstBill.status !== 'cancelled' && user?.role !== 'staff' && (
                   <button
-                    className="btn btn-secondary"
+                    className="gr-btn gr-btn--secondary"
                     onClick={() => openCreditNoteModal(viewingGstBill)}
                   >
                     <FileText size={16} />
@@ -980,7 +1025,7 @@ const History: React.FC = () => {
                   </button>
                 )}
               </div>
-              <button className="btn btn-secondary" onClick={() => setViewingBill(null)}>Close</button>
+              <button className="gr-btn gr-btn--secondary" onClick={() => setViewingBill(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -988,15 +1033,15 @@ const History: React.FC = () => {
 
       {/* Issue Credit Note Modal */}
       {cnModalBill && (
-        <div className="modal-overlay" onClick={() => { if (!isIssuingCn) setCnModalBill(null); }}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => { if (!isIssuingCn) setCnModalBill(null); }}>
+          <div className="gr-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="gr-modal__head">
               <h2>Issue Credit Note — {cnModalBill.invoiceNo || 'Invoice'}</h2>
-              <button className="close-btn" onClick={() => setCnModalBill(null)} disabled={isIssuingCn}>
+              <button className="gr-iconbtn" onClick={() => setCnModalBill(null)} disabled={isIssuingCn}>
                 <X size={20} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="cn-section-head">
                 <span className="cn-section-title">Items to credit</span>
                 <button
@@ -1024,7 +1069,7 @@ const History: React.FC = () => {
                     <div className="cn-qty-stepper">
                       <button
                         type="button"
-                        className="quantity-btn"
+                        className="pos-qtybtn"
                         disabled={exhausted || qty <= 0 || isIssuingCn}
                         onClick={() => setCnQty(l.id, String(qty - 1), remaining)}
                       >
@@ -1042,7 +1087,7 @@ const History: React.FC = () => {
                       />
                       <button
                         type="button"
-                        className="quantity-btn"
+                        className="pos-qtybtn"
                         disabled={exhausted || qty >= remaining || isIssuingCn}
                         onClick={() => setCnQty(l.id, String(qty + 1), remaining)}
                       >
@@ -1052,7 +1097,7 @@ const History: React.FC = () => {
                   </div>
                 );
               })}
-              <div className="form-group" style={{ marginTop: '0.75rem' }}>
+              <div className="gr-field" style={{ marginTop: '0.75rem' }}>
                 <label>Reason *</label>
                 <input
                   type="text"
@@ -1067,11 +1112,11 @@ const History: React.FC = () => {
                 <span className="cn-total-amount">{formatCurrency(cnEstimatedTotal)}</span>
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button className="btn btn-secondary" onClick={() => setCnModalBill(null)} disabled={isIssuingCn}>
+            <div className="gr-modal__foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button className="gr-btn gr-btn--secondary" onClick={() => setCnModalBill(null)} disabled={isIssuingCn}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleIssueCreditNote} disabled={isIssuingCn}>
+              <button className="gr-btn gr-btn--primary" onClick={handleIssueCreditNote} disabled={isIssuingCn}>
                 {isIssuingCn ? 'Issuing...' : 'Issue Credit Note'}
               </button>
             </div>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import { Ic } from './gr';
 import { useAuthStore, useDataStore } from '../stores';
 
 const StoreSelector: React.FC = () => {
@@ -65,7 +66,7 @@ const StoreSelector: React.FC = () => {
             {currentStore?.name} {currentStore?.branch && `- ${currentStore.branch}`}
           </span>
         </div>
-        <ChevronDown size={16} className={`store-selector-chevron ${isOpen ? 'open' : ''}`} />
+        <Ic name="chevron-down" size={16} className="gr-dropdown__caret" />
       </button>
 
       {isOpen && (
@@ -78,7 +79,7 @@ const StoreSelector: React.FC = () => {
             {stores.map((store) => (
               <button
                 key={store.id}
-                className={`store-option ${store.id === currentStoreId ? 'active' : ''}`}
+                className={`store-option ${store.id === currentStoreId ? 'is-active' : ''}`}
                 onClick={() => handleSwitchStore(store.id)}
               >
                 <div className="store-option-icon" style={{ background: 'white', padding: '4px' }}>
@@ -99,7 +100,7 @@ const StoreSelector: React.FC = () => {
                 </div>
                 {store.id === currentStoreId && (
                   <div className="store-option-check">
-                    <Check size={16} />
+                    <Ic icon={Check} size={16} />
                   </div>
                 )}
               </button>

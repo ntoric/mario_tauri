@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Calendar, BarChart3, Download, Loader2, Search, ArrowUp, ArrowDown, IndianRupee, Receipt, Filter } from 'lucide-react';
+import { Calendar, BarChart3, Download, Loader2, Search, ArrowUp, ArrowDown, IndianRupee, Receipt, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
@@ -10,6 +10,7 @@ import type { ExpenseCategoryReportResult, ExpenseDateReportResult } from '../ty
 import { Button } from './ui/Button';
 import { DonutChart, ChartLegend, CHART_COLORS } from './ui/Charts';
 import Pagination from './ui/Pagination';
+import { Empty } from './gr';
 
 type SortDir = 'asc' | 'desc';
 type CategorySort = 'category' | 'amount' | 'count';
@@ -27,6 +28,7 @@ const ExpenseReports: React.FC = () => {
   const [appliedEnd, setAppliedEnd] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const [categorySort, setCategorySort] = useState<CategorySort>('amount');
   const [categoryDir, setCategoryDir] = useState<SortDir>('desc');
@@ -159,7 +161,7 @@ const ExpenseReports: React.FC = () => {
     const rest = sorted.slice(6);
     const data = top.map((t, i) => ({ ...t, color: CHART_COLORS[i % CHART_COLORS.length] }));
     if (rest.length > 0) {
-      data.push({ label: 'Other', value: rest.reduce((s, r) => s + r.value, 0), color: 'rgba(22, 30, 42, 0.22)' });
+      data.push({ label: 'Other', value: rest.reduce((s, r) => s + r.value, 0), color: 'var(--line-strong)' });
     }
     return data;
   }, [activeTab, categoryReport, dateReport]);
@@ -237,34 +239,51 @@ const ExpenseReports: React.FC = () => {
           <Calendar size={15} />
           By Date
         </button>
+        <div className="inv-spacer" />
+        <div className="filter-pop">
+          <button
+            className={`gr-iconbtn ${appliedStart || appliedEnd ? 'has-active-filters' : ''}`}
+            onClick={() => setFilterOpen(o => !o)}
+            title="Filters"
+          >
+            <SlidersHorizontal size={18} />
+          </button>
+          {filterOpen && (
+            <>
+              <div className="filter-overlay" onClick={() => setFilterOpen(false)} />
+              <div className="filter-popover">
+                <div className="gr-field">
+                  <label>Start date</label>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div className="gr-field">
+                  <label>End date</label>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+                <div className="filter-foot">
+                  {(startDate || endDate || appliedStart || appliedEnd) && (
+                    <button
+                      className="inv-toolbar-btn is-ghost"
+                      onClick={() => { clearFilter(); setFilterOpen(false); }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    className="gr-btn gr-btn--primary gr-btn--sm"
+                    onClick={() => { handleFilter(); setFilterOpen(false); }}
+                    disabled={isLoading}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="inv-toolbar">
-        <div className="inv-date">
-          <Calendar size={14} />
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            placeholder="Start date"
-          />
-        </div>
-        <div className="inv-date">
-          <Calendar size={14} />
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            placeholder="End date"
-          />
-        </div>
-        <button className="inv-toolbar-btn" onClick={handleFilter} disabled={isLoading}>
-          {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Filter size={14} />}
-          Filter
-        </button>
-        {(startDate || endDate || appliedStart || appliedEnd) && (
-          <button className="inv-toolbar-btn is-ghost" onClick={clearFilter}>Clear</button>
-        )}
         {activeTab === 'category' && (
           <div className="inv-search">
             <Search size={15} />
@@ -352,7 +371,7 @@ const ExpenseReports: React.FC = () => {
           </div>
         ) : (
           <div style={{ opacity: isLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-            <table className="inv-table">
+            <table className="gr-table">
               <thead>
                 {activeTab === 'category' ? (
                   <tr>
@@ -386,8 +405,8 @@ const ExpenseReports: React.FC = () => {
                 {activeTab === 'category' ? (
                   (categoryReport?.rows ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="empty-cell">
-                        No expense data available for the selected period
+                      <td colSpan={4} style={{ padding: 0 }}>
+                        <Empty icon={<Receipt />} title="No expense data" text="No expenses recorded for the selected period." />
                       </td>
                     </tr>
                   ) : (
@@ -411,8 +430,8 @@ const ExpenseReports: React.FC = () => {
                 ) : (
                   (dateReport?.rows ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="empty-cell">
-                        No expense data available for the selected period
+                      <td colSpan={4} style={{ padding: 0 }}>
+                        <Empty icon={<Receipt />} title="No expense data" text="No expenses recorded for the selected period." />
                       </td>
                     </tr>
                   ) : (

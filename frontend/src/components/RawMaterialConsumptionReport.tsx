@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { RawMaterialConsumptionReport } from '../types';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
@@ -69,7 +70,7 @@ const RawMaterialConsumptionReportPage: React.FC = () => {
         <span className="inv-panel-sub">{rows.length} record{rows.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="inv-scroll inv-scroll--panel">
-        <table className="inv-table">
+        <table className="gr-table">
           <thead>
             <tr>{head}</tr>
           </thead>
@@ -139,11 +140,11 @@ const RawMaterialConsumptionReportPage: React.FC = () => {
         </div>
       ) : !hasData ? (
         <div className="inv-card">
-          <div className="inv-empty">
-            <div className="inv-empty-icon"><Package size={26} /></div>
-            <div className="inv-empty-title">No consumption recorded in this period</div>
-            <div className="inv-empty-sub">Materials are deducted automatically when orders with recipes are completed.</div>
-          </div>
+          <Empty
+            icon={<Package />}
+            title="No consumption recorded in this period"
+            text="Materials are deducted automatically when orders with recipes are completed."
+          />
         </div>
       ) : (
         <div className="inv-grid-2">

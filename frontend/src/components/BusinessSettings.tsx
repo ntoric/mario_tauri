@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Palette, Percent, Package, Sun, Moon, Monitor, Usb, ChefHat, Wifi, Zap, LifeBuoy, Sparkles } from 'lucide-react';
+import { Save, Store, Printer, Receipt, Building2, RefreshCw, AlertCircle, Check, Upload, Trash2, Image, Percent, Package, Usb, ChefHat, Wifi, Zap, LifeBuoy, Sparkles } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { useDataStore, useAuthStore, useUIStore, ColorMode } from '../stores';
+import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
-import { THEME_PRESETS, applyThemeColor } from '../contexts/ThemeContext';
 import { printerService } from '../services/printer';
 import { getDeviceId } from '../utils/deviceId';
 import SoftwareUpdates from './SoftwareUpdates';
 import StoreSupport from './StoreSupport';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 
 interface PrinterDevice {
   name: string;
@@ -22,8 +22,6 @@ interface PrinterDevice {
 const BusinessSettings: React.FC = () => {
   const { currentStoreId, user, ensureStoreSelected } = useAuthStore();
   const { stores, updateStore, fetchStores } = useDataStore();
-  const colorMode = useUIStore((state) => state.colorMode);
-  const setColorMode = useUIStore((state) => state.setColorMode);
   const { setHeaderContent } = usePageHeader();
   
   // Ensure store is selected on mount (for business_admin and staff)
@@ -39,7 +37,7 @@ const BusinessSettings: React.FC = () => {
   const currentStore = stores.find(s => s.id === currentStoreId);
   const location = useLocation();
   
-  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'appearance' | 'software-updates' | 'support'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tax' | 'printer' | 'software-updates' | 'support'>('general');
 
   // Allow deep linking via ?tab=support
   useEffect(() => {
@@ -86,10 +84,6 @@ const BusinessSettings: React.FC = () => {
     remoteBillingEnabled: false,
   });
 
-  const [appearanceSettings, setAppearanceSettings] = useState({
-    themeColor: '',
-  });
-
   const [taxSettings, setTaxSettings] = useState({
     taxEnabled: false,
     defaultTaxPercent: 0,
@@ -134,9 +128,6 @@ const BusinessSettings: React.FC = () => {
       });
       setSelectedPrinterName(currentStore.printerName || '');
       setLogoPreview(currentStore.logoUrl || null);
-      setAppearanceSettings({
-        themeColor: currentStore.themeColor || '',
-      });
       setTaxSettings({
         taxEnabled: currentStore.taxEnabled === true,
         defaultTaxPercent: currentStore.defaultTaxPercent ?? 0,
@@ -270,23 +261,6 @@ const BusinessSettings: React.FC = () => {
     }
   };
 
-  const handleSaveAppearance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentStore) return;
-
-    setIsSaving(true);
-    try {
-      await updateStore(currentStore.id, {
-        themeColor: appearanceSettings.themeColor || '',
-      });
-      notify.success('Appearance settings saved');
-    } catch (error) {
-      notify.error('Failed to save appearance settings');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSaveTax = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentStore) return;
@@ -379,21 +353,19 @@ const BusinessSettings: React.FC = () => {
   if (!currentStore) {
     const isBusinessAdminOrStaff = user?.role === 'business_admin' || user?.role === 'staff';
     return (
-      <div className="empty-state">
-        <Store size={64} style={{ opacity: 0.5 }} />
-        <p>No store selected</p>
-        {isBusinessAdminOrStaff && user?.storeId && (
-          <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', marginTop: '0.5rem' }}>
-            Your assigned store should load automatically. If not, please contact your administrator.
-          </p>
-        )}
-      </div>
+      <Empty
+        icon={<Store />}
+        title="No store selected"
+        text={isBusinessAdminOrStaff && user?.storeId
+          ? 'Your assigned store should load automatically. If not, please contact your administrator.'
+          : 'Pick a store to configure its business settings.'}
+      />
     );
   }
 
   return (
-    <div>
-      <div className="tabs">
+    <div className="dev-settings-page">
+      <div className="gr-tabs">
         <button
           className={`tab ${activeTab === 'general' ? 'active' : ''}`}
           onClick={() => setActiveTab('general')}
@@ -416,13 +388,6 @@ const BusinessSettings: React.FC = () => {
           Printer & Invoice
         </button>
         <button
-          className={`tab ${activeTab === 'appearance' ? 'active' : ''}`}
-          onClick={() => setActiveTab('appearance')}
-        >
-          <Palette size={18} />
-          Appearance
-        </button>
-        <button
           className={`tab ${activeTab === 'software-updates' ? 'active' : ''}`}
           onClick={() => setActiveTab('software-updates')}
         >
@@ -439,14 +404,14 @@ const BusinessSettings: React.FC = () => {
       </div>
 
       {activeTab === 'general' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">General Information</span>
+        <div className="gr-card">
+          <div className="gr-card__head">
+            <span className="gr-h3">General Information</span>
           </div>
           <form onSubmit={handleSaveGeneral}>
-            <div className="card-body">
+            <div className="gr-card__body">
               {/* Logo Upload Section */}
-              <div className="form-group" style={{ marginBottom: '2rem' }}>
+              <div className="gr-field" style={{ marginBottom: '2rem' }}>
                 <label>Business Logo</label>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', marginTop: '0.5rem' }}>
                   {/* Logo Preview */}
@@ -484,7 +449,7 @@ const BusinessSettings: React.FC = () => {
                     <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        className="btn btn-secondary"
+                        className="gr-btn gr-btn--secondary"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploadingLogo}
                       >
@@ -495,7 +460,7 @@ const BusinessSettings: React.FC = () => {
                         <>
                           <button
                             type="button"
-                            className="btn btn-primary"
+                            className="gr-btn gr-btn--primary"
                             onClick={handleLogoUpload}
                             disabled={isUploadingLogo || logoPreview === currentStore?.logoUrl}
                           >
@@ -504,7 +469,7 @@ const BusinessSettings: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            className="btn btn-danger"
+                            className="gr-btn gr-btn--danger"
                             onClick={handleLogoDelete}
                             disabled={isUploadingLogo}
                           >
@@ -522,8 +487,8 @@ const BusinessSettings: React.FC = () => {
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
+              <div className="gr-grid gr-form2">
+                <div className="gr-field">
                   <label>Store Name *</label>
                   <input
                     type="text"
@@ -533,7 +498,7 @@ const BusinessSettings: React.FC = () => {
                     required
                   />
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Branch</label>
                   <input
                     type="text"
@@ -544,7 +509,7 @@ const BusinessSettings: React.FC = () => {
                 </div>
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>Location Address</label>
                 <textarea
                   value={generalSettings.location}
@@ -554,8 +519,8 @@ const BusinessSettings: React.FC = () => {
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
+              <div className="gr-grid gr-form2">
+                <div className="gr-field">
                   <label>FSSAI Number</label>
                   <input
                     type="text"
@@ -566,8 +531,8 @@ const BusinessSettings: React.FC = () => {
                 </div>
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
+              <div className="gr-grid gr-form2">
+                <div className="gr-field">
                   <label>Contact Phone</label>
                   <input
                     type="text"
@@ -576,7 +541,7 @@ const BusinessSettings: React.FC = () => {
                     placeholder="Contact number"
                   />
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Secondary Phone</label>
                   <input
                     type="text"
@@ -588,7 +553,7 @@ const BusinessSettings: React.FC = () => {
               </div>
 
               {user?.role === 'superadmin' && (
-                <div className="form-group" style={{ marginTop: '0.5rem', padding: '1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
+                <div className="gr-field" style={{ marginTop: '0.5rem', padding: '1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
                   <label>Data Retention — hide sales history after (days)</label>
                   <input
                     type="number"
@@ -607,7 +572,7 @@ const BusinessSettings: React.FC = () => {
               )}
 
               {user?.role !== 'superadmin' && (currentStore.dataRetentionDays ?? 0) > 0 && (
-                <div className="form-group" style={{ marginTop: '0.5rem', padding: '0.75rem 1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
+                <div className="gr-field" style={{ marginTop: '0.5rem', padding: '0.75rem 1rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', background: 'var(--gray-50)' }}>
                   <p style={{ fontSize: '0.85rem', color: 'var(--gray-600)', margin: 0 }}>
                     Sales, order, report and expense history older than {currentStore.dataRetentionDays} days
                     is hidden for this store. Contact your administrator for older records.
@@ -615,8 +580,8 @@ const BusinessSettings: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+            <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+              <button type="submit" className="gr-btn gr-btn--primary" disabled={isSaving}>
                 <Save size={18} />
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
@@ -626,18 +591,18 @@ const BusinessSettings: React.FC = () => {
       )}
 
       {activeTab === 'tax' && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Tax Configuration</span>
+        <div className="gr-card">
+          <div className="gr-card__head">
+            <span className="gr-h3">Tax Configuration</span>
           </div>
           <form onSubmit={handleSaveTax}>
-            <div className="card-body">
+            <div className="gr-card__body">
               <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
                 Enable or disable tax for this store. When disabled, all tax-related fields, calculations, and invoice tax lines will be hidden across the application for this store.
               </p>
 
-              <div className="form-group" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
+              <div className="gr-field" style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius)' }}>
+                <label className="gr-switch" style={{ margin: 0 }}>
                   <input
                     type="checkbox"
                     checked={taxSettings.taxEnabled}
@@ -651,7 +616,7 @@ const BusinessSettings: React.FC = () => {
               </div>
 
               {taxSettings.taxEnabled && (<>
-              <div className="form-group" style={{ marginTop: '1.5rem' }}>
+              <div className="gr-field" style={{ marginTop: '1.5rem' }}>
                 <label>Default Tax %</label>
                 <select
                   value={taxSettings.defaultTaxPercent}
@@ -666,7 +631,7 @@ const BusinessSettings: React.FC = () => {
 
               <h4 style={{ margin: '1.5rem 0 0.75rem', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem' }}>GST</h4>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>Registration type</label>
                 <select
                   value={gstSettings.gstRegistrationType}
@@ -688,7 +653,7 @@ const BusinessSettings: React.FC = () => {
                 )}
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>GSTIN</label>
                 <input
                   value={gstSettings.gstin}
@@ -708,7 +673,7 @@ const BusinessSettings: React.FC = () => {
                 )}
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>State</label>
                 <select
                   value={gstSettings.stateCode}
@@ -722,8 +687,8 @@ const BusinessSettings: React.FC = () => {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="gr-field">
+                <label className="gr-switch">
                   <input
                     type="checkbox"
                     checked={gstSettings.pricesIncludeTax}
@@ -733,7 +698,7 @@ const BusinessSettings: React.FC = () => {
                 </label>
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>Invoice prefix</label>
                 <input
                   value={gstSettings.invoicePrefix}
@@ -748,7 +713,7 @@ const BusinessSettings: React.FC = () => {
                 )}
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>Credit note prefix</label>
                 <input
                   value={gstSettings.creditNotePrefix}
@@ -760,7 +725,7 @@ const BusinessSettings: React.FC = () => {
                 )}
               </div>
 
-              <div className="form-group">
+              <div className="gr-field">
                 <label>Default SAC</label>
                 <input
                   value={gstSettings.defaultSacCode}
@@ -774,7 +739,7 @@ const BusinessSettings: React.FC = () => {
                 Swiggy/Zomato pay GST on orders placed through them (Sec 9(5)). Their GSTIN for your state is needed to report these sales in GSTR-1 Table 14 — it is on the platform's monthly tax statement.
               </p>
               {([['swiggyGstin', 'Swiggy GSTIN'], ['zomatoGstin', 'Zomato GSTIN'], ['otherEcoGstin', 'Other platform GSTIN']] as const).map(([key, label]) => (
-                <div className="form-group" key={key}>
+                <div className="gr-field" key={key}>
                   <label>{label}</label>
                   <input
                     value={gstSettings[key]}
@@ -792,241 +757,20 @@ const BusinessSettings: React.FC = () => {
               </p>
               </>)}
             </div>
-            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+            <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+              <button type="submit" className="gr-btn gr-btn--primary" disabled={isSaving}>
                 <Save size={18} />
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </form>
         </div>
-      )}
-
-      {activeTab === 'appearance' && (
-        <>
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <span className="card-title">Display Mode</span>
-          </div>
-          <div className="card-body">
-            <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
-              Choose between light and dark appearance for this device. "System" follows your operating system's setting.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
-              {([
-                { id: 'light' as ColorMode, name: 'Light', icon: Sun, preview: 'linear-gradient(135deg, #ffffff 0%, #f4f6f9 100%)' },
-                { id: 'dark' as ColorMode, name: 'Dark', icon: Moon, preview: 'linear-gradient(135deg, #1c2330 0%, #10151d 100%)' },
-                { id: 'system' as ColorMode, name: 'System', icon: Monitor, preview: 'linear-gradient(135deg, #ffffff 0%, #ffffff 49%, #1c2330 50%, #10151d 100%)' },
-              ]).map((mode) => {
-                const selected = colorMode === mode.id;
-                const ModeIcon = mode.icon;
-                return (
-                  <label
-                    key={mode.id}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      padding: '1rem',
-                      border: '2px solid',
-                      borderColor: selected ? 'var(--primary)' : 'var(--gray-200)',
-                      borderRadius: 'var(--radius)',
-                      background: selected ? 'var(--primary-50)' : 'var(--surface)',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="colorMode"
-                      value={mode.id}
-                      checked={selected}
-                      onChange={() => setColorMode(mode.id)}
-                      style={{ display: 'none' }}
-                    />
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      background: mode.preview,
-                      border: '1px solid var(--gray-300)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <ModeIcon size={18} color={mode.id === 'light' ? '#f5a623' : mode.id === 'dark' ? '#a3adc0' : 'var(--gray-500)'} />
-                    </div>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{mode.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">UI Theme Color</span>
-          </div>
-          <form onSubmit={handleSaveAppearance}>
-            <div className="card-body">
-              <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1.5rem' }}>
-                Choose a color theme for this store. This will change the primary color used throughout the UI (buttons, active states, highlights). The default theme is Orange.
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
-                {/* Default / No custom color */}
-                <label
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    padding: '1rem',
-                    border: '2px solid',
-                    borderColor: !appearanceSettings.themeColor ? 'var(--primary)' : 'var(--gray-200)',
-                    borderRadius: 'var(--radius)',
-                    background: !appearanceSettings.themeColor ? 'rgba(245,130,32,0.05)' : 'var(--surface)',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="themeColor"
-                    value=""
-                    checked={!appearanceSettings.themeColor}
-                    onChange={() => {
-                      setAppearanceSettings({ themeColor: '' });
-                      applyThemeColor(undefined);
-                    }}
-                    style={{ display: 'none' }}
-                  />
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #f99b3f 0%, #f58220 50%, #e0731a 100%)',
-                    boxShadow: '0 2px 8px rgba(245,130,32,0.3)',
-                  }} />
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Default (Orange)</span>
-                </label>
-
-                {THEME_PRESETS.filter(t => t.id !== 'default').map((preset) => {
-                  const selected = appearanceSettings.themeColor === preset.primary;
-                  return (
-                    <label
-                      key={preset.id}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        cursor: 'pointer',
-                        padding: '1rem',
-                        border: '2px solid',
-                        borderColor: selected ? preset.primary : 'var(--gray-200)',
-                        borderRadius: 'var(--radius)',
-                        background: selected ? `${preset.primary}10` : 'var(--surface)',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="themeColor"
-                        value={preset.primary}
-                        checked={selected}
-                        onChange={() => {
-                          setAppearanceSettings({ themeColor: preset.primary });
-                          applyThemeColor(preset.primary);
-                        }}
-                        style={{ display: 'none' }}
-                      />
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        background: `linear-gradient(135deg, ${preset.primaryLight} 0%, ${preset.primary} 50%, ${preset.primaryDark} 100%)`,
-                        boxShadow: `0 2px 8px ${preset.primary}50`,
-                      }} />
-                      <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{preset.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {/* Custom color picker */}
-              <div style={{
-                marginTop: '2rem',
-                padding: '1rem',
-                background: 'var(--gray-50)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--gray-200)',
-              }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="color"
-                    value={appearanceSettings.themeColor || '#f58220'}
-                    onChange={(e) => {
-                      setAppearanceSettings({ themeColor: e.target.value });
-                      applyThemeColor(e.target.value);
-                    }}
-                    style={{ width: '44px', height: '44px', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', padding: 0 }}
-                  />
-                  <div>
-                    <span style={{ fontWeight: 600 }}>Custom Color</span>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                      Pick any color using the color picker above.
-                    </p>
-                  </div>
-                </label>
-              </div>
-
-              {/* Preview */}
-              <div style={{
-                marginTop: '1.5rem',
-                padding: '1.5rem',
-                background: 'var(--gray-50)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--gray-200)',
-              }}>
-                <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>Preview</h4>
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button type="button" className="btn btn-primary" disabled>
-                    Primary Button
-                  </button>
-                  <button type="button" className="btn btn-outline" disabled>
-                    Outline Button
-                  </button>
-                  <span style={{
-                    padding: '0.375rem 0.875rem',
-                    borderRadius: '20px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    background: 'rgba(245,130,32,0.1)',
-                    color: 'var(--primary)',
-                  }}>
-                    Active Badge
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-              <button type="submit" className="btn btn-primary" disabled={isSaving}>
-                <Save size={18} />
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
-        </div>
-        </>
       )}
 
       {activeTab === 'printer' && (
-        <div className="card printer-config">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card-title">Printer Configuration</span>
+        <div className="gr-card printer-config">
+          <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="gr-h3">Printer Configuration</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               {!isLoadingPrinters && !printerError && (
                 <span className={`pc-count-badge ${availablePrinters.length === 0 ? 'muted' : ''}`}>
@@ -1035,7 +779,7 @@ const BusinessSettings: React.FC = () => {
               )}
               <button
                 type="button"
-                className="btn btn-sm btn-secondary"
+                className="gr-btn gr-btn--sm gr-btn--secondary"
                 onClick={fetchPrinters}
                 disabled={isLoadingPrinters}
               >
@@ -1045,7 +789,7 @@ const BusinessSettings: React.FC = () => {
             </div>
           </div>
           <form onSubmit={handleSavePrinter}>
-            <div className="card-body">
+            <div className="gr-card__body">
               {printerError && (
                 <div className="pc-alert pc-alert-error">
                   <AlertCircle size={16} />
@@ -1054,7 +798,7 @@ const BusinessSettings: React.FC = () => {
               )}
 
               {/* Printer Selection */}
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <div className="gr-field" style={{ marginBottom: '1.5rem' }}>
                 <div className="pc-section-label">
                   <Usb size={13} />
                   Receipt Printer
@@ -1109,7 +853,7 @@ const BusinessSettings: React.FC = () => {
               </div>
 
               {/* Invoice Size */}
-              <div className="form-group" style={{ marginTop: '1.75rem' }}>
+              <div className="gr-field" style={{ marginTop: '1.75rem' }}>
                 <div className="pc-section-label">
                   <Receipt size={13} />
                   Invoice & Thermal Paper Size
@@ -1276,7 +1020,7 @@ const BusinessSettings: React.FC = () => {
               </div>
 
               {/* Features */}
-              <div className="form-group" style={{ marginTop: '1.75rem', marginBottom: 0 }}>
+              <div className="gr-field" style={{ marginTop: '1.75rem', marginBottom: 0 }}>
                 <div className="pc-section-label">
                   <Zap size={13} />
                   Features
@@ -1295,7 +1039,7 @@ const BusinessSettings: React.FC = () => {
                       </div>
                     </div>
                     {/* 3. Toggle switch at far right end */}
-                    <div className="pc-toggle-action">
+                    <div className="pc-toggle-action gr-switch">
                       <input
                         type="checkbox"
                         checked={printerSettings.kotPrintEnabled}
@@ -1316,7 +1060,7 @@ const BusinessSettings: React.FC = () => {
                       </div>
                     </div>
                     {/* 3. Toggle switch at far right end */}
-                    <div className="pc-toggle-action">
+                    <div className="pc-toggle-action gr-switch">
                       <input
                         type="checkbox"
                         id="remote-billing-toggle"
@@ -1343,11 +1087,11 @@ const BusinessSettings: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                      <div className="pc-toggle-action">
+                      <div className="pc-toggle-action gr-switch">
                         {isThisDeviceDesignated ? (
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="gr-btn gr-btn--secondary"
                             onClick={handleClearRemotePrinterDevice}
                             disabled={isSavingDevice}
                           >
@@ -1356,7 +1100,7 @@ const BusinessSettings: React.FC = () => {
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-primary"
+                            className="gr-btn gr-btn--primary"
                             onClick={handleSetRemotePrinterDevice}
                             disabled={isSavingDevice}
                           >
@@ -1370,8 +1114,8 @@ const BusinessSettings: React.FC = () => {
               </div>
 
             </div>
-            <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-              <button type="submit" className="btn btn-primary" disabled={isSaving}>
+            <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+              <button type="submit" className="gr-btn gr-btn--primary" disabled={isSaving}>
                 <Save size={18} />
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>

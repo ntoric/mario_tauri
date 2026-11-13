@@ -38,48 +38,48 @@ const ReportsIndex: React.FC = () => {
       description: 'Detailed item-wise sales report with quantity and revenue data',
       icon: <ShoppingBag size={24} />,
       path: '/reports/top-items',
-      color: '#63b3ed',
+      color: 'var(--primary)',
     },
     {
       title: 'Top Selling Categories',
       description: 'Category-wise sales analysis with performance metrics',
       icon: <Tag size={24} />,
       path: '/reports/top-categories',
-      color: '#b794f4',
+      color: 'var(--primary)',
     },
     {
       title: 'Profit Report',
       description: 'Combined sales, revenue, and expense analysis with profit tracking',
       icon: <DollarSign size={24} />,
       path: '/reports/revenue',
-      color: '#f5a623',
+      color: 'var(--primary)',
     },
     {
       title: 'Item Profit Report',
       description: 'Per-item preparation costs, profit margins, and expense breakdown',
       icon: <PieChart size={24} />,
       path: '/reports/item-profit',
-      color: '#2196f3',
+      color: 'var(--primary)',
     },
     {
       title: 'Expense Reports',
       description: 'Analyze business expenses by category and date',
       icon: <TrendingUp size={24} />,
       path: '/expense-reports',
-      color: '#2ba54a',
+      color: 'var(--primary)',
     },
     {
       title: 'GST Reports',
       description: 'GSTR-1, GSTR-3B summary, HSN summary, sales register',
       icon: <DollarSign size={24} />,
       path: '/reports/gst',
-      color: '#34c98e',
+      color: 'var(--primary)',
     },
     {
       title: 'Raw Material Consumption',
       description: 'Raw materials consumed by completed orders — per material and per menu item',
       icon: <Boxes size={24} />,
-      color: '#e65100',
+      color: 'var(--primary)',
       path: '/reports/raw-material-consumption',
     },
   ];
@@ -90,10 +90,10 @@ const ReportsIndex: React.FC = () => {
         {reportCards.filter(card => taxEnabled || card.path !== '/reports/gst').map((card) => (
           <div
             key={card.path}
-            className="card report-nav-card"
+            className="gr-card report-nav-card"
             onClick={() => navigate(card.path)}
           >
-            <div className="card-body" style={{ padding: '1.25rem', position: 'relative' }}>
+            <div className="gr-card__body" style={{ padding: '1.25rem', position: 'relative' }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'flex-start',

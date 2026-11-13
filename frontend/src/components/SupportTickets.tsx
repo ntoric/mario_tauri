@@ -19,6 +19,7 @@ import {
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { SupportTicket, SupportMessage, SupportTicketStatus } from '../types';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -204,7 +205,7 @@ export const SupportTickets: React.FC = () => {
           </div>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="gr-btn gr-btn--secondary gr-btn--sm"
             onClick={loadTickets}
             disabled={isLoading}
           >
@@ -217,24 +218,25 @@ export const SupportTickets: React.FC = () => {
       {/* Two Column Layout: Master Inbox (Left) + Detail/Workflow (Right) */}
       <div className="admin-support-layout">
         {/* Left Column: Tickets Inbox */}
-        <div className="card admin-inbox-card">
-          <div className="card-header" style={{ padding: '0.75rem 1rem' }}>
-            <span className="card-title" style={{ fontSize: '0.9rem' }}>
+        <div className="gr-card admin-inbox-card">
+          <div className="gr-card__head" style={{ padding: '0.75rem 1rem' }}>
+            <span className="gr-h3" style={{ fontSize: '0.9rem' }}>
               <Inbox size={16} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
               Tickets Inbox ({filteredTickets.length})
             </span>
           </div>
 
-          <div className="card-body" style={{ padding: 0 }}>
+          <div className="gr-card__body" style={{ padding: 0 }}>
             {isLoading ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--gray-500)' }}>
                 Loading tickets...
               </div>
             ) : filteredTickets.length === 0 ? (
-              <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--gray-500)' }}>
-                <Inbox size={36} style={{ opacity: 0.35, marginBottom: '0.5rem' }} />
-                <p style={{ fontWeight: 600, margin: 0 }}>No tickets match your filters</p>
-              </div>
+              <Empty
+                icon={<Inbox />}
+                title="No tickets match your filters"
+                text="Try a different search or status filter."
+              />
             ) : (
               <div className="admin-ticket-list">
                 {filteredTickets.map((t) => {
@@ -284,11 +286,11 @@ export const SupportTickets: React.FC = () => {
         </div>
 
         {/* Right Column: Ticket Conversation & Workflow */}
-        <div className="card admin-detail-card">
+        <div className="gr-card admin-detail-card">
           {selectedTicketId && ticketDetail ? (
             <>
               {/* Header with Store Details & Workflow Status Dropdown */}
-              <div className="card-header admin-detail-header">
+              <div className="gr-card__head admin-detail-header">
                 <div className="detail-header-left">
                   <div className="detail-subject-line">
                     <span className="detail-ticket-id">#{ticketDetail.ticket.id.slice(0, 8)}</span>
@@ -339,7 +341,7 @@ export const SupportTickets: React.FC = () => {
               </div>
 
               {/* Body: Requester info chip, stream, and reply box */}
-              <div className="card-body admin-detail-body">
+              <div className="gr-card__body admin-detail-body">
                 <div className="requester-bar">
                   <div className="requester-chip">
                     <User size={13} />
@@ -409,7 +411,7 @@ export const SupportTickets: React.FC = () => {
                     </div>
                     <button
                       type="submit"
-                      className="btn btn-primary"
+                      className="gr-btn gr-btn--primary"
                       disabled={isSendingReply || !replyText.trim()}
                     >
                       <Send size={15} />
@@ -420,15 +422,11 @@ export const SupportTickets: React.FC = () => {
               </div>
             </>
           ) : (
-            <div className="admin-detail-empty">
-              <LifeBuoy size={48} style={{ opacity: 0.35, marginBottom: '0.75rem' }} />
-              <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--gray-700)' }}>
-                Select a ticket to view conversation
-              </h3>
-              <p style={{ margin: 0, fontSize: '0.825rem', color: 'var(--gray-500)' }}>
-                Choose a support request from the inbox on the left to see store details, update workflow status, and reply.
-              </p>
-            </div>
+            <Empty
+              icon={<LifeBuoy />}
+              title="Select a ticket to view conversation"
+              text="Choose a support request from the inbox on the left to see store details, update workflow status, and reply."
+            />
           )}
         </div>
       </div>

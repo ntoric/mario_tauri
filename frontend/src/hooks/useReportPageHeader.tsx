@@ -27,7 +27,7 @@ export function useReportPageHeader({
       subtitle,
       actions: (
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate(backTo)}>
+          <button type="button" className="gr-btn gr-btn--secondary" onClick={() => navigate(backTo)}>
             <ArrowLeft size={16} />
             {backLabel}
           </button>

@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 
 interface AppUpdate {
   id: string;
@@ -81,8 +82,8 @@ const UpdateManagement: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
+      <div className="pos-loader">
+        <div className="gr-spin"></div>
       </div>
     );
   }
@@ -90,7 +91,7 @@ const UpdateManagement: React.FC = () => {
   if (user?.role !== 'superadmin') {
     return (
       <div className="error-container">
-        <AlertCircle size={48} color="#ef4444" />
+        <AlertCircle size={48} color="var(--danger)" />
         <h2>Access Denied</h2>
         <p>Only superadmin can access update management.</p>
       </div>
@@ -142,20 +143,20 @@ const UpdateManagement: React.FC = () => {
           {appUpdates.mobile ? (
             <div className="update-card-body">
               <div className="update-details">
-                <div className="detail-row">
-                  <span className="detail-label">Version:</span>
-                  <span className="detail-value">{appUpdates.mobile.version}</span>
+                <div className="pos-kv">
+                  <span className="pos-kv__label">Version:</span>
+                  <span className="pos-kv__value">{appUpdates.mobile.version}</span>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">Released:</span>
-                  <span className="detail-value">
+                <div className="pos-kv">
+                  <span className="pos-kv__label">Released:</span>
+                  <span className="pos-kv__value">
                     {new Date(appUpdates.mobile.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 {appUpdates.mobile.updatedAt && (
-                  <div className="detail-row">
-                    <span className="detail-label">Last Updated:</span>
-                    <span className="detail-value">
+                  <div className="pos-kv">
+                    <span className="pos-kv__label">Last Updated:</span>
+                    <span className="pos-kv__value">
                       {new Date(appUpdates.mobile.updatedAt).toLocaleString('en-US', {
                         hour: 'numeric',
                         minute: '2-digit',
@@ -168,18 +169,18 @@ const UpdateManagement: React.FC = () => {
                   </div>
                 )}
                 {appUpdates.mobile.releaseNotes && (
-                  <div className="detail-row full-width">
-                    <span className="detail-label">Release Notes:</span>
-                    <p className="detail-value release-notes">{appUpdates.mobile.releaseNotes}</p>
+                  <div className="pos-kv full-width">
+                    <span className="pos-kv__label">Release Notes:</span>
+                    <p className="pos-kv__value release-notes">{appUpdates.mobile.releaseNotes}</p>
                   </div>
                 )}
-                <div className="detail-row full-width">
-                  <span className="detail-label">Download URL:</span>
+                <div className="pos-kv full-width">
+                  <span className="pos-kv__label">Download URL:</span>
                   <a 
                     href={appUpdates.mobile.downloadUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="detail-value link"
+                    className="pos-kv__value link"
                   >
                     {appUpdates.mobile.downloadUrl}
                   </a>
@@ -212,8 +213,8 @@ const UpdateManagement: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="update-card-body empty">
-              <p>No update configuration for mobile app</p>
+            <div className="update-card-body">
+              <Empty compact icon={<Smartphone />} title="No update configuration" text="Set up version requirements for the mobile app." />
             </div>
           )}
         </div>
@@ -242,20 +243,20 @@ const UpdateManagement: React.FC = () => {
           {appUpdates.desktop ? (
             <div className="update-card-body">
               <div className="update-details">
-                <div className="detail-row">
-                  <span className="detail-label">Version:</span>
-                  <span className="detail-value">{appUpdates.desktop.version}</span>
+                <div className="pos-kv">
+                  <span className="pos-kv__label">Version:</span>
+                  <span className="pos-kv__value">{appUpdates.desktop.version}</span>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">Released:</span>
-                  <span className="detail-value">
+                <div className="pos-kv">
+                  <span className="pos-kv__label">Released:</span>
+                  <span className="pos-kv__value">
                     {new Date(appUpdates.desktop.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 {appUpdates.desktop.updatedAt && (
-                  <div className="detail-row">
-                    <span className="detail-label">Last Updated:</span>
-                    <span className="detail-value">
+                  <div className="pos-kv">
+                    <span className="pos-kv__label">Last Updated:</span>
+                    <span className="pos-kv__value">
                       {new Date(appUpdates.desktop.updatedAt).toLocaleString('en-US', {
                         hour: 'numeric',
                         minute: '2-digit',
@@ -268,18 +269,18 @@ const UpdateManagement: React.FC = () => {
                   </div>
                 )}
                 {appUpdates.desktop.releaseNotes && (
-                  <div className="detail-row full-width">
-                    <span className="detail-label">Release Notes:</span>
-                    <p className="detail-value release-notes">{appUpdates.desktop.releaseNotes}</p>
+                  <div className="pos-kv full-width">
+                    <span className="pos-kv__label">Release Notes:</span>
+                    <p className="pos-kv__value release-notes">{appUpdates.desktop.releaseNotes}</p>
                   </div>
                 )}
-                <div className="detail-row full-width">
-                  <span className="detail-label">Download URL:</span>
+                <div className="pos-kv full-width">
+                  <span className="pos-kv__label">Download URL:</span>
                   <a 
                     href={appUpdates.desktop.downloadUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="detail-value link"
+                    className="pos-kv__value link"
                   >
                     {appUpdates.desktop.downloadUrl}
                   </a>
@@ -312,271 +313,14 @@ const UpdateManagement: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="update-card-body empty">
-              <p>No update configuration for desktop app</p>
+            <div className="update-card-body">
+              <Empty compact icon={<Monitor />} title="No update configuration" text="Set up version requirements for the desktop app." />
             </div>
           )}
         </div>
       </div>
 
-      <style>{`
-        .update-management-container {
-          padding: 1.5rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
 
-        .active-updates-banner {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1rem 1.25rem;
-          background: rgba(16, 185, 129, 0.1);
-          border: 1px solid rgba(16, 185, 129, 0.3);
-          border-radius: var(--radius);
-          margin-bottom: 2rem;
-        }
-
-        .banner-icon {
-          color: #10b981;
-          flex-shrink: 0;
-        }
-
-        .banner-content {
-          color: #10b981;
-          font-size: 0.95rem;
-        }
-
-        .banner-content strong {
-          font-weight: 600;
-        }
-
-        .updates-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-          gap: 1.5rem;
-        }
-
-        .update-card {
-          background: var(--darker);
-          border: 2px solid rgba(255, 255, 255, 0.05);
-          border-radius: var(--radius);
-          overflow: hidden;
-          transition: all 0.3s;
-        }
-
-        .update-card.active {
-          border-color: rgba(16, 185, 129, 0.3);
-          box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
-        }
-
-        .update-card.inactive {
-          opacity: 0.7;
-        }
-
-        .update-card-header {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1.25rem;
-          background: rgba(255, 255, 255, 0.02);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .platform-icon {
-          width: 56px;
-          height: 56px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: var(--radius);
-          color: var(--primary);
-        }
-
-        .platform-info {
-          flex: 1;
-        }
-
-        .platform-info h3 {
-          margin: 0 0 0.25rem 0;
-          font-size: 1.1rem;
-          color: #f1f5f9;
-        }
-
-        .status-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-
-        .status-badge.active {
-          background: rgba(16, 185, 129, 0.2);
-          color: #10b981;
-        }
-
-        .status-badge.inactive {
-          background: rgba(148, 163, 184, 0.2);
-          color: #94a3b8;
-        }
-
-        .refresh-btn {
-          width: 36px;
-          height: 36px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 8px;
-          color: #94a3b8;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .refresh-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #f1f5f9;
-        }
-
-        .update-card-body {
-          padding: 1.25rem;
-        }
-
-        .update-card-body.empty {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 2rem;
-          color: #94a3b8;
-          font-size: 0.9rem;
-        }
-
-        .update-details {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          margin-bottom: 1.5rem;
-        }
-
-        .detail-row {
-          display: flex;
-          gap: 0.75rem;
-          align-items: flex-start;
-        }
-
-        .detail-row.full-width {
-          flex-direction: column;
-        }
-
-        .detail-label {
-          min-width: 100px;
-          font-size: 0.85rem;
-          color: #94a3b8;
-          font-weight: 500;
-        }
-
-        .detail-value {
-          font-size: 0.9rem;
-          color: #f1f5f9;
-          word-break: break-all;
-        }
-
-        .detail-value.release-notes {
-          background: rgba(255, 255, 255, 0.02);
-          padding: 0.75rem;
-          border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          margin-top: 0.25rem;
-          line-height: 1.5;
-        }
-
-        .detail-value.link {
-          color: var(--primary);
-          text-decoration: none;
-          word-break: break-all;
-        }
-
-        .detail-value.link:hover {
-          text-decoration: underline;
-        }
-
-        .update-card-actions {
-          display: flex;
-          gap: 0.75rem;
-          padding-top: 1rem;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .toggle-btn {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          padding: 0.75rem 1rem;
-          border: none;
-          border-radius: 8px;
-          font-size: 0.9rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .toggle-btn.disable {
-          background: rgba(239, 68, 68, 0.1);
-          color: #ef4444;
-          border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .toggle-btn.disable:hover {
-          background: rgba(239, 68, 68, 0.2);
-        }
-
-        .toggle-btn.enable {
-          background: rgba(16, 185, 129, 0.1);
-          color: #10b981;
-          border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .toggle-btn.enable:hover {
-          background: rgba(16, 185, 129, 0.2);
-        }
-
-        .toggle-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 768px) {
-          .updates-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .detail-row {
-            flex-direction: column;
-            gap: 0.25rem;
-          }
-
-          .detail-label {
-            min-width: auto;
-          }
-        }
-      `}</style>
     </div>
   );
 };

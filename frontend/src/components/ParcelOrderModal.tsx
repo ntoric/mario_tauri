@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Minus, Trash2, Search, Printer, Package, ChevronDown } from 'lucide-react';
+import { X, Plus, Minus, Trash2, Search, Printer, Package, ChevronDown, ShoppingCart } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
 import { isTaxEnabled } from '../utils/tax';
 import { orderItemUnitPrice } from '../utils/order';
-import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
+import { sortCategories, sortItemsByCategoryOrder, matchesSearchQuery } from '../utils/category';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
@@ -13,6 +13,7 @@ import { computeCartTotals } from '../utils/tax';
 import GstBillSummary from './GstBillSummary';
 import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { OrderItem, Item } from '../types';
 
 const ParcelOrderModal: React.FC = () => {
@@ -96,7 +97,7 @@ const ParcelOrderModal: React.FC = () => {
     if (item.enabled === false) return false;
     if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
-    const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesSearchQuery(item.name, searchQuery);
     return matchesCategory && matchesSearch;
   }), categories);
 
@@ -253,19 +254,19 @@ const ParcelOrderModal: React.FC = () => {
   };
 
   return (
-    <div className="modal-overlay" onClick={closeParcelOrderModal}>
-      <div className="modal order-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
+    <div className="gr-modal-live is-open" onClick={closeParcelOrderModal}>
+      <div className="gr-modal order-modal" onClick={e => e.stopPropagation()}>
+        <div className="gr-modal__head">
           <h2>
             <Package size={19} />
             Parcel Order
           </h2>
-          <button className="close-btn" onClick={closeParcelOrderModal}>
+          <button className="gr-iconbtn" onClick={closeParcelOrderModal}>
             <X size={24} />
           </button>
         </div>
 
-        <div className="modal-body order-modal-body">
+        <div className="gr-modal__body order-modal-body">
           <div className="order-layout-fixed">
             <div className="order-main-fixed">
               <div className="order-search-box">
@@ -384,9 +385,7 @@ const ParcelOrderModal: React.FC = () => {
               <h3>Order Items ({orderItems.length})</h3>
 
               {orderItems.length === 0 ? (
-                <div className="empty-order">
-                  Click items to add
-                </div>
+                <Empty compact icon={<ShoppingCart />} text="Click items to add" />
               ) : (
                 <>
                   <div className="order-items-scrollable">
@@ -399,14 +398,14 @@ const ParcelOrderModal: React.FC = () => {
                         </div>
                         <div className="order-item-actions">
                           <button
-                            className="quantity-btn"
+                            className="pos-qtybtn"
                             onClick={() => updateQuantity(oi.itemId, -1)}
                           >
                             <Minus size={10} />
                           </button>
                           <span className="order-item-quantity">{oi.quantity}</span>
                           <button
-                            className="quantity-btn"
+                            className="pos-qtybtn"
                             onClick={() => updateQuantity(oi.itemId, 1)}
                           >
                             <Plus size={10} />
@@ -444,35 +443,35 @@ const ParcelOrderModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="gr-modal__foot">
           <button
-            className="btn btn-primary"
+            className="gr-btn gr-btn--primary"
             onClick={handleCreateOrderClick}
             disabled={orderItems.length === 0}
           >
             <Package size={16} />
             Create Order
           </button>
-          <button className="btn btn-secondary" onClick={closeParcelOrderModal}>
+          <button className="gr-btn gr-btn--secondary" onClick={closeParcelOrderModal}>
             Cancel
           </button>
         </div>
 
         {/* Customer Details Dialog */}
         {showCustomerDialog && (
-          <div className="modal-overlay" onClick={() => !isSubmitting && setShowCustomerDialog(false)}>
-            <div className="modal" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
+          <div className="gr-modal-live is-open" onClick={() => !isSubmitting && setShowCustomerDialog(false)}>
+            <div className="gr-modal" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+              <div className="gr-modal__head">
                 <h2>Customer Details</h2>
                 <button
-                  className="close-btn"
+                  className="gr-iconbtn"
                   onClick={() => !isSubmitting && setShowCustomerDialog(false)}
                   disabled={isSubmitting}
                 >
                   <X size={24} />
                 </button>
               </div>
-              <div className="modal-body">
+              <div className="gr-modal__body">
                                 <div style={{ margin: '8px 0' }}>
                   <label style={{ fontSize: '0.8rem' }}>Order source</label>
                   <select value={orderSource} onChange={e => setOrderSource(e.target.value)}>
@@ -486,7 +485,7 @@ const ParcelOrderModal: React.FC = () => {
                   <span className="bill-total-value">{formatCurrency(total)}</span>
                 </div>
 
-                <div className="form-group" style={{ marginTop: '1rem' }}>
+                <div className="gr-field" style={{ marginTop: '1rem' }}>
                   <label>Customer Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
                   <input
                     type="text"
@@ -497,7 +496,7 @@ const ParcelOrderModal: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Mobile Number <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
                   <input
                     type="text"
@@ -509,9 +508,9 @@ const ParcelOrderModal: React.FC = () => {
                 </div>
 
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <button
-                  className="btn btn-primary btn-lg"
+                  className="gr-btn gr-btn--primary gr-btn--sm"
                   onClick={() => handleSubmit()}
                   disabled={isSubmitting}
                 >
@@ -519,7 +518,7 @@ const ParcelOrderModal: React.FC = () => {
                   {isSubmitting ? 'Processing...' : 'Submit & Print'}
                 </button>
                 <button
-                  className="btn btn-secondary"
+                  className="gr-btn gr-btn--secondary"
                   onClick={() => setShowCustomerDialog(false)}
                   disabled={isSubmitting}
                 >

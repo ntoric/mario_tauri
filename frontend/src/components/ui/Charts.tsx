@@ -8,15 +8,13 @@ export interface ChartDatum {
 
 export const CHART_COLORS = [
   'var(--primary)',
-  '#63b3ed',
-  '#b794f4',
+  'var(--primary-strong)',
+  'var(--grad-start)',
+  'var(--ink)',
   'var(--success)',
-  '#f6ad55',
-  '#fc8181',
-  '#4fd1c5',
-  '#f687b3',
-  '#76e4f7',
-  '#d6bcfa',
+  'var(--danger)',
+  'var(--muted)',
+  'var(--line-strong)',
 ];
 
 /* ---------------- Donut Chart ---------------- */

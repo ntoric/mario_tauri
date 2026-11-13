@@ -2,6 +2,7 @@ import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore, useDataStore } from './stores';
 import UpdateNotification from './components/UpdateNotification';
+import { PageLoader } from './components/gr';
 import AppContextMenu from './components/AppContextMenu';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
 import Login from './components/Login';
@@ -41,11 +42,10 @@ const RevenueReport = React.lazy(() => import('./components/RevenueReport'));
 const ItemProfitReport = React.lazy(() => import('./components/ItemProfitReport'));
 const GstReports = React.lazy(() => import('./components/GstReports'));
 const RawMaterialConsumptionReportPage = React.lazy(() => import('./components/RawMaterialConsumptionReport'));
+const Appearance = React.lazy(() => import('./components/Appearance'));
 
 const routeFallback = (
-  <div className="loading-container">
-    <div className="spinner"></div>
-  </div>
+  <PageLoader />
 );
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -53,9 +53,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-      </div>
+      <PageLoader />
     );
   }
   
@@ -133,9 +131,7 @@ const AppRoutes: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-      </div>
+      <PageLoader />
     );
   }
 
@@ -166,6 +162,7 @@ const AppRoutes: React.FC = () => {
         <Route path="subscriptions" element={<Subscriptions />} />
         <Route path="my-plan" element={<MyPlan />} />
         <Route path="business-settings" element={<BusinessSettings />} />
+        <Route path="appearance" element={<Appearance />} />
         <Route path="support-tickets" element={<SupportTickets />} />
         <Route path="support-settings" element={<SupportSettings />} />
         <Route path="developer-settings" element={<DeveloperSettings />} />
@@ -191,7 +188,7 @@ const AppRoutes: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <div className="app">
+    <div className="app gr">
       <UpdateNotification />
       <AppContextMenu />
       <AppRoutes />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Search, Calendar, Package, PackagePlus, PackageMinus, SlidersHorizontal, Boxes, IndianRupee, AlertTriangle, Receipt, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Search, Package, PackagePlus, PackageMinus, SlidersHorizontal, Boxes, IndianRupee, AlertTriangle, Receipt } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { useSearchParams } from 'react-router-dom';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency } from '../utils/currency';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import { api } from '../services/api';
 import type { RawMaterial, RawMaterialPurchase, RawMaterialTransaction, RawMaterialTransactionType, RawMaterialConsumptionReport } from '../types';
 
@@ -49,6 +50,9 @@ const Inventory: React.FC = () => {
   // Filters
   const [stockSearch, setStockSearch] = useState('');
   const [purchaseSearch, setPurchaseSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const toolbarSearchRef = useRef<HTMLInputElement>(null);
   const [purchaseMaterial, setPurchaseMaterial] = useState('');
   const [purchaseStart, setPurchaseStart] = useState('');
   const [purchaseEnd, setPurchaseEnd] = useState('');
@@ -453,17 +457,17 @@ const Inventory: React.FC = () => {
 
       {/* Material Modal */}
       {materialModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setMaterialModal({ isOpen: false, editing: null })}>
-          <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setMaterialModal({ isOpen: false, editing: null })}>
+          <div className="gr-modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>{materialModal.editing ? 'Edit Material' : 'Add Material'}</h2>
-              <button onClick={() => setMaterialModal({ isOpen: false, editing: null })} className="close-btn">
+              <button onClick={() => setMaterialModal({ isOpen: false, editing: null })} className="gr-iconbtn">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleMaterialSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
+              <div className="gr-modal__body">
+                <div className="gr-field">
                   <label>Material Name *</label>
                   <input
                     type="text"
@@ -473,8 +477,8 @@ const Inventory: React.FC = () => {
                     placeholder="e.g., Coffee Beans, Milk, Sugar"
                   />
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Unit *</label>
                     <select
                       value={materialForm.unit}
@@ -483,7 +487,7 @@ const Inventory: React.FC = () => {
                       {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Min Stock Level</label>
                     <input
                       type="number"
@@ -494,7 +498,7 @@ const Inventory: React.FC = () => {
                       placeholder="Low stock alert at"
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Unit Cost <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
                     <input
                       type="number"
@@ -507,7 +511,7 @@ const Inventory: React.FC = () => {
                   </div>
                 </div>
                 {!materialModal.editing && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Opening Stock</label>
                     <input
                       type="number"
@@ -519,7 +523,7 @@ const Inventory: React.FC = () => {
                     />
                   </div>
                 )}
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Description</label>
                   <textarea
                     value={materialForm.description}
@@ -529,7 +533,7 @@ const Inventory: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button type="button" variant="secondary" onClick={() => setMaterialModal({ isOpen: false, editing: null })}>
                   Cancel
                 </Button>
@@ -545,19 +549,19 @@ const Inventory: React.FC = () => {
 
       {/* Purchase Modal */}
       {purchaseModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setPurchaseModal({ isOpen: false, editing: null })}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setPurchaseModal({ isOpen: false, editing: null })}>
+          <div className="gr-modal" onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>{purchaseModal.editing ? 'Edit Purchase' : 'Record Purchase'}</h2>
-              <button onClick={() => setPurchaseModal({ isOpen: false, editing: null })} className="close-btn">
+              <button onClick={() => setPurchaseModal({ isOpen: false, editing: null })} className="gr-iconbtn">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handlePurchaseSubmit}>
-              <div className="modal-body">
-                <div className="form-row">
+              <div className="gr-modal__body">
+                <div className="gr-grid gr-form2">
                   <div
-                    className="form-group"
+                    className="gr-field"
                     style={{ position: 'relative' }}
                     onBlur={e => {
                       if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
@@ -612,7 +616,7 @@ const Inventory: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Purchase Date *</label>
                     <input
                       type="date"
@@ -621,7 +625,7 @@ const Inventory: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Expiry Date <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
                     <input
                       type="date"
@@ -630,8 +634,8 @@ const Inventory: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Quantity *</label>
                     <input
                       type="number"
@@ -643,7 +647,7 @@ const Inventory: React.FC = () => {
                       placeholder="0"
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Unit Cost</label>
                     <input
                       type="number"
@@ -655,8 +659,8 @@ const Inventory: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Total Cost</label>
                     <input
                       type="number"
@@ -670,7 +674,7 @@ const Inventory: React.FC = () => {
                       <small style={{ color: 'var(--gray-400)' }}>Auto: {formatCurrency(purchaseTotalPreview)}</small>
                     )}
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Payment Method</label>
                     <select
                       value={purchaseForm.paymentMethod}
@@ -681,8 +685,8 @@ const Inventory: React.FC = () => {
                     </select>
                   </div>
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Vendor</label>
                     <input
                       type="text"
@@ -691,7 +695,7 @@ const Inventory: React.FC = () => {
                       placeholder="Supplier name"
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Invoice Number</label>
                     <input
                       type="text"
@@ -701,7 +705,7 @@ const Inventory: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Notes</label>
                   <textarea
                     value={purchaseForm.notes}
@@ -711,7 +715,7 @@ const Inventory: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button type="button" variant="secondary" onClick={() => setPurchaseModal({ isOpen: false, editing: null })}>
                   Cancel
                 </Button>
@@ -727,22 +731,22 @@ const Inventory: React.FC = () => {
 
       {/* Stock Transaction Modal (usage / wastage / adjustment) */}
       {txnModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setTxnModal(m => ({ ...m, isOpen: false }))}>
-          <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setTxnModal(m => ({ ...m, isOpen: false }))}>
+          <div className="gr-modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>
                 {txnModal.type === 'usage' && 'Record Usage'}
                 {txnModal.type === 'wastage' && 'Record Wastage'}
                 {txnModal.type === 'adjustment' && 'Adjust Stock'}
               </h2>
-              <button onClick={() => setTxnModal(m => ({ ...m, isOpen: false }))} className="close-btn">
+              <button onClick={() => setTxnModal(m => ({ ...m, isOpen: false }))} className="gr-iconbtn">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleTxnSubmit}>
-              <div className="modal-body">
-                <div className="form-row">
-                  <div className="form-group" style={{ position: 'relative' }}>
+              <div className="gr-modal__body">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field" style={{ position: 'relative' }}>
                     <label>Material *</label>
                     <input
                       type="text"
@@ -776,7 +780,7 @@ const Inventory: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Type *</label>
                     {txnModal.type === 'adjustment' ? (
                       <input type="text" value="Adjustment" disabled />
@@ -796,8 +800,8 @@ const Inventory: React.FC = () => {
                     Current stock: <strong>{txnModalMaterial.currentStock} {txnModalMaterial.unit}</strong>
                   </div>
                 )}
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>{txnQuantityLabel}</label>
                     <input
                       type="number"
@@ -809,7 +813,7 @@ const Inventory: React.FC = () => {
                       placeholder={txnModal.type === 'adjustment' ? 'Corrected stock level' : '0'}
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Date *</label>
                     <input
                       type="date"
@@ -819,7 +823,7 @@ const Inventory: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Notes</label>
                   <textarea
                     value={txnForm.notes}
@@ -829,7 +833,7 @@ const Inventory: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button type="button" variant="secondary" onClick={() => setTxnModal(m => ({ ...m, isOpen: false }))}>
                   Cancel
                 </Button>
@@ -910,22 +914,128 @@ const Inventory: React.FC = () => {
             ? <span className="inv-tab-count is-alert">{lowStockCount} low</span>
             : <span className="inv-tab-count">{rawMaterials.length}</span>}
         </button>
-      </div>
-
-      {/* Stock Tab */}
-      {activeTab === 'stock' && (
-        <>
-          <div className="inv-toolbar">
-            <div className="inv-search">
-              <Search size={15} />
-              <input
-                type="text"
-                placeholder="Search materials..."
-                value={stockSearch}
-                onChange={e => { setStockSearch(e.target.value); setStockPage(1); }}
-              />
-            </div>
-            <div className="inv-spacer" />
+        <div className="inv-spacer" />
+        {searchOpen && (activeTab === 'stock' || activeTab === 'purchases') && (
+          <div className="inv-search">
+            <Search size={15} />
+            <input
+              ref={toolbarSearchRef}
+              type="text"
+              placeholder={activeTab === 'stock' ? 'Search materials...' : 'Search purchases...'}
+              value={activeTab === 'stock' ? stockSearch : purchaseSearch}
+              onChange={e => {
+                if (activeTab === 'stock') { setStockSearch(e.target.value); setStockPage(1); }
+                else { setPurchaseSearch(e.target.value); setPurchasePage(1); }
+              }}
+            />
+          </div>
+        )}
+        {(activeTab === 'stock' || activeTab === 'purchases') && (
+          <button
+            className="gr-iconbtn"
+            onClick={() => {
+              setSearchOpen(o => {
+                if (o) { setStockSearch(''); setPurchaseSearch(''); }
+                else { setTimeout(() => toolbarSearchRef.current?.focus(), 0); }
+                return !o;
+              });
+            }}
+            title={searchOpen ? 'Close search' : 'Search'}
+          >
+            {searchOpen ? <X size={18} /> : <Search size={18} />}
+          </button>
+        )}
+        {activeTab === 'purchases' && (
+          <div className="filter-pop">
+            <button
+              className={`gr-iconbtn ${purchaseMaterial || purchaseStart || purchaseEnd ? 'has-active-filters' : ''}`}
+              onClick={() => setFilterOpen(o => !o)}
+              title="Filters"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
+            {filterOpen && (
+              <>
+                <div className="filter-overlay" onClick={() => setFilterOpen(false)} />
+                <div className="filter-popover">
+                  <div className="gr-field">
+                    <label>Material</label>
+                    <select value={purchaseMaterial} onChange={e => setPurchaseMaterial(e.target.value)}>
+                      <option value="">All materials</option>
+                      {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="gr-field">
+                    <label>Start date</label>
+                    <input type="date" value={purchaseStart} onChange={e => setPurchaseStart(e.target.value)} />
+                  </div>
+                  <div className="gr-field">
+                    <label>End date</label>
+                    <input type="date" value={purchaseEnd} onChange={e => setPurchaseEnd(e.target.value)} />
+                  </div>
+                  <div className="filter-foot">
+                    {(purchaseMaterial || purchaseStart || purchaseEnd) && (
+                      <button className="inv-toolbar-btn is-ghost" onClick={() => { clearPurchaseFilters(); setFilterOpen(false); }}>Clear</button>
+                    )}
+                    <button className="gr-btn gr-btn--primary gr-btn--sm" onClick={() => { applyPurchaseFilters(); setFilterOpen(false); }}>Apply</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {activeTab === 'transactions' && (
+          <div className="filter-pop">
+            <button
+              className={`gr-iconbtn ${txnMaterial || txnType || txnStart || txnEnd ? 'has-active-filters' : ''}`}
+              onClick={() => setFilterOpen(o => !o)}
+              title="Filters"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
+            {filterOpen && (
+              <>
+                <div className="filter-overlay" onClick={() => setFilterOpen(false)} />
+                <div className="filter-popover">
+                  <div className="gr-field">
+                    <label>Material</label>
+                    <select value={txnMaterial} onChange={e => setTxnMaterial(e.target.value)}>
+                      <option value="">All materials</option>
+                      {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="gr-field">
+                    <label>Type</label>
+                    <select value={txnType} onChange={e => setTxnType(e.target.value)}>
+                      <option value="">All types</option>
+                      <option value="purchase">Purchase</option>
+                      <option value="usage">Usage</option>
+                      <option value="wastage">Wastage</option>
+                      <option value="adjustment">Adjustment</option>
+                      <option value="consumption">Consumption</option>
+                    </select>
+                  </div>
+                  <div className="gr-field">
+                    <label>Start date</label>
+                    <input type="date" value={txnStart} onChange={e => setTxnStart(e.target.value)} />
+                  </div>
+                  <div className="gr-field">
+                    <label>End date</label>
+                    <input type="date" value={txnEnd} onChange={e => setTxnEnd(e.target.value)} />
+                  </div>
+                  <div className="filter-foot">
+                    {(txnMaterial || txnType || txnStart || txnEnd) && (
+                      <button className="inv-toolbar-btn is-ghost" onClick={() => { clearTxnFilters(); setFilterOpen(false); }}>Clear</button>
+                    )}
+                    <button className="gr-btn gr-btn--primary gr-btn--sm" onClick={() => { applyTxnFilters(); setFilterOpen(false); }}>Apply</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {activeTab === 'stock' && (
+          <>
             <button className="inv-toolbar-btn" onClick={() => openTxnForm('wastage')}>
               <PackageMinus size={15} />
               Usage / Wastage
@@ -938,20 +1048,80 @@ const Inventory: React.FC = () => {
               <Plus size={16} />
               Add Material
             </Button>
-          </div>
+          </>
+        )}
+        {activeTab === 'purchases' && (
+          <Button onClick={() => openPurchaseForm()}>
+            <Plus size={16} />
+            Record Purchase
+          </Button>
+        )}
+        {activeTab === 'transactions' && (
+          <>
+            <button className="inv-toolbar-btn" onClick={() => openTxnForm('wastage')}>
+              <PackageMinus size={15} />
+              Usage / Wastage
+            </button>
+            <button className="inv-toolbar-btn" onClick={() => openTxnForm('adjustment')}>
+              <SlidersHorizontal size={15} />
+              Adjust Stock
+            </button>
+          </>
+        )}
+        {activeTab === 'consumption' && (
+          <>
+            <div className="inv-total-pill">
+              Total consumption cost <strong>{formatCurrency(consumptionReport?.totalCost ?? 0)}</strong>
+            </div>
+            <div className="filter-pop">
+              <button
+                className={`gr-iconbtn ${consStart || consEnd ? 'has-active-filters' : ''}`}
+                onClick={() => setFilterOpen(o => !o)}
+                title="Filters"
+              >
+                <SlidersHorizontal size={18} />
+              </button>
+              {filterOpen && (
+                <>
+                  <div className="filter-overlay" onClick={() => setFilterOpen(false)} />
+                  <div className="filter-popover">
+                    <div className="gr-field">
+                      <label>Start date</label>
+                      <input type="date" value={consStart} onChange={e => setConsStart(e.target.value)} />
+                    </div>
+                    <div className="gr-field">
+                      <label>End date</label>
+                      <input type="date" value={consEnd} onChange={e => setConsEnd(e.target.value)} />
+                    </div>
+                    <div className="filter-foot">
+                      {(consStart || consEnd) && (
+                        <button className="inv-toolbar-btn is-ghost" onClick={() => { setConsStart(''); setConsEnd(''); loadConsumption(); setFilterOpen(false); }}>Clear</button>
+                      )}
+                      <button className="gr-btn gr-btn--primary gr-btn--sm" onClick={() => { loadConsumption(consStart || undefined, consEnd || undefined); setFilterOpen(false); }}>Apply</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
+      {/* Stock Tab */}
+      {activeTab === 'stock' && (
+        <>
           <div className="inv-card">
             {filteredMaterials.length === 0 ? (
-              <div className="inv-empty">
-                <div className="inv-empty-icon"><Package size={26} /></div>
-                <div className="inv-empty-title">No raw materials found</div>
-                <div className="inv-empty-sub">Add materials to start tracking stock, purchases and usage.</div>
-                <Button onClick={() => openMaterialForm()} style={{ marginTop: '0.6rem' }}>Add your first material</Button>
-              </div>
+              <Empty
+                icon={<Package />}
+                title="No raw materials found"
+                text="Add materials to start tracking stock, purchases and usage."
+                action={<Button onClick={() => openMaterialForm()}>Add your first material</Button>}
+              />
             ) : (
               <>
                 <div className="inv-scroll">
-                  <table className="inv-table">
+                  <table className="gr-table">
                     <thead>
                       <tr>
                         <th>Material</th>
@@ -989,19 +1159,19 @@ const Inventory: React.FC = () => {
                             </td>
                             <td>
                               <div className="inv-actions">
-                                <button className="inv-icon-btn tint-primary" title="Record purchase" onClick={() => openPurchaseForm(material.id)}>
+                                <button className="gr-iconbtn gr-iconbtn--sm tint-primary" title="Record purchase" onClick={() => openPurchaseForm(material.id)}>
                                   <PackagePlus size={14} />
                                 </button>
-                                <button className="inv-icon-btn" title="Usage / wastage" onClick={() => openTxnForm('wastage', material.id)}>
+                                <button className="gr-iconbtn gr-iconbtn--sm" title="Usage / wastage" onClick={() => openTxnForm('wastage', material.id)}>
                                   <PackageMinus size={14} />
                                 </button>
-                                <button className="inv-icon-btn" title="Adjust stock" onClick={() => openTxnForm('adjustment', material.id)}>
+                                <button className="gr-iconbtn gr-iconbtn--sm" title="Adjust stock" onClick={() => openTxnForm('adjustment', material.id)}>
                                   <SlidersHorizontal size={14} />
                                 </button>
-                                <button className="inv-icon-btn" title="Edit" onClick={() => openMaterialForm(material)}>
+                                <button className="gr-iconbtn gr-iconbtn--sm" title="Edit" onClick={() => openMaterialForm(material)}>
                                   <Edit2 size={14} />
                                 </button>
-                                <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteMaterial(material)} disabled={loadingId === material.id}>
+                                <button className="gr-iconbtn gr-iconbtn--sm tint-danger" title="Delete" onClick={() => handleDeleteMaterial(material)} disabled={loadingId === material.id}>
                                   {loadingId === material.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                                 </button>
                               </div>
@@ -1028,58 +1198,18 @@ const Inventory: React.FC = () => {
       {/* Purchases Tab */}
       {activeTab === 'purchases' && (
         <>
-          <div className="inv-toolbar">
-            <div className="inv-search">
-              <Search size={15} />
-              <input
-                type="text"
-                placeholder="Search purchases..."
-                value={purchaseSearch}
-                onChange={e => { setPurchaseSearch(e.target.value); setPurchasePage(1); }}
-              />
-            </div>
-            <select
-              className="inv-select"
-              value={purchaseMaterial}
-              onChange={e => setPurchaseMaterial(e.target.value)}
-            >
-              <option value="">All materials</option>
-              {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={purchaseStart} onChange={e => setPurchaseStart(e.target.value)} />
-            </div>
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={purchaseEnd} onChange={e => setPurchaseEnd(e.target.value)} />
-            </div>
-            <button className="inv-toolbar-btn" onClick={applyPurchaseFilters}>
-              <Filter size={14} />
-              Filter
-            </button>
-            {(purchaseMaterial || purchaseStart || purchaseEnd) && (
-              <button className="inv-toolbar-btn is-ghost" onClick={clearPurchaseFilters}>Clear</button>
-            )}
-            <div className="inv-spacer" />
-            <Button onClick={() => openPurchaseForm()}>
-              <Plus size={16} />
-              Record Purchase
-            </Button>
-          </div>
-
           <div className="inv-card">
             {filteredPurchases.length === 0 ? (
-              <div className="inv-empty">
-                <div className="inv-empty-icon"><PackagePlus size={26} /></div>
-                <div className="inv-empty-title">No purchases found</div>
-                <div className="inv-empty-sub">Record purchases to keep stock levels and costs up to date.</div>
-                <Button onClick={() => openPurchaseForm()} style={{ marginTop: '0.6rem' }}>Record your first purchase</Button>
-              </div>
+              <Empty
+                icon={<PackagePlus />}
+                title="No purchases found"
+                text="Record purchases to keep stock levels and costs up to date."
+                action={<Button onClick={() => openPurchaseForm()}>Record your first purchase</Button>}
+              />
             ) : (
               <>
                 <div className="inv-scroll">
-                  <table className="inv-table">
+                  <table className="gr-table">
                     <thead>
                       <tr>
                         <th>Date</th>
@@ -1116,10 +1246,10 @@ const Inventory: React.FC = () => {
                           </td>
                           <td>
                             <div className="inv-actions">
-                              <button className="inv-icon-btn" title="Edit" onClick={() => openPurchaseForm(undefined, purchase)}>
+                              <button className="gr-iconbtn gr-iconbtn--sm" title="Edit" onClick={() => openPurchaseForm(undefined, purchase)}>
                                 <Edit2 size={14} />
                               </button>
-                              <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeletePurchase(purchase)} disabled={loadingId === purchase.id}>
+                              <button className="gr-iconbtn gr-iconbtn--sm tint-danger" title="Delete" onClick={() => handleDeletePurchase(purchase)} disabled={loadingId === purchase.id}>
                                 {loadingId === purchase.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                               </button>
                             </div>
@@ -1149,64 +1279,17 @@ const Inventory: React.FC = () => {
       {/* Transactions Tab */}
       {activeTab === 'transactions' && (
         <>
-          <div className="inv-toolbar">
-            <select
-              className="inv-select"
-              value={txnMaterial}
-              onChange={e => setTxnMaterial(e.target.value)}
-            >
-              <option value="">All materials</option>
-              {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select
-              className="inv-select"
-              value={txnType}
-              onChange={e => setTxnType(e.target.value)}
-            >
-              <option value="">All types</option>
-              <option value="purchase">Purchase</option>
-              <option value="usage">Usage</option>
-              <option value="wastage">Wastage</option>
-              <option value="adjustment">Adjustment</option>
-              <option value="consumption">Consumption</option>
-            </select>
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={txnStart} onChange={e => setTxnStart(e.target.value)} />
-            </div>
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={txnEnd} onChange={e => setTxnEnd(e.target.value)} />
-            </div>
-            <button className="inv-toolbar-btn" onClick={applyTxnFilters}>
-              <Filter size={14} />
-              Filter
-            </button>
-            {(txnMaterial || txnType || txnStart || txnEnd) && (
-              <button className="inv-toolbar-btn is-ghost" onClick={clearTxnFilters}>Clear</button>
-            )}
-            <div className="inv-spacer" />
-            <button className="inv-toolbar-btn" onClick={() => openTxnForm('wastage')}>
-              <PackageMinus size={15} />
-              Usage / Wastage
-            </button>
-            <button className="inv-toolbar-btn" onClick={() => openTxnForm('adjustment')}>
-              <SlidersHorizontal size={15} />
-              Adjust Stock
-            </button>
-          </div>
-
           <div className="inv-card">
             {rawMaterialTransactionsTotal === 0 ? (
-              <div className="inv-empty">
-                <div className="inv-empty-icon"><Package size={26} /></div>
-                <div className="inv-empty-title">No stock transactions found</div>
-                <div className="inv-empty-sub">Purchases, usage, wastage and adjustments will appear here.</div>
-              </div>
+              <Empty
+                icon={<Package />}
+                title="No stock transactions found"
+                text="Purchases, usage, wastage and adjustments will appear here."
+              />
             ) : (
               <>
                 <div className="inv-scroll">
-                  <table className="inv-table">
+                  <table className="gr-table">
                     <thead>
                       <tr>
                         <th>Date</th>
@@ -1237,7 +1320,7 @@ const Inventory: React.FC = () => {
                           <td>
                             <div className="inv-actions">
                               {txn.type !== 'purchase' && txn.type !== 'consumption' && (
-                                <button className="inv-icon-btn tint-danger" title="Delete" onClick={() => handleDeleteTxn(txn)} disabled={loadingId === txn.id}>
+                                <button className="gr-iconbtn gr-iconbtn--sm tint-danger" title="Delete" onClick={() => handleDeleteTxn(txn)} disabled={loadingId === txn.id}>
                                   {loadingId === txn.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                                 </button>
                               )}
@@ -1264,39 +1347,17 @@ const Inventory: React.FC = () => {
       {/* Consumption Tab */}
       {activeTab === 'consumption' && (
         <>
-          <div className="inv-toolbar">
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={consStart} onChange={e => setConsStart(e.target.value)} />
-            </div>
-            <div className="inv-date">
-              <Calendar size={14} />
-              <input type="date" value={consEnd} onChange={e => setConsEnd(e.target.value)} />
-            </div>
-            <button className="inv-toolbar-btn" onClick={() => loadConsumption(consStart || undefined, consEnd || undefined)}>
-              <Filter size={14} />
-              Filter
-            </button>
-            {(consStart || consEnd) && (
-              <button className="inv-toolbar-btn is-ghost" onClick={() => { setConsStart(''); setConsEnd(''); loadConsumption(); }}>Clear</button>
-            )}
-            <div className="inv-spacer" />
-            <div className="inv-total-pill">
-              Total consumption cost <strong>{formatCurrency(consumptionReport?.totalCost ?? 0)}</strong>
-            </div>
-          </div>
-
           {loadingConsumption ? (
             <div className="inv-card">
               <div className="inv-loading"><Loader2 size={24} className="animate-spin" /></div>
             </div>
           ) : !consumptionReport || (consumptionReport.byMaterial.length === 0 && consumptionReport.byItem.length === 0) ? (
             <div className="inv-card">
-              <div className="inv-empty">
-                <div className="inv-empty-icon"><Package size={26} /></div>
-                <div className="inv-empty-title">No consumption recorded yet</div>
-                <div className="inv-empty-sub">Materials are deducted automatically when orders with recipes are completed.</div>
-              </div>
+              <Empty
+                icon={<Package />}
+                title="No consumption recorded yet"
+                text="Materials are deducted automatically when orders with recipes are completed."
+              />
             </div>
           ) : (
             <div className="inv-grid-2">
@@ -1306,7 +1367,7 @@ const Inventory: React.FC = () => {
                   <span className="inv-panel-sub">{consumptionReport.byMaterial.length} material{consumptionReport.byMaterial.length === 1 ? '' : 's'}</span>
                 </div>
                 <div className="inv-scroll inv-scroll--panel">
-                  <table className="inv-table">
+                  <table className="gr-table">
                     <thead>
                       <tr><th>Material</th><th className="num">Consumed</th><th className="num">Cost</th></tr>
                     </thead>
@@ -1328,7 +1389,7 @@ const Inventory: React.FC = () => {
                   <span className="inv-panel-sub">{consumptionReport.byItem.length} item{consumptionReport.byItem.length === 1 ? '' : 's'}</span>
                 </div>
                 <div className="inv-scroll inv-scroll--panel">
-                  <table className="inv-table">
+                  <table className="gr-table">
                     <thead>
                       <tr><th>Item</th><th className="num">Recipe Lines</th><th className="num">Material Cost</th></tr>
                     </thead>

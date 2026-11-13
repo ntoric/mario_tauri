@@ -11,8 +11,9 @@ import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 import type { ItemProfitEntry } from '../types';
 import { Button } from './ui/Button';
-import { DonutChart, ChartLegend } from './ui/Charts';
+import { DonutChart, ChartLegend, CHART_COLORS } from './ui/Charts';
 import Pagination from './ui/Pagination';
+import { Empty } from './gr';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
 type MenuSortField = 'name' | 'category' | 'price' | 'cost' | 'profit' | 'profitPercent';
@@ -94,8 +95,10 @@ const ItemProfitReportPage: React.FC = () => {
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(25);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [topProfitItems, setTopProfitItems] = useState<SalesProfitRow[]>([]);
   const menuSeq = useRef(0);
   const salesSeq = useRef(0);
+  const topSeq = useRef(0);
 
   useReportPageHeader({
     title: 'Item Profit Report',
@@ -159,6 +162,21 @@ const ItemProfitReportPage: React.FC = () => {
       .catch(err => { if (id === salesSeq.current) console.error('Failed to fetch sales profit report:', err); })
       .finally(() => { if (id === salesSeq.current) setSalesLoading(false); });
   }, [currentStoreId, dateRange, salesSearchQuery, salesSortField, salesSortDir, salesPage, salesPageSize, refreshKey]);
+
+  // Top items by profit for the widget beside the revenue composition donut.
+  useEffect(() => {
+    if (!currentStoreId) return;
+    const id = ++topSeq.current;
+    api.getSalesProfitReport(currentStoreId, {
+      startDate: getStartDate(dateRange),
+      sort: 'profit',
+      dir: 'desc',
+      page: 1,
+      pageSize: 10,
+    })
+      .then((res: SalesProfitResponse) => { if (id === topSeq.current) setTopProfitItems(res.rows ?? []); })
+      .catch(err => { if (id === topSeq.current) console.error('Failed to fetch top profit items:', err); });
+  }, [currentStoreId, dateRange, refreshKey]);
 
   const menuRows = menuReport?.rows ?? [];
   const menuTotal = menuReport?.total ?? 0;
@@ -337,7 +355,7 @@ const ItemProfitReportPage: React.FC = () => {
           {(['today', 'week', 'month', 'all'] as DateRange[]).map(r => (
             <button
               key={r}
-              className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
+              className={`gr-btn ${dateRange === r ? 'gr-btn--primary' : 'gr-btn--secondary'} gr-btn--sm`}
               onClick={() => { setDateRange(r); setSalesPage(1); }}
             >
               {rangeLabel[r]}
@@ -361,61 +379,61 @@ const ItemProfitReportPage: React.FC = () => {
           </div>
           <div className="summary-cards" style={{ marginBottom: '1.75rem' }}>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(99, 179, 237, 0.15)', color: '#1976d2' }}>
+              <div className="gr-well" style={{ background: 'var(--tint)', color: 'var(--primary)' }}>
                 <BarChart3 size={24} />
               </div>
-              <div className="card-content">
-                <div className="card-label">Units Sold</div>
-                <div className="card-value">{salesSummary.unitsSold.toLocaleString()}</div>
+              <div className="gr-stat__top">
+                <div className="gr-caption">Units Sold</div>
+                <div className="gr-stat__value">{salesSummary.unitsSold.toLocaleString()}</div>
                 <div className="kpi-subtext">{salesSummary.itemsSold} unique items</div>
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(159, 122, 234, 0.15)', color: '#805ad5' }}>
+              <div className="gr-well" style={{ background: 'var(--tint)', color: 'var(--primary)' }}>
                 <DollarSign size={24} />
               </div>
-              <div className="card-content">
-                <div className="card-label">Sales Revenue</div>
-                <div className="card-value">{formatCurrency(salesSummary.revenue)}</div>
+              <div className="gr-stat__top">
+                <div className="gr-caption">Sales Revenue</div>
+                <div className="gr-stat__value">{formatCurrency(salesSummary.revenue)}</div>
                 {salesSummary.untrackedRevenue > 0 && (
                   <div className="kpi-subtext">{formatCurrency(salesSummary.untrackedRevenue)} without cost data</div>
                 )}
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
+              <div className="gr-well" style={{ background: 'var(--danger-tint)', color: 'var(--danger)' }}>
                 <Receipt size={24} />
               </div>
-              <div className="card-content">
-                <div className="card-label">Sales Prep Cost</div>
-                <div className="card-value" style={{ color: 'var(--danger)' }}>
+              <div className="gr-stat__top">
+                <div className="gr-caption">Sales Prep Cost</div>
+                <div className="gr-stat__value" style={{ color: 'var(--danger)' }}>
                   {formatCurrency(salesSummary.prepCost)}
                 </div>
                 <div className="kpi-subtext">{salesSummary.itemsWithCostSold} items tracked</div>
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{
-                background: salesSummary.profit >= 0 ? 'rgba(43,165,74, 0.15)' : 'rgba(229,57,53, 0.15)',
+              <div className="gr-well" style={{
+                background: salesSummary.profit >= 0 ? 'var(--success-tint)' : 'var(--danger-tint)',
                 color: getProfitColor(salesSummary.profit, salesSummary.prepCost > 0),
               }}>
                 <TrendingUp size={24} />
               </div>
-              <div className="card-content">
-                <div className="card-label">Sales Profit</div>
-                <div className="card-value" style={{ color: getProfitColor(salesSummary.profit, salesSummary.prepCost > 0) }}>
+              <div className="gr-stat__top">
+                <div className="gr-caption">Sales Profit</div>
+                <div className="gr-stat__value" style={{ color: getProfitColor(salesSummary.profit, salesSummary.prepCost > 0) }}>
                   {salesSummary.prepCost > 0 ? formatCurrency(salesSummary.profit) : '—'}
                 </div>
                 <div className="kpi-subtext">Qty sold × unit profit</div>
               </div>
             </div>
             <div className="summary-card">
-              <div className="card-icon" style={{ background: 'rgba(245,166,35, 0.15)', color: '#e09516' }}>
+              <div className="gr-well" style={{ background: 'var(--tint)', color: 'var(--primary)' }}>
                 <Percent size={24} />
               </div>
-              <div className="card-content">
-                <div className="card-label">Sales Margin</div>
-                <div className="card-value" style={{ color: getProfitColor(salesSummary.marginPercent, salesSummary.prepCost > 0) }}>
+              <div className="gr-stat__top">
+                <div className="gr-caption">Sales Margin</div>
+                <div className="gr-stat__value" style={{ color: getProfitColor(salesSummary.marginPercent, salesSummary.prepCost > 0) }}>
                   {salesSummary.prepCost > 0 ? `${salesSummary.marginPercent.toFixed(1)}%` : '—'}
                 </div>
                 <div className="kpi-subtext">Profit ÷ tracked revenue</div>
@@ -423,32 +441,104 @@ const ItemProfitReportPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Profit Composition */}
+          {/* Profit Composition + Top Items */}
           {salesSummary.revenue > 0 && (
-            <div className="report-widget-grid">
-              <div className="card">
-                <div className="card-header">
-                  <span className="card-title">Revenue Composition</span>
+            <div className="report-widget-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', marginBottom: '1.25rem' }}>
+              <div className="gr-card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
+                <div className="gr-card__head" style={{ flexShrink: 0 }}>
+                  <span className="gr-h3">Revenue Composition</span>
                 </div>
-                <div className="card-body">
+                <div className="gr-card__body" style={{ flex: 1, minHeight: 0, justifyContent: 'space-between' }}>
                   {(() => {
                     const splitData = [
                       { label: 'Profit', value: Math.max(salesSummary.profit, 0), color: 'var(--success)' },
                       { label: 'Prep Cost', value: salesSummary.prepCost, color: 'var(--danger)' },
-                      { label: 'Untracked Revenue', value: salesSummary.untrackedRevenue, color: '#b794f4' },
+                      { label: 'Untracked Revenue', value: salesSummary.untrackedRevenue, color: 'var(--ink)' },
                     ].filter(d => d.value > 0);
+                    const coverage = salesSummary.itemsSold > 0 ? (salesSummary.itemsWithCostSold / salesSummary.itemsSold) * 100 : 0;
+                    const avgProfit = salesSummary.itemsWithCostSold > 0 ? salesSummary.profit / salesSummary.itemsWithCostSold : 0;
+                    const tileStyle: React.CSSProperties = {
+                      flex: 1, minWidth: 0, background: 'rgba(var(--surface-rgb),0.5)',
+                      border: '1px solid rgba(var(--surface-rgb),0.65)', borderRadius: '12px',
+                      padding: '0.75rem', textAlign: 'center',
+                      boxShadow: 'inset 0 1px 0 rgba(var(--sheen-rgb),0.8), 0 1px 4px rgba(18,24,34,0.05)',
+                    };
+                    const valueStyle: React.CSSProperties = {
+                      fontSize: '0.92rem', fontWeight: 800, letterSpacing: '-0.02em',
+                      color: 'var(--primary)', fontVariantNumeric: 'tabular-nums',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    };
+                    const captionStyle: React.CSSProperties = {
+                      fontSize: '0.68rem', fontWeight: 600, color: 'var(--gray-500)',
+                      marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    };
                     return (
-                      <div className="chart-split">
-                        <DonutChart
-                          data={splitData}
-                          size={150}
-                          thickness={20}
-                          centerValue={salesSummary.prepCost > 0 ? `${salesSummary.marginPercent.toFixed(0)}%` : '—'}
-                          centerLabel="margin"
-                        />
-                        <ChartLegend data={splitData} formatValue={formatCurrency} />
-                      </div>
+                      <>
+                        <div className="chart-split" style={{ justifyContent: 'center' }}>
+                          <DonutChart
+                            data={splitData}
+                            size={180}
+                            thickness={22}
+                            centerValue={salesSummary.prepCost > 0 ? `${salesSummary.marginPercent.toFixed(0)}%` : '—'}
+                            centerLabel="margin"
+                          />
+                          <div style={{ flex: 1, minWidth: '200px', maxWidth: '380px' }}>
+                            <ChartLegend data={splitData} formatValue={formatCurrency} />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--gray-200)' }}>
+                          <div style={tileStyle}>
+                            <div style={{ ...valueStyle, color: getProfitColor(salesSummary.marginPercent, salesSummary.prepCost > 0) }}>
+                              {salesSummary.prepCost > 0 ? `${salesSummary.marginPercent.toFixed(1)}%` : '—'}
+                            </div>
+                            <div style={captionStyle}>Sales Margin</div>
+                          </div>
+                          <div style={tileStyle}>
+                            <div style={valueStyle}>{coverage.toFixed(0)}%</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', fontVariantNumeric: 'tabular-nums' }}>{salesSummary.itemsWithCostSold}/{salesSummary.itemsSold} items</div>
+                            <div style={captionStyle}>Cost Coverage</div>
+                          </div>
+                          <div style={tileStyle}>
+                            <div style={valueStyle}>{salesSummary.itemsWithCostSold > 0 ? formatCurrency(avgProfit) : '—'}</div>
+                            <div style={captionStyle}>Avg Profit / Item</div>
+                          </div>
+                        </div>
+                      </>
                     );
+                  })()}
+                </div>
+              </div>
+              <div className="gr-card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
+                <div className="gr-card__head" style={{ flexShrink: 0 }}>
+                  <span className="gr-h3">Top Items by Profit</span>
+                </div>
+                <div className="gr-card__body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  {(() => {
+                    const topItems = topProfitItems.filter(r => r.hasCostData).slice(0, 10);
+                    if (topItems.length === 0) {
+                      return <Empty compact icon={<TrendingUp />} title="No profit data" text="No item profit data for this period." />;
+                    }
+                    const maxProfit = Math.max(topItems[0].profit, 1);
+                    const totalProfit = topItems.reduce((s, t) => s + Math.max(t.profit, 0), 0);
+                    return topItems.map((row, idx) => {
+                      const barPct = maxProfit > 0 ? (Math.max(row.profit, 0) / maxProfit) * 100 : 0;
+                      const pct = totalProfit > 0 ? (Math.max(row.profit, 0) / totalProfit) * 100 : 0;
+                      return (
+                        <div key={row.itemId}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.3rem' }}>
+                            <span style={{ color: 'var(--gray-800)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '0.5rem' }} title={row.name}>{row.name}</span>
+                            <span style={{ color: 'var(--gray-600)', flexShrink: 0 }}>
+                              {formatCurrency(row.profit)}
+                              <span style={{ color: 'var(--gray-500)', marginLeft: '0.35rem' }}>({pct.toFixed(1)}%)</span>
+                            </span>
+                          </div>
+                          <div className="progress-track">
+                            <div className="progress-fill" style={{ width: `${barPct}%`, background: CHART_COLORS[idx % CHART_COLORS.length], minWidth: row.profit > 0 ? '6px' : '0' }} />
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.2rem' }}>{row.qtySold} sold</div>
+                        </div>
+                      );
+                    });
                   })()}
                 </div>
               </div>
@@ -466,62 +556,62 @@ const ItemProfitReportPage: React.FC = () => {
             <span className="kpi-section-hint">Per-item unit economics</span>
           </div>
           <div className="stats-grid" style={{ marginBottom: '1.75rem' }}>
-            <div className="stat-card">
-              <div className="stat-icon primary">
+            <div className="gr-card pos-stat">
+              <div className="gr-well primary">
                 <Layers size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{menuReport.totalItems}</div>
-                <div className="stat-label">Menu Items</div>
+                <div className="gr-stat__value">{menuReport.totalItems}</div>
+                <div className="gr-caption">Menu Items</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon success">
+            <div className="gr-card pos-stat">
+              <div className="gr-well success">
                 <Receipt size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{menuReport.itemsWithCostCount}</div>
-                <div className="stat-label">With Cost Data</div>
+                <div className="gr-stat__value">{menuReport.itemsWithCostCount}</div>
+                <div className="gr-caption">With Cost Data</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon warning">
+            <div className="gr-card pos-stat">
+              <div className="gr-well warning">
                 <DollarSign size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value">{formatCurrency(menuReport.totalSellingValue)}</div>
-                <div className="stat-label">Total List Price</div>
+                <div className="gr-stat__value">{formatCurrency(menuReport.totalSellingValue)}</div>
+                <div className="gr-caption">Total List Price</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon" style={{ background: 'rgba(229,57,53, 0.12)', color: 'var(--danger)' }}>
+            <div className="gr-card pos-stat">
+              <div className="gr-well" style={{ background: 'var(--danger-tint)', color: 'var(--danger)' }}>
                 <Receipt size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: 'var(--danger)' }}>{formatCurrency(menuReport.totalCost)}</div>
-                <div className="stat-label">Total Prep Cost</div>
+                <div className="gr-stat__value" style={{ color: 'var(--danger)' }}>{formatCurrency(menuReport.totalCost)}</div>
+                <div className="gr-caption">Total Prep Cost</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon success">
+            <div className="gr-card pos-stat">
+              <div className="gr-well success">
                 <TrendingUp size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: getProfitColor(menuReport.totalProfit, menuReport.totalCost > 0) }}>
+                <div className="gr-stat__value" style={{ color: getProfitColor(menuReport.totalProfit, menuReport.totalCost > 0) }}>
                   {menuReport.totalCost > 0 ? formatCurrency(menuReport.totalProfit) : '—'}
                 </div>
-                <div className="stat-label">Unit Profit (all items)</div>
+                <div className="gr-caption">Unit Profit (all items)</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon primary">
+            <div className="gr-card pos-stat">
+              <div className="gr-well primary">
                 <Percent size={22} />
               </div>
               <div className="stat-content">
-                <div className="stat-value" style={{ color: getProfitColor(menuReport.averageProfitPercent, menuReport.itemsWithCostCount > 0) }}>
+                <div className="gr-stat__value" style={{ color: getProfitColor(menuReport.averageProfitPercent, menuReport.itemsWithCostCount > 0) }}>
                   {menuReport.itemsWithCostCount > 0 ? `${menuReport.averageProfitPercent.toFixed(1)}%` : '—'}
                 </div>
-                <div className="stat-label">Avg Unit Margin</div>
+                <div className="gr-caption">Avg Unit Margin</div>
               </div>
             </div>
           </div>
@@ -529,9 +619,9 @@ const ItemProfitReportPage: React.FC = () => {
       )}
 
       {/* Sales profit table */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-header">
-          <span className="card-title">
+      <div className="gr-card" style={{ marginBottom: '1.5rem' }}>
+        <div className="gr-card__head">
+          <span className="gr-h3">
             <ShoppingBag size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
             Sales-Based Profit by Item
           </span>
@@ -547,7 +637,7 @@ const ItemProfitReportPage: React.FC = () => {
               />
             </div>
             <select
-              className="form-input"
+              className="gr-input"
               value={salesPageSize}
               onChange={e => { setSalesPageSize(Number(e.target.value)); setSalesPage(1); }}
               style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
@@ -563,7 +653,7 @@ const ItemProfitReportPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="gr-card__body" style={{ padding: 0 }}>
           <div style={{ overflowX: 'auto', opacity: salesLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
             <table className="reports-table">
               <thead>
@@ -580,15 +670,15 @@ const ItemProfitReportPage: React.FC = () => {
               <tbody>
                 {salesRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-                      {salesLoading ? 'Loading…' : 'No sales in this period.'}
+                    <td colSpan={7} style={{ textAlign: 'center', padding: salesLoading ? '2rem' : 0, color: 'var(--gray-500)' }}>
+                      {salesLoading ? 'Loading…' : <Empty compact icon={<ShoppingBag />} title="No sales in this period" />}
                     </td>
                   </tr>
                 ) : (
                   salesRows.map(row => (
                     <tr key={row.itemId}>
                       <td><strong>{row.name}</strong></td>
-                      <td><span className="badge badge-primary">{row.category}</span></td>
+                      <td><span className="gr-badge gr-badge--red">{row.category}</span></td>
                       <td>{row.qtySold}</td>
                       <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(row.revenue)}</td>
                       <td style={{ color: 'var(--gray-600)' }}>
@@ -617,9 +707,9 @@ const ItemProfitReportPage: React.FC = () => {
       </div>
 
       {/* Menu breakdown table */}
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">
+      <div className="gr-card">
+        <div className="gr-card__head">
+          <span className="gr-h3">
             <Package size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
             Menu Item Profit Breakdown
           </span>
@@ -635,7 +725,7 @@ const ItemProfitReportPage: React.FC = () => {
               />
             </div>
             <select
-              className="form-input"
+              className="gr-input"
               value={menuPageSize}
               onChange={e => { setMenuPageSize(Number(e.target.value)); setMenuPage(1); }}
               style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
@@ -651,7 +741,7 @@ const ItemProfitReportPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="gr-card__body" style={{ padding: 0 }}>
           <div style={{ overflowX: 'auto', opacity: menuLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
             <table className="reports-table">
               <thead>
@@ -668,8 +758,8 @@ const ItemProfitReportPage: React.FC = () => {
               <tbody>
                 {menuRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-                      {menuLoading ? 'Loading…' : menuReport ? 'No items match your search.' : 'No data available.'}
+                    <td colSpan={7} style={{ textAlign: 'center', padding: menuLoading ? '2rem' : 0, color: 'var(--gray-500)' }}>
+                      {menuLoading ? 'Loading…' : <Empty compact icon={<Search />} title={menuReport ? 'No items match your search' : 'No data available'} />}
                     </td>
                   </tr>
                 ) : (
@@ -687,7 +777,7 @@ const ItemProfitReportPage: React.FC = () => {
                             )}
                           </td>
                           <td><strong>{entry.item.name}</strong></td>
-                          <td><span className="badge badge-primary">{entry.item.categoryName || '—'}</span></td>
+                          <td><span className="gr-badge gr-badge--red">{entry.item.categoryName || '—'}</span></td>
                           <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(entry.item.price)}</td>
                           <td style={{ color: 'var(--gray-600)' }}>
                             {entry.totalCost > 0 ? formatCurrency(entry.totalCost) : '—'}
@@ -738,14 +828,14 @@ const ItemProfitReportPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: '1.5rem' }}>
-        <div className="card-header">
-          <span className="card-title">
+      <div className="gr-card" style={{ marginTop: '1.5rem' }}>
+        <div className="gr-card__head">
+          <span className="gr-h3">
             <PieChart size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
             How Profit is Calculated
           </span>
         </div>
-        <div className="card-body">
+        <div className="gr-card__body">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             <div style={{ padding: '1rem', background: 'var(--gray-50)', borderRadius: '8px' }}>
               <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Unit Profit (Menu)</div>

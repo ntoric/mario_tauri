@@ -123,12 +123,12 @@ const SupportSettings: React.FC = () => {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Support Contact Information</span>
+      <div className="gr-card">
+        <div className="gr-card__head">
+          <span className="gr-h3">Support Contact Information</span>
         </div>
         <form onSubmit={handleSave}>
-          <div className="card-body">
+          <div className="gr-card__body">
             <div style={{ 
               padding: '1rem', 
               background: 'var(--gray-50)', 
@@ -142,7 +142,7 @@ const SupportSettings: React.FC = () => {
               </p>
             </div>
 
-            <div className="form-group">
+            <div className="gr-field">
               <label>
                 <Mail size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
                 Support Email
@@ -158,7 +158,7 @@ const SupportSettings: React.FC = () => {
               </small>
             </div>
 
-            <div className="form-group">
+            <div className="gr-field">
               <label>
                 <Phone size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
                 Support Phone
@@ -174,7 +174,7 @@ const SupportSettings: React.FC = () => {
               </small>
             </div>
 
-            <div className="form-group">
+            <div className="gr-field">
               <label>
                 <MessageCircle size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
                 WhatsApp Link
@@ -190,8 +190,8 @@ const SupportSettings: React.FC = () => {
               </small>
             </div>
           </div>
-          <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-            <button type="submit" className="btn btn-primary" disabled={isSaving}>
+          <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+            <button type="submit" className="gr-btn gr-btn--primary" disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 size={18} className="animate-spin" style={{ marginRight: '0.5rem' }} />

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 const OSK_STORAGE_KEY = 'onscreen-keyboard-enabled';
+const STATS_VISIBLE_KEY = 'stats-widgets-visible';
 const COLOR_MODE_KEY = 'app-color-mode';
 
 export type ColorMode = 'light' | 'dark' | 'system';
@@ -8,6 +9,14 @@ export type ColorMode = 'light' | 'dark' | 'system';
 const getInitialOskEnabled = () => {
   try {
     return localStorage.getItem(OSK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const getInitialStatsVisible = () => {
+  try {
+    return localStorage.getItem(STATS_VISIBLE_KEY) === 'true';
   } catch {
     return false;
   }
@@ -71,6 +80,9 @@ interface UIState {
   // On-screen keyboard
   onScreenKeyboardEnabled: boolean;
 
+  // Stat widgets visibility (hidden by default)
+  statsVisible: boolean;
+
   // Color mode (light / dark / system)
   colorMode: ColorMode;
 
@@ -104,6 +116,7 @@ interface UIState {
   closeStoreSwitcher: () => void;
   toggleSidebar: () => void;
   toggleOnScreenKeyboard: () => void;
+  toggleStatsVisible: () => void;
   setColorMode: (mode: ColorMode) => void;
   addNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   removeNotification: (id: string) => void;
@@ -122,6 +135,7 @@ export const useUIStore = create<UIState>((set) => ({
   storeSwitcherModal: false,
   sidebarOpen: true,
   onScreenKeyboardEnabled: getInitialOskEnabled(),
+  statsVisible: getInitialStatsVisible(),
   colorMode: getInitialColorMode(),
   notifications: [],
 
@@ -164,6 +178,16 @@ export const useUIStore = create<UIState>((set) => ({
       // localStorage unavailable
     }
     return { onScreenKeyboardEnabled: next };
+  }),
+
+  toggleStatsVisible: () => set((state) => {
+    const next = !state.statsVisible;
+    try {
+      localStorage.setItem(STATS_VISIBLE_KEY, String(next));
+    } catch {
+      // localStorage unavailable
+    }
+    return { statsVisible: next };
   }),
 
   setColorMode: (mode) => {

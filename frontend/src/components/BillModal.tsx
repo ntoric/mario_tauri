@@ -140,16 +140,16 @@ const BillModal: React.FC = () => {
   };
 
   return (
-    <div className="modal-overlay" onClick={closeBillModal}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
+    <div className="gr-modal-live is-open" onClick={closeBillModal}>
+      <div className="gr-modal" onClick={e => e.stopPropagation()}>
+        <div className="gr-modal__head">
           <h2>Bill Receipt</h2>
-          <button className="close-btn" onClick={closeBillModal}>
+          <button className="gr-iconbtn" onClick={closeBillModal}>
             <X size={24} />
           </button>
         </div>
 
-        <div className="modal-body">
+        <div className="gr-modal__body">
           <div className="bill-container">
             <div className="bill-header">
               <h2>Cafe Manager</h2>
@@ -190,12 +190,12 @@ const BillModal: React.FC = () => {
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn btn-primary" onClick={handlePrint} disabled={isPrinting}>
+        <div className="gr-modal__foot">
+          <button className="gr-btn gr-btn--primary" onClick={handlePrint} disabled={isPrinting}>
             <Printer size={16} />
             {isPrinting ? 'Printing...' : 'Print Bill'}
           </button>
-          <button className="btn btn-secondary" onClick={closeBillModal}>
+          <button className="gr-btn gr-btn--secondary" onClick={closeBillModal}>
             Close
           </button>
         </div>

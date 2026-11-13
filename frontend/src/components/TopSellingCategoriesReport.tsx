@@ -6,6 +6,7 @@ import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import { DonutChart, ChartLegend, CHART_COLORS } from './ui/Charts';
 import Pagination from './ui/Pagination';
 
@@ -128,9 +129,14 @@ const TopSellingCategoriesReport: React.FC = () => {
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
     if (rest.length > 0) {
-      data.push({ label: 'Other', value: rest.reduce((s, r) => s + r.revenue, 0), color: 'rgba(22, 30, 42, 0.22)' });
+      data.push({ label: 'Other', value: rest.reduce((s, r) => s + r.revenue, 0), color: 'var(--line-strong)' });
     }
     return data;
+  }, [report]);
+
+  const categoriesByVolume = useMemo(() => {
+    const totals = report?.categoryTotals ?? [];
+    return [...totals].sort((a, b) => b.count - a.count).slice(0, 10);
   }, [report]);
 
   const handleSort = (field: SortField) => {
@@ -197,7 +203,7 @@ const TopSellingCategoriesReport: React.FC = () => {
           {(['today', 'week', 'month', 'all'] as DateRange[]).map(r => (
             <button
               key={r}
-              className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
+              className={`gr-btn ${dateRange === r ? 'gr-btn--primary' : 'gr-btn--secondary'} gr-btn--sm`}
               onClick={() => { setDateRange(r); setPage(1); }}
             >
               {rangeLabel[r]}
@@ -211,12 +217,12 @@ const TopSellingCategoriesReport: React.FC = () => {
             placeholder="Search category..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            className="form-input"
+            className="gr-input"
             style={{ paddingLeft: '2.25rem', width: '100%' }}
           />
         </div>
         <select
-          className="form-input"
+          className="gr-input"
           value={pageSize}
           onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
           style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
@@ -226,7 +232,7 @@ const TopSellingCategoriesReport: React.FC = () => {
             <option key={n} value={n}>{n} / page</option>
           ))}
         </select>
-        <button className="btn btn-outline btn-sm" onClick={handleExportCSV} disabled={exporting} title="Export CSV">
+        <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={handleExportCSV} disabled={exporting} title="Export CSV">
           <Download size={15} style={{ marginRight: '0.35rem' }} />
           {exporting ? 'Exporting...' : 'Export'}
         </button>
@@ -234,55 +240,128 @@ const TopSellingCategoriesReport: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
-        <div className="stat-card">
-          <div className="stat-icon primary"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well primary"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{report?.uniqueCategories ?? 0}</div>
-            <div className="stat-label">Categories</div>
+            <div className="gr-stat__value">{report?.uniqueCategories ?? 0}</div>
+            <div className="gr-caption">Categories</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon success"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well success"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{report?.totalCount ?? 0}</div>
-            <div className="stat-label">Total Items Sold</div>
+            <div className="gr-stat__value">{report?.totalCount ?? 0}</div>
+            <div className="gr-caption">Total Items Sold</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon warning"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well warning"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(report?.totalRevenue ?? 0)}</div>
-            <div className="stat-label">Total Revenue</div>
+            <div className="gr-stat__value">{formatCurrency(report?.totalRevenue ?? 0)}</div>
+            <div className="gr-caption">Total Revenue</div>
           </div>
         </div>
       </div>
 
-      {/* Category Revenue Split */}
+      {/* Category Revenue Split + Volume */}
       {categoryDonut.length > 0 && (
-        <div className="report-widget-grid">
-          <div className="card">
-            <div className="card-header">
+        <div className="report-widget-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', marginBottom: '1.25rem' }}>
+          <div className="gr-card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
+            <div className="gr-card__head" style={{ flexShrink: 0 }}>
               <h3 style={{ margin: 0, fontSize: '1rem' }}>Category Revenue Split</h3>
             </div>
-            <div className="card-body">
+            <div className="gr-card__body" style={{ flex: 1, minHeight: 0, justifyContent: 'space-between' }}>
               <div className="chart-split">
                 <DonutChart
                   data={categoryDonut}
-                  size={150}
-                  thickness={20}
+                  size={180}
+                  thickness={22}
                   centerValue={formatCurrency(report?.totalRevenue ?? 0)}
                   centerLabel="total"
                 />
-                <ChartLegend data={categoryDonut} formatValue={formatCurrency} />
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <ChartLegend data={categoryDonut} formatValue={formatCurrency} />
+                </div>
               </div>
+              {(() => {
+                const topByRevenue = report?.categoryTotals?.[0];
+                const topByVolume = categoriesByVolume[0];
+                const unique = report?.uniqueCategories ?? 0;
+                const avgRevenue = unique > 0 ? (report?.totalRevenue ?? 0) / unique : 0;
+                const tileStyle: React.CSSProperties = {
+                  flex: 1, minWidth: 0, background: 'rgba(var(--surface-rgb),0.5)',
+                  border: '1px solid rgba(var(--surface-rgb),0.65)', borderRadius: '12px',
+                  padding: '0.75rem', textAlign: 'center',
+                  boxShadow: 'inset 0 1px 0 rgba(var(--sheen-rgb),0.8), 0 1px 4px rgba(18,24,34,0.05)',
+                };
+                const valueStyle: React.CSSProperties = {
+                  fontSize: '0.92rem', fontWeight: 800, letterSpacing: '-0.02em',
+                  color: 'var(--primary)', fontVariantNumeric: 'tabular-nums',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                };
+                const captionStyle: React.CSSProperties = {
+                  fontSize: '0.68rem', fontWeight: 600, color: 'var(--gray-500)',
+                  marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em',
+                };
+                return (
+                  <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--gray-200)' }}>
+                    <div style={tileStyle} title={topByRevenue?.category}>
+                      <div style={valueStyle}>{topByRevenue?.category ?? '—'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', fontVariantNumeric: 'tabular-nums' }}>{topByRevenue ? formatCurrency(topByRevenue.revenue) : ''}</div>
+                      <div style={captionStyle}>Top by Revenue</div>
+                    </div>
+                    <div style={tileStyle} title={topByVolume?.category}>
+                      <div style={valueStyle}>{topByVolume?.category ?? '—'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', fontVariantNumeric: 'tabular-nums' }}>{topByVolume ? `${topByVolume.count} sold` : ''}</div>
+                      <div style={captionStyle}>Top by Volume</div>
+                    </div>
+                    <div style={tileStyle}>
+                      <div style={valueStyle}>{formatCurrency(avgRevenue)}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)' }}>{unique} categor{unique === 1 ? 'y' : 'ies'}</div>
+                      <div style={captionStyle}>Avg per Category</div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
+          {categoriesByVolume.length > 0 && (
+            <div className="gr-card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
+              <div className="gr-card__head" style={{ flexShrink: 0 }}>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>Categories by Items Sold</h3>
+              </div>
+              <div className="gr-card__body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                {(() => {
+                  const maxCount = categoriesByVolume[0].count;
+                  const totalCount = categoriesByVolume.reduce((s, c) => s + c.count, 0);
+                  return categoriesByVolume.map((cat, idx) => {
+                    const barPct = maxCount > 0 ? (cat.count / maxCount) * 100 : 0;
+                    const pct = totalCount > 0 ? (cat.count / totalCount) * 100 : 0;
+                    return (
+                      <div key={cat.categoryId || idx}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.3rem' }}>
+                          <span style={{ color: 'var(--gray-800)', fontWeight: 500 }}>{cat.category}</span>
+                          <span style={{ color: 'var(--gray-600)' }}>
+                            {cat.count} sold
+                            <span style={{ color: 'var(--gray-500)', marginLeft: '0.35rem' }}>({pct.toFixed(1)}%)</span>
+                          </span>
+                        </div>
+                        <div className="progress-track">
+                          <div className="progress-fill" style={{ width: `${barPct}%`, background: CHART_COLORS[idx % CHART_COLORS.length], minWidth: cat.count > 0 ? '6px' : '0' }} />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Table */}
-      <div className="card">
-        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="gr-card">
+        <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '1rem' }}>
             Category Sales — {rangeLabel[dateRange]}
           </h3>
@@ -290,16 +369,13 @@ const TopSellingCategoriesReport: React.FC = () => {
             {total} record{total !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="gr-card__body" style={{ padding: 0 }}>
           {report === null && loading ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
               <p style={{ fontSize: '0.9rem' }}>Loading report…</p>
             </div>
           ) : !loading && total === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
-              <BarChart2 size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
-              <p style={{ fontSize: '0.9rem' }}>No category sales data for this period</p>
-            </div>
+            <Empty icon={<BarChart2 />} title="No category sales data" text="No category sales data for this period." />
           ) : (
             <>
               <div style={{ overflowX: 'auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s' }}>

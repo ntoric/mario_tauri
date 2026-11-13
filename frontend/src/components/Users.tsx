@@ -239,7 +239,7 @@ const Users: React.FC = () => {
       title: 'User Management',
       subtitle: 'Manage system users and permissions',
       actions: (
-        <button className="btn btn-primary" onClick={() => openModal()}>
+        <button className="gr-btn gr-btn--primary" onClick={() => openModal()}>
           <Plus size={18} />
           Add User
         </button>
@@ -254,10 +254,10 @@ const Users: React.FC = () => {
 
   return (
     <div>
-      <div className="card">
-        <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div className="table-scroll-container">
-            <table className="items-table">
+      <div className="gr-card">
+        <div className="gr-card__body" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="gr-tablewrap">
+            <table className="gr-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -276,21 +276,21 @@ const Users: React.FC = () => {
                     <div style={{ fontSize: '0.875rem', color: 'var(--gray-600)' }}>{user.email}</div>
                   </td>
                   <td>{user.username}</td>
-                  <td><span className="badge badge-primary">{getRoleLabel(user.role)}</span></td>
+                  <td><span className="gr-badge gr-badge--red">{getRoleLabel(user.role)}</span></td>
                   <td>{user.storeName || user.storeIds?.length > 0 ? `${user.storeIds?.length || 1} store(s)` : '-'}</td>
                   <td>
-                    <span className={`badge ${user.isActive ? 'badge-success' : 'badge-danger'}`}>
+                    <span className={`gr-badge ${user.isActive ? 'badge-success' : 'badge-danger'}`}>
                       {user.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td>
                     <div className="action-btns">
-                      <button className="action-btn edit" onClick={() => openModal(user)} title="Edit User">
+                      <button className="gr-iconbtn gr-iconbtn--sm edit" onClick={() => openModal(user)} title="Edit User">
                         <Edit2 size={14} />
                       </button>
                       {(currentUser?.role === 'superadmin' || currentUser?.role === 'business_owner') && (
                         <button 
-                          className="action-btn" 
+                          className="gr-iconbtn gr-iconbtn--sm" 
                           style={{ background: 'rgba(255, 193, 7, 0.1)', color: 'var(--warning)' }} 
                           onClick={() => openPasswordModal(user)} 
                           title="Reset Password"
@@ -301,7 +301,7 @@ const Users: React.FC = () => {
                       {canManageRole(user.role) && user.id !== currentUser?.id && (
                         <>
                           <button 
-                            className="action-btn" 
+                            className="gr-iconbtn gr-iconbtn--sm" 
                             style={{ 
                               background: user.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', 
                               color: user.isActive ? 'var(--danger)' : 'var(--success)',
@@ -319,7 +319,7 @@ const Users: React.FC = () => {
                             )}
                           </button>
                           <button 
-                            className="action-btn delete" 
+                            className="gr-iconbtn gr-iconbtn--sm delete" 
                             onClick={() => handleDeleteUser(user)}
                             title="Delete User"
                             style={{
@@ -355,18 +355,18 @@ const Users: React.FC = () => {
 
       {/* User Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>{editingUser ? 'Edit User' : 'Add New User'}</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="modal-body">
-                <div className="form-row">
-                  <div className="form-group">
+              <div className="gr-modal__body">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Full Name</label>
                     <input
                       type="text"
@@ -375,7 +375,7 @@ const Users: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Username</label>
                     <input
                       type="text"
@@ -388,7 +388,7 @@ const Users: React.FC = () => {
                 </div>
                 
                 {!editingUser && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Password</label>
                     <input
                       type="password"
@@ -399,8 +399,8 @@ const Users: React.FC = () => {
                   </div>
                 )}
 
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Email</label>
                     <input
                       type="email"
@@ -408,7 +408,7 @@ const Users: React.FC = () => {
                       onChange={e => setForm({ ...form, email: e.target.value })}
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Role</label>
                     <select
                       value={form.role}
@@ -423,7 +423,7 @@ const Users: React.FC = () => {
                 </div>
 
                 {(form.role === 'staff' || form.role === 'business_admin') && !isBusinessAdmin && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Assigned Store</label>
                     <select
                       value={form.storeId}
@@ -441,11 +441,11 @@ const Users: React.FC = () => {
                 
 
                 {form.role === 'business_owner' && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Assigned Stores</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
                       {stores.map(store => (
-                        <label key={store.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius)', cursor: 'pointer' }}>
+                        <label key={store.id} className="gr-check" style={{ padding: '0.4rem 0.75rem', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius-pill)' }}>
                           <input
                             type="checkbox"
                             checked={form.storeIds.includes(store.id)}
@@ -470,7 +470,7 @@ const Users: React.FC = () => {
                   {error}
                 </div>
               )}
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button
                   type="button"
                   variant="secondary"
@@ -495,16 +495,16 @@ const Users: React.FC = () => {
 
       {/* Password Modal */}
       {showPasswordModal && passwordUser && (
-        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
-          <div className="modal" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowPasswordModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Reset Password</h2>
-              <button className="close-btn" onClick={() => setShowPasswordModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowPasswordModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handlePasswordChange}>
-              <div className="modal-body">
+              <div className="gr-modal__body">
                 {/* User Info */}
                 <div style={{
                   padding: '1rem',
@@ -551,7 +551,7 @@ const Users: React.FC = () => {
                   </div>
                 )}
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>New Password</label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -582,7 +582,7 @@ const Users: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Confirm Password</label>
                   <input
                     type="password"
@@ -605,7 +605,7 @@ const Users: React.FC = () => {
                   They will need to use the new password on their next login.
                 </p>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button
                   type="button"
                   variant="secondary"

@@ -14,6 +14,7 @@ import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { formatCurrency } from '../utils/currency';
 import { downloadPaymentReceipt, paymentMethodLabel } from '../utils/paymentReceipt';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type {
@@ -144,7 +145,7 @@ const MyPlan: React.FC = () => {
       subtitle: 'Your store subscription & billing status',
       actions: (
         <button
-          className="btn btn-secondary"
+          className="gr-btn gr-btn--secondary"
           onClick={activeTab === 'history' ? loadHistory : load}
           disabled={refreshing}
         >
@@ -352,17 +353,17 @@ const MyPlan: React.FC = () => {
       {activeTab === 'plan' && (isLoading ? (
         <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>Loading your plan...</div>
       ) : !sub ? (
-        <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--gray-500)' }}>
-          <CreditCard size={64} style={{ marginBottom: '1.25rem', opacity: 0.4 }} />
-          <p style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--gray-700)', margin: 0 }}>No subscription yet</p>
-          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-            {currentStore ? `${currentStore.name} doesn't` : 'This store doesn\'t'} have a subscription plan. Contact your administrator to get started.
-          </p>
-          {canRequest && payEnabled && plans.some((p) => p.isActive) && (
-            <Button variant="primary" leftIcon={<CreditCard size={15} />} onClick={openPayModal} style={{ marginTop: '1.5rem' }}>
-              Subscribe Online
-            </Button>
-          )}
+        <div className="gr-card" style={{ padding: 0 }}>
+          <Empty
+            icon={<CreditCard />}
+            title="No subscription yet"
+            text={`${currentStore ? `${currentStore.name} doesn't` : "This store doesn't"} have a subscription plan. Contact your administrator to get started.`}
+            action={canRequest && payEnabled && plans.some((p) => p.isActive) && (
+              <Button variant="primary" leftIcon={<CreditCard size={15} />} onClick={openPayModal}>
+                Subscribe Online
+              </Button>
+            )}
+          />
         </div>
       ) : (
         <>
@@ -389,13 +390,13 @@ const MyPlan: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase' }}>
-                  <Crown size={13} style={{ color: '#f5a623' }} /> Membership Plan
+                  <Crown size={13} style={{ color: 'var(--primary)' }} /> Membership Plan
                 </div>
                 <h2 style={{ margin: '0.4rem 0 0.2rem', fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
                   {sub.planName}
                 </h2>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
-                  <span style={{ fontSize: '1.35rem', fontWeight: 700, color: '#f5a623' }}>{hidePrice ? '•••' : formatCurrency(sub.planPrice)}</span>
+                  <span style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--primary)' }}>{hidePrice ? '•••' : formatCurrency(sub.planPrice)}</span>
                   <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)' }}>{RECURRING_SUFFIX[sub.recurringType]}</span>
                 </div>
               </div>
@@ -501,7 +502,7 @@ const MyPlan: React.FC = () => {
                     borderRadius: '999px',
                     transition: 'width 0.6s ease',
                     background: urgent
-                      ? 'linear-gradient(90deg, #ff7a59, #f5a623)'
+                      ? 'linear-gradient(90deg, var(--grad-start), var(--primary))'
                       : 'linear-gradient(90deg, #43d98a, #a3e635)',
                     boxShadow: urgent ? '0 0 12px rgba(245,166,35,0.5)' : '0 0 12px rgba(67,217,138,0.45)',
                   }}
@@ -517,7 +518,7 @@ const MyPlan: React.FC = () => {
           {/* pending / scheduled change request */}
           {pending && (
             <div
-              className="card"
+              className="gr-card"
               style={{
                 marginTop: '1.25rem',
                 padding: '1rem 1.25rem',
@@ -603,7 +604,7 @@ const MyPlan: React.FC = () => {
 
           {/* pending payment banner */}
           {pendingOrderId && (
-            <div className="card" style={{ marginTop: '1.25rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="gr-card" style={{ marginTop: '1.25rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Clock3 size={20} style={{ color: 'var(--warning)', flexShrink: 0 }} />
                 <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)' }}>
@@ -618,7 +619,7 @@ const MyPlan: React.FC = () => {
 
           {/* alerts */}
           {sub.status === 'expired' && (
-            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--danger)', flexWrap: 'wrap' }}>
+            <div className="gr-card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--danger)', flexWrap: 'wrap' }}>
               <AlertTriangle size={20} style={{ color: 'var(--danger)', flexShrink: 0 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)', flex: 1 }}>
                 Your subscription expired on <strong>{formatDate(sub.endDate)}</strong>.{' '}
@@ -634,7 +635,7 @@ const MyPlan: React.FC = () => {
             </div>
           )}
           {sub.status === 'cancelled' && (
-            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', flexWrap: 'wrap' }}>
+            <div className="gr-card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)', flexWrap: 'wrap' }}>
               <AlertTriangle size={20} style={{ color: 'var(--warning)', flexShrink: 0 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)', flex: 1 }}>
                 This subscription was cancelled.{' '}
@@ -650,7 +651,7 @@ const MyPlan: React.FC = () => {
             </div>
           )}
           {isActive && !sub.autoRenew && (
-            <div className="card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)' }}>
+            <div className="gr-card" style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.25rem', borderLeft: '4px solid var(--warning)' }}>
               <AlertTriangle size={20} style={{ color: 'var(--warning)', flexShrink: 0 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--gray-700)' }}>
                 Auto-renewal is off — this plan will expire on <strong>{formatDate(sub.endDate)}</strong> unless renewed.
@@ -660,13 +661,13 @@ const MyPlan: React.FC = () => {
 
           {/* features */}
           {plan?.features && plan.features.length > 0 && (
-            <div className="card" style={{ marginTop: '1.25rem' }}>
-              <div className="card-header" style={{ paddingBottom: 0 }}>
-                <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
+            <div className="gr-card" style={{ marginTop: '1.25rem' }}>
+              <div className="gr-card__head" style={{ paddingBottom: 0 }}>
+                <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
                   <Zap size={16} style={{ color: 'var(--primary)' }} /> What's included
                 </span>
               </div>
-              <div className="card-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.65rem' }}>
+              <div className="gr-card__body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.65rem' }}>
                 {plan.features.map((f, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.88rem', color: 'var(--gray-700)' }}>
                     <CheckCircle2 size={15} style={{ color: 'var(--success)', flexShrink: 0, marginTop: '0.15rem' }} />
@@ -688,12 +689,12 @@ const MyPlan: React.FC = () => {
       {/* ===== History tab ===== */}
       {activeTab === 'history' && (
         <>
-          <div className="card">
-            <div className="card-header" style={{ paddingBottom: 0 }}>
-              <span className="card-title" style={{ fontSize: '0.95rem' }}>Billing Periods</span>
+          <div className="gr-card">
+            <div className="gr-card__head" style={{ paddingBottom: 0 }}>
+              <span className="gr-h3" style={{ fontSize: '0.95rem' }}>Billing Periods</span>
             </div>
-            <div className="table-scroll-container">
-              <table className="items-table">
+            <div className="gr-tablewrap">
+              <table className="gr-table">
                 <thead>
                   <tr>
                     <th>Plan</th>
@@ -708,7 +709,7 @@ const MyPlan: React.FC = () => {
                   {isHistoryLoading ? (
                     <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>Loading history...</td></tr>
                   ) : !history || history.periods.length === 0 ? (
-                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>No subscription history yet</td></tr>
+                    <tr><td colSpan={6} style={{ padding: 0 }}><Empty icon={<Clock3 />} title="No subscription history yet" text="Plan periods and renewals will appear here." /></td></tr>
                   ) : (
                     history.periods.map((p) => (
                       <tr key={p.id}>
@@ -717,7 +718,7 @@ const MyPlan: React.FC = () => {
                         <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.startDate)} → {formatDate(p.endDate)}</td>
                         <td>{RECURRING_LABELS[p.recurringType] || p.recurringType}</td>
                         <td>{p.renewalCount > 0 ? `${p.renewalCount}×` : '—'}</td>
-                        <td><span className={`badge ${STATUS_META[p.status]?.badge || ''}`}>{STATUS_META[p.status]?.label || p.status}</span></td>
+                        <td><span className={`gr-badge ${STATUS_META[p.status]?.badge || ''}`}>{STATUS_META[p.status]?.label || p.status}</span></td>
                       </tr>
                     ))
                   )}
@@ -726,12 +727,12 @@ const MyPlan: React.FC = () => {
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: '1.25rem' }}>
-            <div className="card-header" style={{ paddingBottom: 0 }}>
-              <span className="card-title" style={{ fontSize: '0.95rem' }}>Payments</span>
+          <div className="gr-card" style={{ marginTop: '1.25rem' }}>
+            <div className="gr-card__head" style={{ paddingBottom: 0 }}>
+              <span className="gr-h3" style={{ fontSize: '0.95rem' }}>Payments</span>
             </div>
-            <div className="table-scroll-container">
-              <table className="items-table">
+            <div className="gr-tablewrap">
+              <table className="gr-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -748,7 +749,7 @@ const MyPlan: React.FC = () => {
                   {isHistoryLoading ? (
                     <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>Loading history...</td></tr>
                   ) : !history || history.payments.length === 0 ? (
-                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>No payments recorded</td></tr>
+                    <tr><td colSpan={8} style={{ padding: 0 }}><Empty icon={<CreditCard />} title="No payments recorded" text="Your subscription payments will appear here." /></td></tr>
                   ) : (
                     history.payments.map((p: SubscriptionPayment) => (
                       <tr key={p.id}>
@@ -757,13 +758,13 @@ const MyPlan: React.FC = () => {
                         <td><strong>{hidePrice ? '—' : formatCurrency(p.amount)}</strong></td>
                         <td>{paymentMethodLabel(p.method)}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{p.periodStart && p.periodEnd ? `${formatDate(p.periodStart)} → ${formatDate(p.periodEnd)}` : '—'}</td>
-                        <td><span className={`badge ${p.status === 'paid' ? 'badge-success' : p.status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>{p.status}</span></td>
+                        <td><span className={`gr-badge ${p.status === 'paid' ? 'badge-success' : p.status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>{p.status}</span></td>
                         <td>{p.recordedByName || 'System'}</td>
                         <td>
                           {p.status === 'paid' && !hidePrice ? (
                             <button
                               type="button"
-                              className="action-btn"
+                              className="gr-iconbtn gr-iconbtn--sm"
                               title="Download receipt"
                               style={{ color: 'var(--primary)' }}
                               onClick={() => downloadPaymentReceipt(p, currentStore)}
@@ -782,12 +783,12 @@ const MyPlan: React.FC = () => {
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: '1.25rem' }}>
-            <div className="card-header" style={{ paddingBottom: 0 }}>
-              <span className="card-title" style={{ fontSize: '0.95rem' }}>Activity</span>
+          <div className="gr-card" style={{ marginTop: '1.25rem' }}>
+            <div className="gr-card__head" style={{ paddingBottom: 0 }}>
+              <span className="gr-h3" style={{ fontSize: '0.95rem' }}>Activity</span>
             </div>
-            <div className="table-scroll-container">
-              <table className="items-table">
+            <div className="gr-tablewrap">
+              <table className="gr-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -801,14 +802,14 @@ const MyPlan: React.FC = () => {
                   {isHistoryLoading ? (
                     <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>Loading history...</td></tr>
                   ) : !history || history.events.length === 0 ? (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--gray-500)' }}>No activity yet</td></tr>
+                    <tr><td colSpan={5} style={{ padding: 0 }}><Empty icon={<Zap />} title="No activity yet" text="Subscription events will show up here." /></td></tr>
                   ) : (
                     history.events.map((ev) => {
                       const meta = ACTION_META[ev.action] || { label: ev.action, badge: 'badge-primary' };
                       return (
                         <tr key={ev.id}>
                           <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(ev.createdAt)}</td>
-                          <td><span className={`badge ${meta.badge}`}>{meta.label}</span></td>
+                          <td><span className={`gr-badge ${meta.badge}`}>{meta.label}</span></td>
                           <td>
                             {ev.fromPlanName && ev.toPlanName && ev.fromPlanName !== ev.toPlanName ? (
                               <span>{ev.fromPlanName} → <strong>{ev.toPlanName}</strong></span>
@@ -831,21 +832,21 @@ const MyPlan: React.FC = () => {
 
       {/* ===== change-plan request modal ===== */}
       {showReqModal && sub && (
-        <div className="modal-overlay" onClick={() => setShowReqModal(false)}>
-          <div className="modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowReqModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Request Plan Change</h2>
-              <button className="close-btn" onClick={() => setShowReqModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowReqModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleRequestChange}>
-              <div className="modal-body">
-                <div className="form-group">
+              <div className="gr-modal__body">
+                <div className="gr-field">
                   <label>Current Plan</label>
                   <input type="text" value={hidePrice ? sub.planName : `${sub.planName} (${formatCurrency(sub.planPrice)}${RECURRING_SUFFIX[sub.recurringType]})`} disabled />
                 </div>
-                <div className="form-group">
+                <div className="gr-field">
                   <label>New Plan *</label>
                   <select value={reqPlanId} onChange={(e) => setReqPlanId(e.target.value)} required>
                     <option value="">Select plan...</option>
@@ -858,11 +859,11 @@ const MyPlan: React.FC = () => {
                   {reqDelta !== null && reqPlanId && (
                     <div style={{ marginTop: '0.4rem' }}>
                       {reqDelta > 0 ? (
-                        <span className="badge badge-success"><ArrowUpCircle size={11} style={{ marginRight: '0.25rem' }} />Upgrade{hidePrice ? '' : ` (+${formatCurrency(reqDelta)})`}</span>
+                        <span className="gr-badge gr-badge--success"><ArrowUpCircle size={11} style={{ marginRight: '0.25rem' }} />Upgrade{hidePrice ? '' : ` (+${formatCurrency(reqDelta)})`}</span>
                       ) : reqDelta < 0 ? (
-                        <span className="badge badge-warning"><ArrowDownCircle size={11} style={{ marginRight: '0.25rem' }} />Downgrade{hidePrice ? '' : ` (−${formatCurrency(Math.abs(reqDelta))})`}</span>
+                        <span className="gr-badge gr-badge--red"><ArrowDownCircle size={11} style={{ marginRight: '0.25rem' }} />Downgrade{hidePrice ? '' : ` (−${formatCurrency(Math.abs(reqDelta))})`}</span>
                       ) : (
-                        <span className="badge badge-primary">Same price</span>
+                        <span className="gr-badge gr-badge--red">Same price</span>
                       )}
                     </div>
                   )}
@@ -873,7 +874,7 @@ const MyPlan: React.FC = () => {
                   Your current plan stays active until then.
                 </small>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button type="button" variant="secondary" onClick={() => setShowReqModal(false)} disabled={isSubmittingReq}>
                   Cancel
                 </Button>
@@ -888,23 +889,23 @@ const MyPlan: React.FC = () => {
 
       {/* ===== online payment modal ===== */}
       {showPayModal && (
-        <div className="modal-overlay" onClick={() => setShowPayModal(false)}>
-          <div className="modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowPayModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Pay Online</h2>
-              <button className="close-btn" onClick={() => setShowPayModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowPayModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handlePayNow(); }}>
-              <div className="modal-body">
+              <div className="gr-modal__body">
                 {sub && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Current Plan</label>
                     <input type="text" value={hidePrice ? sub.planName : `${sub.planName} (${formatCurrency(sub.planPrice)}${RECURRING_SUFFIX[sub.recurringType]})`} disabled />
                   </div>
                 )}
-                <div className="form-group">
+                <div className="gr-field">
                   <label>{sub ? 'Plan to pay for' : 'Choose a plan'} *</label>
                   <select value={payPlanId} onChange={(e) => setPayPlanId(e.target.value)} required>
                     <option value="">Select plan...</option>
@@ -917,7 +918,7 @@ const MyPlan: React.FC = () => {
                 </div>
                 {payPlanId && sub && payPlanId !== sub.planId && (
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <span className="badge badge-primary">
+                    <span className="gr-badge gr-badge--red">
                       {(plans.find((p) => p.id === payPlanId)?.price ?? 0) > sub.planPrice ? 'Upgrade' : 'Switch plan'} — applies immediately on payment
                     </span>
                   </div>
@@ -927,7 +928,7 @@ const MyPlan: React.FC = () => {
                   your plan is recorded and renewed automatically — no admin action needed.
                 </small>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button type="button" variant="secondary" onClick={() => setShowPayModal(false)} disabled={isPaying}>
                   Cancel
                 </Button>

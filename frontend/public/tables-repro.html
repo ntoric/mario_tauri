@@ -1,0 +1,90 @@
+<!doctype html>
+<html data-theme="light">
+<head>
+<link rel="stylesheet" href="/src/index.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: var(--bg); padding: 24px; }
+  h4 { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; margin: 24px 0 10px; }
+</style>
+</head>
+<body class="gr">
+<div class="tables-page">
+
+  <h4>Default (auto-fill) — action buttons must stay inside the card</h4>
+  <div class="tables-layout-container">
+    <div class="tables-section-group">
+      <div class="tables-layout-grid">
+        <div class="table-layout-card occupied">
+          <div class="table-card-head"><span class="order-timer table-card-timer">00:05:43</span></div>
+          <div class="table-card-body">
+            <div class="table-layout-number">1</div>
+            <div class="table-card-sub amount">₹170 · 3 items</div>
+          </div>
+          <div class="table-card-actions">
+            <button class="table-bill-btn new-design" title="Print Bill">P</button>
+            <button class="table-change-btn" title="Change Table">C</button>
+            <button class="table-combine-btn" title="Merge Bill">M</button>
+            <button class="table-preview-btn" title="Preview">V</button>
+          </div>
+        </div>
+        <div class="table-layout-card occupied">
+          <div class="table-card-head"><span class="order-timer table-card-timer">00:02:14</span></div>
+          <div class="table-card-body">
+            <div class="table-layout-number">2</div>
+            <div class="table-card-sub amount">₹130 · 2 items</div>
+          </div>
+          <div class="table-card-actions">
+            <button class="table-bill-btn new-design">P</button>
+            <button class="table-change-btn">C</button>
+            <button class="table-combine-btn">M</button>
+            <button class="table-preview-btn">V</button>
+          </div>
+        </div>
+        <div class="table-layout-card">
+          <div class="table-card-head"><span class="table-status-chip available">Available</span></div>
+          <div class="table-card-body">
+            <div class="table-layout-number">3</div>
+            <div class="table-card-sub">4 seats</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h4>15 per row + dense — no room for inline buttons (floating bar used in app)</h4>
+  <div class="tables-layout-container">
+    <div class="tables-section-group">
+      <div class="tables-layout-grid cards-dense" style="grid-template-columns: repeat(15, minmax(0, 1fr))">
+        <div class="table-layout-card occupied"><div class="table-card-head"><span class="order-timer table-card-timer">00:05:43</span></div><div class="table-card-body"><div class="table-layout-number">1</div><div class="table-card-sub amount">₹170</div></div></div>
+        <div class="table-layout-card occupied"><div class="table-card-head"><span class="order-timer table-card-timer">00:02:14</span></div><div class="table-card-body"><div class="table-layout-number">2</div><div class="table-card-sub amount">₹130</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">3</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">4</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card occupied"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">5</div><div class="table-card-sub amount">₹90</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">6</div><div class="table-card-sub">1 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">7</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">8</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">9</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">10</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">11</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">12</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">13</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">14</div><div class="table-card-sub">4 seats</div></div></div>
+        <div class="table-layout-card"><div class="table-card-head"></div><div class="table-card-body"><div class="table-layout-number">15</div><div class="table-card-sub">4 seats</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <h4>Floating action bar (shown above a narrow card on click)</h4>
+  <div style="position:relative;height:60px">
+    <div class="table-float-actions" style="top:10px;left:24px">
+      <button class="table-bill-btn new-design" title="Print Bill">P</button>
+      <button class="table-change-btn" title="Change Table">C</button>
+      <button class="table-combine-btn" title="Merge Bill">M</button>
+      <button class="table-preview-btn" title="Preview">V</button>
+      <button class="table-open-btn" title="Open Order">→</button>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

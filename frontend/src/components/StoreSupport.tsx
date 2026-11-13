@@ -18,6 +18,7 @@ import {
 import { api } from '../services/api';
 import notify from '../utils/toast';
 import type { SupportTicket, SupportMessage, SupportTicketStatus } from '../types';
+import { Empty } from './gr';
 
 interface StoreSupportProps {
   storeId: string;
@@ -150,11 +151,11 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
       {/* Left Column: Form & Tickets List / Thread */}
       <div className="support-left-col">
         {activeTicketId && ticketDetail ? (
-          <div className="card ticket-thread-card">
-            <div className="card-header ticket-thread-header">
+          <div className="gr-card ticket-thread-card">
+            <div className="gr-card__head ticket-thread-header">
               <button
                 type="button"
-                className="btn btn-sm btn-outline back-btn"
+                className="gr-btn gr-btn--sm gr-btn--secondary back-btn"
                 onClick={() => {
                   setActiveTicketId(null);
                   setTicketDetail(null);
@@ -170,7 +171,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
               </div>
             </div>
 
-            <div className="card-body ticket-thread-body">
+            <div className="gr-card__body ticket-thread-body">
               <div className="ticket-title-block">
                 <h3 className="ticket-thread-subject">{ticketDetail.ticket.subject}</h3>
                 <div className="ticket-submeta">
@@ -224,7 +225,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                 <div className="reply-actions">
                   <button
                     type="submit"
-                    className="btn btn-primary"
+                    className="gr-btn gr-btn--primary"
                     disabled={isSendingReply || !replyText.trim()}
                   >
                     <Send size={15} />
@@ -237,16 +238,16 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
         ) : (
           <>
             {/* Create new request panel */}
-            <div className="card new-request-card">
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="card-title">
+            <div className="gr-card new-request-card">
+              <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="gr-h3">
                   <LifeBuoy size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle', color: 'var(--primary)' }} />
                   Submit a Support Request
                 </span>
                 {!showNewForm && (
                   <button
                     type="button"
-                    className="btn btn-sm btn-primary"
+                    className="gr-btn gr-btn--sm gr-btn--primary"
                     onClick={() => setShowNewForm(true)}
                   >
                     <Plus size={14} /> New Request
@@ -256,9 +257,9 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
 
               {showNewForm ? (
                 <form onSubmit={handleCreateTicket}>
-                  <div className="card-body">
-                    <div className="form-row">
-                      <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <div className="gr-card__body">
+                    <div className="gr-grid gr-form2">
+                      <div className="gr-field" style={{ marginBottom: '1rem' }}>
                         <label>Category</label>
                         <select
                           value={category}
@@ -274,7 +275,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                         </select>
                       </div>
 
-                      <div className="form-group" style={{ marginBottom: '1rem' }}>
+                      <div className="gr-field" style={{ marginBottom: '1rem' }}>
                         <label>Priority</label>
                         <select
                           value={priority}
@@ -288,7 +289,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                       </div>
                     </div>
 
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <div className="gr-field" style={{ marginBottom: '1rem' }}>
                       <label>Subject *</label>
                       <input
                         type="text"
@@ -300,7 +301,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                       />
                     </div>
 
-                    <div className="form-group" style={{ marginBottom: '0' }}>
+                    <div className="gr-field" style={{ marginBottom: '0' }}>
                       <label>Description / Message *</label>
                       <textarea
                         rows={4}
@@ -313,10 +314,10 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                     </div>
                   </div>
 
-                  <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+                  <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="gr-btn gr-btn--secondary"
                       onClick={() => setShowNewForm(false)}
                       disabled={isSubmitting}
                     >
@@ -324,7 +325,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                     </button>
                     <button
                       type="submit"
-                      className="btn btn-primary"
+                      className="gr-btn gr-btn--primary"
                       disabled={isSubmitting}
                     >
                       <Send size={15} />
@@ -333,22 +334,22 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                   </div>
                 </form>
               ) : (
-                <div className="card-body" style={{ color: 'var(--gray-600)', fontSize: '0.875rem' }}>
+                <div className="gr-card__body" style={{ color: 'var(--gray-600)', fontSize: '0.875rem' }}>
                   Have an issue or need assistance? Submit a ticket and our support team will reply directly.
                 </div>
               )}
             </div>
 
             {/* My Support Requests list */}
-            <div className="card my-requests-card" style={{ marginTop: '1.5rem' }}>
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="card-title">
+            <div className="gr-card my-requests-card" style={{ marginTop: '1.5rem' }}>
+              <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="gr-h3">
                   <MessageSquare size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle', color: 'var(--primary)' }} />
                   My Support Requests ({tickets.length})
                 </span>
                 <button
                   type="button"
-                  className="btn btn-sm btn-secondary"
+                  className="gr-btn gr-btn--sm gr-btn--secondary"
                   onClick={loadTickets}
                   disabled={isLoading}
                 >
@@ -357,19 +358,17 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
                 </button>
               </div>
 
-              <div className="card-body" style={{ padding: 0 }}>
+              <div className="gr-card__body" style={{ padding: 0 }}>
                 {isLoading ? (
                   <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--gray-500)' }}>
                     Loading requests...
                   </div>
                 ) : tickets.length === 0 ? (
-                  <div className="empty-requests-state">
-                    <LifeBuoy size={42} style={{ opacity: 0.35, marginBottom: '0.5rem' }} />
-                    <p style={{ fontWeight: 600, margin: 0 }}>No support requests yet</p>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                      When you submit a request, you can track and continue the conversation here.
-                    </span>
-                  </div>
+                  <Empty
+                    icon={<LifeBuoy />}
+                    title="No support requests yet"
+                    text="When you submit a request, you can track and continue the conversation here."
+                  />
                 ) : (
                   <div className="ticket-list">
                     {tickets.map((t) => {
@@ -421,7 +420,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
 
         {/* Email Support Card */}
         <a
-          href="mailto:support@runerail.com"
+          href="mailto:support@gooseroot.com"
           className="contact-channel-card email-card"
         >
           <div className="channel-icon-tile email-tile">
@@ -429,7 +428,7 @@ export const StoreSupport: React.FC<StoreSupportProps> = ({ storeId }) => {
           </div>
           <div className="channel-info">
             <span className="channel-label">Email Support</span>
-            <span className="channel-value">support@runerail.com</span>
+            <span className="channel-value">support@gooseroot.com</span>
             <span className="channel-desc">Send us an email anytime; we usually respond within a few hours.</span>
           </div>
           <ChevronRight size={18} className="channel-chevron" />

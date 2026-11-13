@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, FileText } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { notify } from '../utils/toast';
 import Pagination from './ui/Pagination';
+import { Empty } from './gr';
 import { useTaxEnabled } from '../hooks/useTaxEnabled';
 
 type Period = 'this_month' | 'last_month' | 'this_quarter' | 'custom';
@@ -59,12 +60,12 @@ function rangeFor(p: Period, customFrom: string, customTo: string): { from: stri
 }
 
 const Section: React.FC<{ title: string; action?: React.ReactNode; children: React.ReactNode }> = ({ title, action, children }) => (
-  <div className="card gstr-section">
-    <div className="card-header gstr-section-head">
+  <div className="gr-card gstr-section">
+    <div className="gr-card__head gstr-section-head">
       <h3>{title}</h3>
       {action}
     </div>
-    <div className="card-body" style={{ padding: 0 }}>{children}</div>
+    <div className="gr-card__body" style={{ padding: 0 }}>{children}</div>
   </div>
 );
 
@@ -76,7 +77,7 @@ const Tbl: React.FC<{ head: string[]; rows: React.ReactNode[][]; numCols?: numbe
       </thead>
       <tbody>
         {rows.length === 0
-          ? <tr><td colSpan={head.length} className="gstr-empty">No data for this period</td></tr>
+          ? <tr><td colSpan={head.length} style={{ padding: 0 }}><Empty compact icon={<FileText />} title="No data for this period" /></td></tr>
           : rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className={numCols.includes(j) ? 'num' : ''}>{c}</td>)}</tr>)}
       </tbody>
     </table>
@@ -166,8 +167,8 @@ const GstReports: React.FC = () => {
 
   if (!taxEnabled) {
     return (
-      <div className="card">
-        <div className="card-body">
+      <div className="gr-card">
+        <div className="gr-card__body">
           <p className="gstr-note">Tax is turned off for this store. Turn it on in Business Settings → Tax to use GST reports.</p>
         </div>
       </div>
@@ -191,13 +192,13 @@ const GstReports: React.FC = () => {
         </div>
         {period === 'custom' && (
           <div className="gstr-dates">
-            <input type="date" className="form-input" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+            <input type="date" className="gr-input" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
             <span className="gstr-dates-sep">to</span>
-            <input type="date" className="form-input" value={customTo} onChange={e => setCustomTo(e.target.value)} />
+            <input type="date" className="gr-input" value={customTo} onChange={e => setCustomTo(e.target.value)} />
           </div>
         )}
         <span style={{ flex: 1 }} />
-        <button className="btn btn-outline btn-sm" onClick={downloadGstr1}>
+        <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={downloadGstr1}>
           <Download size={14} /> Download GSTR-1 JSON
         </button>
       </div>
@@ -244,7 +245,7 @@ const GstReports: React.FC = () => {
             ]} />
           </Section>
           <Section title="Rate-wise" action={
-            <button className="btn btn-outline btn-sm"
+            <button className="gr-btn gr-btn--secondary gr-btn--sm"
               onClick={() => exportCsv('gst_ratewise.csv', ['Rate', 'B2B', 'B2C', 'Taxable', 'IGST', 'CGST', 'SGST', 'Cess'],
                 (summary.rateWise || []).map((r: any) => [r.rate, r.b2bTaxable, r.b2cTaxable, r.taxableValue, r.igst, r.cgst, r.sgst, r.cess]))}>
               <Download size={14} /> Export CSV
@@ -340,7 +341,7 @@ const GstReports: React.FC = () => {
               <Search size={14} className="gstr-search-icon" />
               <input
                 type="text"
-                className="form-input"
+                className="gr-input"
                 placeholder="Search invoice no / GSTIN"
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye, MoreVertical, Layers, Pencil, Check, Star } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Trash2, Grid3X3, List, Printer, X, ArrowRightLeft, ArrowRight, Loader2, Package, Filter, ChevronDown, HelpCircle, Combine, Eye, MoreVertical, Layers, Pencil, Check, Star, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useDataStore, useAuthStore } from '../stores';
+import { useDataStore, useAuthStore, useTableLayoutStore } from '../stores';
+import type { TableFloatPosition } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency, formatCurrencyInt } from '../utils/currency';
 import { orderItemUnitPrice } from '../utils/order';
@@ -13,6 +14,7 @@ import { Button } from '../components/ui/Button';
 import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
+import { Empty, Seg } from './gr';
 import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
 import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import notify from '../utils/toast';
@@ -155,6 +157,45 @@ const Tables: React.FC = () => {
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
   const [sectionLoading, setSectionLoading] = useState(false);
 
+  // User-customizable layout prefs (persisted per device)
+  const [showLayoutModal, setShowLayoutModal] = useState(false);
+  const {
+    gridColumns, cardSize, showStatus, showTimer, showInfo, actionStyle, floatPosition,
+    setGridColumns, setCardSize, setShowStatus, setShowTimer, setShowInfo,
+    setActionStyle, setFloatPosition, resetTableLayout,
+  } = useTableLayoutStore();
+
+  // Floating action bar: when cards are too narrow for inline buttons,
+  // hovering an occupied table shows its actions in a bar near the card.
+  const [floatBar, setFloatBar] = useState<{ tableId: string; top: number; left: number; dir: TableFloatPosition } | null>(null);
+
+  // A short hide delay lets the pointer travel from the card into the bar.
+  const floatHideTimer = useRef<number | null>(null);
+  const cancelFloatBarHide = useCallback(() => {
+    if (floatHideTimer.current !== null) {
+      window.clearTimeout(floatHideTimer.current);
+      floatHideTimer.current = null;
+    }
+  }, []);
+  const scheduleFloatBarHide = useCallback(() => {
+    cancelFloatBarHide();
+    floatHideTimer.current = window.setTimeout(() => setFloatBar(null), 180);
+  }, [cancelFloatBarHide]);
+
+  // Measure the layout container so card density and the inline/floating
+  // action decision adapt to the real card width.
+  const layoutContainerRef = useRef<HTMLDivElement | null>(null);
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  useEffect(() => {
+    const el = layoutContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      setLayoutWidth(Math.round(entries[0].contentRect.width));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewMode]);
+
   // Keyboard navigation state
   const [kbFocusedIndex, setKbFocusedIndex] = useState<number>(-1);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -197,6 +238,66 @@ const Tables: React.FC = () => {
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'business_owner' || user?.role === 'business_admin';
 
+  // The global right-click menu (AppContextMenu) drives this page's add-table
+  // modal and delete mode through window events.
+  useEffect(() => {
+    const onAdd = () => setShowAddModal(true);
+    const onDeleteToggle = () => { if (isAdmin) setDeleteMode(m => !m); };
+    const onCustomize = () => { if (isAdmin) setShowLayoutModal(true); };
+    window.addEventListener('app:tables-add', onAdd);
+    window.addEventListener('app:tables-delete-mode', onDeleteToggle);
+    window.addEventListener('app:tables-customize', onCustomize);
+    return () => {
+      window.removeEventListener('app:tables-add', onAdd);
+      window.removeEventListener('app:tables-delete-mode', onDeleteToggle);
+      window.removeEventListener('app:tables-customize', onCustomize);
+    };
+  }, [isAdmin]);
+
+  // Per-table context-menu actions (right-click on an occupied table card).
+  // Mirrors the card action buttons: print bill, move table, merge, preview.
+  useEffect(() => {
+    const onTableAction = (e: Event) => {
+      const { action, tableId } = (e as CustomEvent).detail || {};
+      const table = tables.find(t => t.id === tableId);
+      if (!table) return;
+      const activeOrder = getActiveOrderByTable(table.id);
+      if (!activeOrder) return;
+      switch (action) {
+        case 'print-bill': setPaymentMethod('upi'); setBillDialogTable(table); break;
+        case 'move': setChangeTableDialog({ fromTable: table, order: activeOrder }); break;
+        case 'merge': setCombineDialog({ intoTable: table, order: activeOrder }); break;
+        case 'view': setPreviewTable(table); break;
+      }
+    };
+    window.addEventListener('app:tables-table-action', onTableAction);
+    return () => window.removeEventListener('app:tables-table-action', onTableAction);
+  }, [tables, getActiveOrderByTable]);
+
+  // Broadcast delete mode so the context menu can show "Done" while active.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('app:tables-delete-state', { detail: deleteMode }));
+  }, [deleteMode]);
+
+  // Close the floating action bar on outside click, scroll, or resize.
+  useEffect(() => {
+    if (!floatBar) return;
+    const onDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest?.('.table-float-actions')) return;
+      setFloatBar(null);
+    };
+    const close = () => setFloatBar(null);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+      cancelFloatBarHide();
+    };
+  }, [floatBar, cancelFloatBarHide]);
+
   // Display label: alphanumeric name when set, otherwise the numeric table number.
   const tableLabel = (t: Table) => t.name || String(t.number);
 
@@ -219,7 +320,7 @@ const Tables: React.FC = () => {
       subtitle: 'Manage tables and orders',
       actions: (
         <>
-          <button className="btn btn-primary" onClick={() => navigate('/parcel-order')}>
+          <button className="gr-btn gr-btn--primary" onClick={() => navigate('/parcel-order')}>
             <Package size={18} />
             Parcel Order
           </button>
@@ -239,13 +340,22 @@ const Tables: React.FC = () => {
               <List size={18} />
             </button>
           </div>
+          {isAdmin && (
+            <button
+              className="view-btn"
+              onClick={() => setShowLayoutModal(true)}
+              title="Customize layout"
+            >
+              <SlidersHorizontal size={16} />
+            </button>
+          )}
           <div className="header-dropdown">
             <button
-              className={`btn btn-icon ${deleteMode ? 'btn-danger' : 'btn-secondary'}`}
+              className={`view-btn ${deleteMode ? 'danger' : ''}`}
               onClick={() => setShowTableMenu(s => !s)}
               title="Table actions"
             >
-              <MoreVertical size={18} />
+              <MoreVertical size={16} />
             </button>
             {showTableMenu && (
               <>
@@ -279,11 +389,11 @@ const Tables: React.FC = () => {
             )}
           </div>
           <button
-            className="btn btn-secondary btn-icon"
+            className="view-btn"
             onClick={() => setShowShortcutsHelp(true)}
             title="Keyboard shortcuts (?)"
           >
-            <HelpCircle size={18} />
+            <HelpCircle size={16} />
           </button>
         </>
       ),
@@ -293,9 +403,41 @@ const Tables: React.FC = () => {
   const handleTableClick = async (table: Table) => {
     if (checkingTableId) return; // Prevent double clicks
 
+    setFloatBar(null);
     setCheckingTableId(table.id);
     setCheckingTableId(null);
     navigate(`/order/${table.id}`);
+  };
+
+  const handleCardHover = (e: React.MouseEvent, table: Table) => {
+    if (actionStyle === 'hidden' || actionsFit) return;
+    if (!getActiveOrderByTable(table.id)) return;
+    cancelFloatBarHide();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const barW = actionStyle === 'labeled' ? 340 : 200;
+    const barH = 46;
+    const gap = 8;
+    // Honor the configured direction; flip to the opposite side when there
+    // isn't enough room, then clamp inside the viewport.
+    const flip: Record<TableFloatPosition, TableFloatPosition> = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+    const fits: Record<TableFloatPosition, boolean> = {
+      top: r.top >= barH + gap + 8,
+      bottom: r.bottom + barH + gap + 8 <= window.innerHeight,
+      left: r.left >= barW + gap + 8,
+      right: r.right + barW + gap + 8 <= window.innerWidth,
+    };
+    const dir = fits[floatPosition] ? floatPosition : flip[floatPosition];
+    let top: number, left: number;
+    if (dir === 'left' || dir === 'right') {
+      left = dir === 'left' ? r.left - barW - gap : r.right + gap;
+      top = r.top + r.height / 2 - barH / 2;
+    } else {
+      top = dir === 'top' ? r.top - barH - gap : r.bottom + gap;
+      left = r.left + r.width / 2 - barW / 2;
+    }
+    top = Math.min(Math.max(8, top), window.innerHeight - barH - 8);
+    left = Math.min(Math.max(8, left), window.innerWidth - barW - 8);
+    setFloatBar({ tableId: table.id, top, left, dir });
   };
 
   const handleBillClick = (e: React.MouseEvent, table: Table) => {
@@ -696,6 +838,28 @@ const Tables: React.FC = () => {
   const occupiedCount = tables.filter(t => getActiveOrderByTable(t.id)).length;
   const vacantCount = tables.length - occupiedCount;
 
+  // Adaptive card metrics: the real card width decides whether cards render
+  // in a dense form and whether occupied tables get inline action buttons or
+  // a floating bar on click (when the buttons wouldn't fit).
+  const { minCard, gridGap } = cardSize === 'compact'
+    ? { minCard: 110, gridGap: 10 }
+    : cardSize === 'large'
+      ? { minCard: 190, gridGap: 18 }
+      : { minCard: 150, gridGap: 14 };
+  const effectiveCols = gridColumns > 0
+    ? gridColumns
+    : layoutWidth > 0
+      ? Math.max(1, Math.floor((layoutWidth + gridGap) / (minCard + gridGap)))
+      : 1;
+  const cardPx = layoutWidth > 0
+    ? (layoutWidth - (effectiveCols - 1) * gridGap) / effectiveCols
+    : minCard;
+  const denseCards = cardPx < 115;
+  const actionsFit =
+    actionStyle === 'labeled' ? cardPx >= 90 :
+    actionStyle === 'compact' ? cardPx >= 175 :
+    cardPx >= 150;
+
   // Reset the section pill filter if its section no longer has any tables.
   useEffect(() => {
     if (sectionFilter !== 'all' && (sectionCounts.get(sectionFilter) || 0) === 0) {
@@ -716,7 +880,8 @@ const Tables: React.FC = () => {
     billDialogTable || confirmTableChange || changeTableDialog || combineDialog ||
     confirmCombineTable || deleteConfirmTable || previewTable || cancelOrderConfirm ||
     showAddModal || showSectionsModal || showStatusDropdown || showTableMenu ||
-    showShortcutsHelp || printerConfirm.show || errorDialog.show || sectionToDelete
+    showShortcutsHelp || showLayoutModal || printerConfirm.show || errorDialog.show ||
+    sectionToDelete || floatBar
   );
 
   // Close the top-most open modal/dialog (used by Esc).
@@ -733,11 +898,13 @@ const Tables: React.FC = () => {
     if (combineDialog) { setCombineDialog(null); return; }
     if (cancelOrderConfirm) { if (!isCancellingOrder) setCancelOrderConfirm(null); return; }
     if (previewTable) { setPreviewTable(null); return; }
+    if (floatBar) { setFloatBar(null); return; }
     if (showTableMenu) { setShowTableMenu(false); return; }
     if (showStatusDropdown) { setShowStatusDropdown(false); return; }
+    if (showLayoutModal) { setShowLayoutModal(false); return; }
     if (showSectionsModal) { setShowSectionsModal(false); return; }
     if (showAddModal) { setShowAddModal(false); return; }
-  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, isPrintingOnly, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showTableMenu, showSectionsModal, showAddModal]);
+  }, [showShortcutsHelp, printerConfirm.show, errorDialog.show, sectionToDelete, deleteConfirmTable, billDialogTable, isPrinting, isPrintingOnly, confirmTableChange, changeTableDialog, confirmCombineTable, combineDialog, cancelOrderConfirm, isCancellingOrder, previewTable, showStatusDropdown, showTableMenu, showLayoutModal, showSectionsModal, showAddModal, floatBar]);
 
   const openFocusedTable = useCallback((table: Table) => {
     if (checkingTableId) return;
@@ -863,19 +1030,18 @@ const Tables: React.FC = () => {
     <>
       <div className="tables-page">
         {viewMode === 'layout' ? (
-          <div className="tables-layout-container">
+          <div className="tables-layout-container" ref={layoutContainerRef}>
             {tables.length === 0 ? (
-              <div className="empty-state">
-                <div className="tables-empty-icon">
-                  <Grid3X3 size={30} />
-                </div>
-                <p>No tables configured</p>
-                {isAdmin && (
-                  <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '1rem' }}>
+              <Empty
+                icon={<Grid3X3 />}
+                title="No tables configured"
+                text="Set up your dining tables to start seating guests and taking orders."
+                action={isAdmin && (
+                  <button className="gr-btn gr-btn--primary" onClick={() => setShowAddModal(true)}>
                     Add Your First Table
                   </button>
                 )}
-              </div>
+              />
             ) : (
               <>
                 {/* Section filter pills + status filter */}
@@ -940,15 +1106,21 @@ const Tables: React.FC = () => {
                       {group.name}
                       <span className="tab-count">{group.tables.length}</span>
                     </div>
-                    <div className="tables-layout-grid">
+                    <div
+                      className={`tables-layout-grid${cardSize !== 'default' ? ` cards-${cardSize}` : ''}${denseCards ? ' cards-dense' : ''}`}
+                      style={gridColumns > 0 ? { gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` } : undefined}
+                    >
                 {group.tables.map((table) => {
                   const idx = tableIndexById.get(table.id) ?? -1;
                   const activeOrder = getActiveOrderByTable(table.id);
                   return (
                     <div
                       key={table.id}
-                      className={`table-layout-card ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
+                      className={`table-layout-card ${activeOrder ? 'occupied' : ''} ${idx === kbFocusedIndex ? 'kb-focused' : ''} ${floatBar?.tableId === table.id ? 'actions-open' : ''}`}
+                      data-ctx-table={activeOrder ? table.id : undefined}
                       onClick={() => handleTableClick(table)}
+                      onMouseEnter={(e) => handleCardHover(e, table)}
+                      onMouseLeave={scheduleFloatBarHide}
                       style={{ animationDelay: `${Math.min(idx, 15) * 25}ms` }}
                     >
                       {checkingTableId === table.id && (
@@ -974,27 +1146,28 @@ const Tables: React.FC = () => {
                       )}
                       <div className="table-card-head">
                         {activeOrder ? (
-                          <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
+                          showTimer && <OrderTimer createdAt={activeOrder.createdAt} className="table-card-timer" />
                         ) : (
-                          <span className="table-status-chip available">Available</span>
+                          showStatus && <span className="table-status-chip available">Available</span>
                         )}
                       </div>
                       <div className="table-card-body">
                         <div className="table-layout-number">{tableLabel(table)}</div>
-                        <div className={`table-card-sub ${activeOrder ? 'amount' : ''}`}>
-                          {activeOrder
-                            ? `${formatCurrencyInt(activeOrder.totalAmount)} · ${activeOrder.items.length} item${activeOrder.items.length === 1 ? '' : 's'}`
-                            : `${table.seats} seats`}
-                        </div>
+                        {showInfo && (
+                          <div className={`table-card-sub ${activeOrder ? 'amount' : ''}`}>
+                            {activeOrder ? formatCurrencyInt(activeOrder.totalAmount) : `${table.seats} seats`}
+                          </div>
+                        )}
                       </div>
-                      {activeOrder && (
-                        <div className="table-card-actions">
+                      {activeOrder && actionStyle !== 'hidden' && actionsFit && (
+                        <div className={`table-card-actions${actionStyle !== 'row' ? ` actions-${actionStyle}` : ''}`}>
                           <button
                             className="table-bill-btn new-design"
                             onClick={(e) => handleBillClick(e, table)}
                             data-tooltip="Print Bill"
                           >
                             <Printer size={15} />
+                            {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
                           </button>
                           <button
                             className="table-change-btn"
@@ -1002,6 +1175,7 @@ const Tables: React.FC = () => {
                             data-tooltip="Change Table"
                           >
                             <ArrowRightLeft size={14} />
+                            {actionStyle === 'labeled' && <span className="action-label">Move</span>}
                           </button>
                           <button
                             className="table-combine-btn"
@@ -1009,6 +1183,7 @@ const Tables: React.FC = () => {
                             data-tooltip="Merge Bill"
                           >
                             <Combine size={14} />
+                            {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
                           </button>
                           <button
                             className="table-preview-btn"
@@ -1016,6 +1191,7 @@ const Tables: React.FC = () => {
                             data-tooltip="Preview Order"
                           >
                             <Eye size={14} />
+                            {actionStyle === 'labeled' && <span className="action-label">View</span>}
                           </button>
                         </div>
                       )}
@@ -1029,9 +1205,9 @@ const Tables: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="card">
-            <div className="card-body" style={{ padding: 0 }}>
-              <table className="items-table">
+          <div className="gr-card">
+            <div className="gr-card__body" style={{ padding: 0 }}>
+              <table className="gr-table">
                 <thead>
                   <tr>
                     <th>Table #</th>
@@ -1055,6 +1231,7 @@ const Tables: React.FC = () => {
                       <tr
                         key={table.id}
                         className={`clickable-row ${idx === kbFocusedIndex ? 'kb-focused' : ''}`}
+                        data-ctx-table={activeOrder ? table.id : undefined}
                         onClick={() => handleTableClick(table)}
                         style={{ cursor: 'pointer' }}
                       >
@@ -1068,7 +1245,7 @@ const Tables: React.FC = () => {
                         </td>
                         <td>{table.seats} seats</td>
                         <td>
-                          <span className={`badge ${activeOrder ? 'badge-warning' : 'badge-success'}`}>
+                          <span className={`gr-badge ${activeOrder ? 'badge-warning' : 'badge-success'}`}>
                             {activeOrder ? 'Occupied' : 'Available'}
                           </span>
                         </td>
@@ -1088,45 +1265,49 @@ const Tables: React.FC = () => {
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="action-btns">
-                            {activeOrder && (
+                            {activeOrder && actionStyle !== 'hidden' && (
                               <>
                                 <button
-                                  className="action-btn"
+                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
                                   style={{ background: 'rgba(245,130,32, 0.1)', color: 'var(--primary)' }}
                                   onClick={(e) => handleBillClick(e as any, table)}
                                   title="Print Bill"
                                 >
                                   <Printer size={14} />
+                                  {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
                                 </button>
-                                <button 
-                                  className="action-btn" 
+                                <button
+                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
                                   style={{ background: 'rgba(33,150,243, 0.1)', color: 'var(--info)' }}
                                   onClick={(e) => handleChangeTableClick(e as any, table)}
                                   title="Change Table"
                                 >
                                   <ArrowRightLeft size={14} />
+                                  {actionStyle === 'labeled' && <span className="action-label">Move</span>}
                                 </button>
                                 <button
-                                  className="action-btn"
+                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
                                   style={{ background: 'rgba(245,166,35, 0.1)', color: 'var(--warning)' }}
                                   onClick={(e) => handleCombineClick(e as any, table)}
                                   title="Merge Bill"
                                 >
                                   <Combine size={14} />
+                                  {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
                                 </button>
                                 <button
-                                  className="action-btn"
+                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
                                   style={{ background: 'rgba(45,55,72, 0.1)', color: 'var(--secondary)' }}
                                   onClick={(e) => handlePreviewClick(e as any, table)}
                                   title="Preview Order"
                                 >
                                   <Eye size={14} />
+                                  {actionStyle === 'labeled' && <span className="action-label">View</span>}
                                 </button>
                               </>
                             )}
                             {isAdmin && deleteMode && (
                               <button 
-                                className="action-btn delete" 
+                                className="gr-iconbtn gr-iconbtn--sm delete" 
                                 onClick={() => handleDeleteTable(table)}
                                 disabled={loadingTableId === table.id}
                                 style={{
@@ -1156,18 +1337,18 @@ const Tables: React.FC = () => {
 
       {/* Add Table Modal */}
       {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowAddModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Add New Table</h2>
-              <button className="close-btn" onClick={() => setShowAddModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowAddModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleAddTable}>
-              <div className="modal-body">
-                <div className="form-row">
-                  <div className="form-group">
+              <div className="gr-modal__body">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Table Name</label>
                     <input
                       type="text"
@@ -1176,7 +1357,7 @@ const Tables: React.FC = () => {
                       placeholder="e.g., 1A, 2C, 4AA"
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Table Number</label>
                     <input
                       type="number"
@@ -1187,8 +1368,8 @@ const Tables: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Seats</label>
                     <input
                       type="number"
@@ -1199,7 +1380,7 @@ const Tables: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Section</label>
                     <select
                       value={newTable.section || defaultSectionName}
@@ -1212,7 +1393,7 @@ const Tables: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button
                   type="submit"
                   variant="primary"
@@ -1237,15 +1418,15 @@ const Tables: React.FC = () => {
 
       {/* Manage Sections Modal */}
       {showSectionsModal && (
-        <div className="modal-overlay" onClick={() => setShowSectionsModal(false)}>
-          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowSectionsModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Floor Sections</h2>
-              <button className="close-btn" onClick={() => setShowSectionsModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowSectionsModal(false)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="sections-add-row">
                 <input
                   type="text"
@@ -1293,7 +1474,7 @@ const Tables: React.FC = () => {
                             disabled={sectionLoading}
                           />
                           <button
-                            className="section-icon-btn"
+                            className="gr-iconbtn gr-iconbtn--sm"
                             title="Save"
                             onClick={() => handleRenameSection(name)}
                             disabled={sectionLoading}
@@ -1301,7 +1482,7 @@ const Tables: React.FC = () => {
                             <Check size={14} />
                           </button>
                           <button
-                            className="section-icon-btn"
+                            className="gr-iconbtn gr-iconbtn--sm"
                             title="Cancel"
                             onClick={() => setEditingSection(null)}
                             disabled={sectionLoading}
@@ -1320,7 +1501,7 @@ const Tables: React.FC = () => {
                           </span>
                           {!isDefault && (
                             <button
-                              className="section-icon-btn"
+                              className="gr-iconbtn gr-iconbtn--sm"
                               title="Set as default — unassigned tables go here"
                               onClick={() => handleSetDefaultSection(name)}
                               disabled={sectionLoading}
@@ -1329,7 +1510,7 @@ const Tables: React.FC = () => {
                             </button>
                           )}
                           <button
-                            className="section-icon-btn"
+                            className="gr-iconbtn gr-iconbtn--sm"
                             title="Rename section"
                             onClick={() => { setEditingSection(name); setEditingSectionValue(name); }}
                             disabled={sectionLoading}
@@ -1337,7 +1518,7 @@ const Tables: React.FC = () => {
                             <Pencil size={14} />
                           </button>
                           <button
-                            className="section-icon-btn danger"
+                            className="gr-iconbtn gr-iconbtn--sm danger"
                             title={isDefault ? 'The default section cannot be deleted' : 'Delete section'}
                             onClick={() => setSectionToDelete(name)}
                             disabled={sectionLoading || isDefault}
@@ -1357,19 +1538,19 @@ const Tables: React.FC = () => {
 
       {/* Bill Dialog */}
       {billDialogTable && billDialogOrder && (
-        <div className="modal-overlay" onClick={() => !isPrinting && !isPrintingOnly && setBillDialogTable(null)}>
-          <div className="modal bill-dialog" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => !isPrinting && !isPrintingOnly && setBillDialogTable(null)}>
+          <div className="gr-modal bill-dialog" onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Print Bill - Table {tableLabel(billDialogTable)}</h2>
               <button 
-                className="close-btn" 
+                className="gr-iconbtn" 
                 onClick={() => !isPrinting && !isPrintingOnly && setBillDialogTable(null)}
                 disabled={isPrinting || isPrintingOnly}
               >
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="bill-total-display">
                 <span className="bill-total-label">Total Amount</span>
                 <span className="bill-total-value">{formatCurrency(billDialogTotal)}</span>
@@ -1377,9 +1558,9 @@ const Tables: React.FC = () => {
               
               <p className="bill-hint">Print Bill prints without completing · Enter completes the order</p>
             </div>
-            <div className="modal-footer">
+            <div className="gr-modal__foot">
               <button
-                className="btn btn-secondary"
+                className="gr-btn gr-btn--secondary"
                 onClick={handlePrintOnly}
                 disabled={isPrinting || isPrintingOnly}
               >
@@ -1387,14 +1568,14 @@ const Tables: React.FC = () => {
                 {isPrintingOnly ? 'Printing...' : 'Print Bill'}
               </button>
               <button
-                className="btn btn-primary btn-lg"
+                className="gr-btn gr-btn--primary gr-btn--sm"
                 onClick={() => handlePrintAndComplete()}
                 disabled={isPrinting || isPrintingOnly}
               >
                 {isPrinting ? 'Completing...' : 'Complete Order'}
               </button>
               <button 
-                className="btn btn-secondary" 
+                className="gr-btn gr-btn--secondary" 
                 onClick={() => setBillDialogTable(null)}
                 disabled={isPrinting || isPrintingOnly}
               >
@@ -1448,15 +1629,15 @@ const Tables: React.FC = () => {
 
       {/* Change Table Dialog */}
       {changeTableDialog && !confirmTableChange && (
-        <div className="modal-overlay" onClick={() => setChangeTableDialog(null)}>
-          <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setChangeTableDialog(null)}>
+          <div className="gr-modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Change Table</h2>
-              <button className="close-btn" onClick={() => setChangeTableDialog(null)}>
+              <button className="gr-iconbtn" onClick={() => setChangeTableDialog(null)}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <p style={{ marginBottom: '1rem', color: 'var(--gray-600)' }}>
                 Select a table to move the order from <strong>Table {tableLabel(changeTableDialog.fromTable)}</strong>:
               </p>
@@ -1475,14 +1656,12 @@ const Tables: React.FC = () => {
                     </button>
                   ))}
                 {tables.filter(t => t.id !== changeTableDialog.fromTable.id && !getActiveOrderByTable(t.id)).length === 0 && (
-                  <p style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>
-                    No available tables to move to
-                  </p>
+                  <Empty compact icon={<ArrowRightLeft />} text="No available tables to move to" />
                 )}
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setChangeTableDialog(null)}>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={() => setChangeTableDialog(null)}>
                 Cancel
               </button>
             </div>
@@ -1492,15 +1671,15 @@ const Tables: React.FC = () => {
 
       {/* Confirm Table Change Dialog */}
       {changeTableDialog && confirmTableChange && (
-        <div className="modal-overlay" onClick={() => setConfirmTableChange(null)}>
-          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setConfirmTableChange(null)}>
+          <div className="gr-modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Confirm Table Change</h2>
-              <button className="close-btn" onClick={() => setConfirmTableChange(null)}>
+              <button className="gr-iconbtn" onClick={() => setConfirmTableChange(null)}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body" style={{ textAlign: 'center' }}>
+            <div className="gr-modal__body" style={{ textAlign: 'center' }}>
               <div style={{ 
                 width: '64px', 
                 height: '64px', 
@@ -1520,11 +1699,11 @@ const Tables: React.FC = () => {
                 This will release Table {tableLabel(changeTableDialog.fromTable)} and assign the order to Table {tableLabel(confirmTableChange)}.
               </p>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setConfirmTableChange(null)}>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={() => setConfirmTableChange(null)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleTableChange}>
+              <button className="gr-btn gr-btn--primary" onClick={handleTableChange}>
                 Confirm Change
               </button>
             </div>
@@ -1534,15 +1713,15 @@ const Tables: React.FC = () => {
 
       {/* Merge Bill Dialog */}
       {combineDialog && !confirmCombineTable && (
-        <div className="modal-overlay" onClick={() => setCombineDialog(null)}>
-          <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setCombineDialog(null)}>
+          <div className="gr-modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Merge Bill</h2>
-              <button className="close-btn" onClick={() => setCombineDialog(null)}>
+              <button className="gr-iconbtn" onClick={() => setCombineDialog(null)}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <p style={{ marginBottom: '1rem', color: 'var(--gray-600)' }}>
                 Select an occupied table to merge into <strong>Table {tableLabel(combineDialog.intoTable)}</strong>'s order:
               </p>
@@ -1566,14 +1745,12 @@ const Tables: React.FC = () => {
                     );
                   })}
                 {tables.filter(t => t.id !== combineDialog.intoTable.id && getActiveOrderByTable(t.id)).length === 0 && (
-                  <p style={{ textAlign: 'center', color: 'var(--gray-500)', padding: '2rem' }}>
-                    No other occupied tables to merge with
-                  </p>
+                  <Empty compact icon={<Combine />} text="No other occupied tables to merge with" />
                 )}
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setCombineDialog(null)}>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={() => setCombineDialog(null)}>
                 Cancel
               </button>
             </div>
@@ -1583,15 +1760,15 @@ const Tables: React.FC = () => {
 
       {/* Confirm Combine Dialog */}
       {combineDialog && confirmCombineTable && (
-        <div className="modal-overlay" onClick={() => !isCombining && setConfirmCombineTable(null)}>
-          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => !isCombining && setConfirmCombineTable(null)}>
+          <div className="gr-modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Confirm Merge</h2>
-              <button className="close-btn" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
+              <button className="gr-iconbtn" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body" style={{ textAlign: 'center' }}>
+            <div className="gr-modal__body" style={{ textAlign: 'center' }}>
               <div style={{
                 width: '64px',
                 height: '64px',
@@ -1611,11 +1788,11 @@ const Tables: React.FC = () => {
                 Table {tableLabel(confirmCombineTable)} will be freed and its items will appear on Table {tableLabel(combineDialog.intoTable)}'s bill.
               </p>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={() => setConfirmCombineTable(null)} disabled={isCombining}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleCombine} disabled={isCombining}>
+              <button className="gr-btn gr-btn--primary" onClick={handleCombine} disabled={isCombining}>
                 {isCombining ? 'Merging...' : 'Confirm Merge'}
               </button>
             </div>
@@ -1625,15 +1802,15 @@ const Tables: React.FC = () => {
 
       {/* Order Preview Dialog */}
       {previewTable && previewOrder && (
-        <div className="modal-overlay" onClick={() => setPreviewTable(null)}>
-          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setPreviewTable(null)}>
+          <div className="gr-modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>Order Details - Table {tableLabel(previewTable)}</h2>
-              <button className="close-btn" onClick={() => setPreviewTable(null)}>
+              <button className="gr-iconbtn" onClick={() => setPreviewTable(null)}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="bill-items">
                 {previewOrder.items.map((oi: any, idx: number) => (
                   <div className="bill-item" key={oi.itemId || idx}>
@@ -1665,15 +1842,16 @@ const Tables: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-footer" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div className="gr-modal__foot" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
               <button
-                className="btn btn-danger"
+                className="gr-btn gr-btn--danger"
+                style={{ marginRight: 'auto' }}
                 onClick={() => setCancelOrderConfirm(previewOrder)}
               >
                 Cancel Order
               </button>
               <button
-                className="btn btn-secondary"
+                className="gr-btn gr-btn--secondary"
                 onClick={() => {
                   setPreviewTable(null);
                   setChangeTableDialog({ fromTable: previewTable, order: previewOrder });
@@ -1682,7 +1860,7 @@ const Tables: React.FC = () => {
                 Move
               </button>
               <button
-                className="btn btn-secondary"
+                className="gr-btn gr-btn--secondary"
                 onClick={() => {
                   const t = previewTable;
                   setPreviewTable(null);
@@ -1693,7 +1871,7 @@ const Tables: React.FC = () => {
                 Bill
               </button>
               <button
-                className="btn btn-primary"
+                className="gr-btn gr-btn--primary"
                 onClick={() => navigate(`/order/${previewTable.id}`)}
               >
                 Open Order
@@ -1713,6 +1891,188 @@ const Tables: React.FC = () => {
         onConfirm={handleCancelOrder}
         onCancel={() => !isCancellingOrder && setCancelOrderConfirm(null)}
       />
+
+      {/* Floating action bar — used when cards are too narrow for inline buttons */}
+      {floatBar && (() => {
+        const t = tables.find(x => x.id === floatBar.tableId);
+        const order = t ? getActiveOrderByTable(t.id) : null;
+        if (!t || !order) return null;
+        return (
+          <div
+            className={`table-float-actions dir-${floatBar.dir}${actionStyle === 'labeled' ? ' with-labels' : ''}`}
+            style={{ top: floatBar.top, left: floatBar.left }}
+            onMouseEnter={cancelFloatBarHide}
+            onMouseLeave={scheduleFloatBarHide}
+          >
+            <button
+              className="table-bill-btn new-design"
+              title="Print Bill"
+              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleBillClick(e, t); }}
+            >
+              <Printer size={15} />
+              {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
+            </button>
+            <button
+              className="table-change-btn"
+              title="Change Table"
+              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleChangeTableClick(e, t); }}
+            >
+              <ArrowRightLeft size={14} />
+              {actionStyle === 'labeled' && <span className="action-label">Move</span>}
+            </button>
+            <button
+              className="table-combine-btn"
+              title="Merge Bill"
+              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleCombineClick(e, t); }}
+            >
+              <Combine size={14} />
+              {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
+            </button>
+            <button
+              className="table-preview-btn"
+              title="Preview Order"
+              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handlePreviewClick(e, t); }}
+            >
+              <Eye size={14} />
+              {actionStyle === 'labeled' && <span className="action-label">View</span>}
+            </button>
+            <button
+              className="table-open-btn"
+              title="Open Order"
+              onClick={(e) => { e.stopPropagation(); setFloatBar(null); navigate(`/order/${t.id}`); }}
+            >
+              <ArrowRight size={14} />
+              {actionStyle === 'labeled' && <span className="action-label">Open</span>}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Customize Layout Modal */}
+      {showLayoutModal && (
+        <div className="gr-modal-live is-open" onClick={() => setShowLayoutModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
+              <h2>Customize Layout</h2>
+              <button className="gr-iconbtn" onClick={() => setShowLayoutModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="gr-modal__body layout-prefs">
+              <div className="layout-pref-group">
+                <span className="pref-label">Tables per row</span>
+                <p className="gr-caption">Fixed number of table cards per row (up to 15), or auto-fit to the available width. When cards get too small, action buttons move to a floating bar on click.</p>
+                <div className="layout-cols-control">
+                  <input
+                    type="range"
+                    className="gr-range"
+                    min={0}
+                    max={15}
+                    step={1}
+                    value={gridColumns}
+                    style={{ '--v': `${(gridColumns / 15) * 100}%` } as React.CSSProperties}
+                    onChange={e => setGridColumns(parseInt(e.target.value, 10))}
+                  />
+                  <span className="layout-cols-value">{gridColumns === 0 ? 'Auto' : `${gridColumns} / row`}</span>
+                </div>
+              </div>
+
+              <div className="layout-pref-group">
+                <span className="pref-label">Card size</span>
+                <p className="gr-caption">Smaller cards fit more rows on screen.</p>
+                <Seg
+                  value={cardSize}
+                  onChange={v => setCardSize(v as typeof cardSize)}
+                  options={[
+                    { value: 'compact', label: 'Compact' },
+                    { value: 'default', label: 'Default' },
+                    { value: 'large', label: 'Large' },
+                  ]}
+                />
+              </div>
+
+              <div className="layout-pref-group">
+                <span className="pref-label">Card content</span>
+                <div className="pref-toggles">
+                  <label className="gr-switch pref-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showStatus}
+                      onChange={e => setShowStatus(e.target.checked)}
+                    />
+                    <span className="pref-toggle__text">
+                      <strong>Status chip</strong>
+                      <small>"Available" label on free tables.</small>
+                    </span>
+                  </label>
+                  <label className="gr-switch pref-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showTimer}
+                      onChange={e => setShowTimer(e.target.checked)}
+                    />
+                    <span className="pref-toggle__text">
+                      <strong>Order timer</strong>
+                      <small>Elapsed time on occupied tables.</small>
+                    </span>
+                  </label>
+                  <label className="gr-switch pref-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showInfo}
+                      onChange={e => setShowInfo(e.target.checked)}
+                    />
+                    <span className="pref-toggle__text">
+                      <strong>Details line</strong>
+                      <small>Seats when free, order amount when occupied.</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="layout-pref-group">
+                <span className="pref-label">Action buttons</span>
+                <p className="gr-caption">How the bill, move, merge and preview buttons appear on occupied tables.</p>
+                <Seg
+                  value={actionStyle}
+                  onChange={v => setActionStyle(v as typeof actionStyle)}
+                  options={[
+                    { value: 'row', label: 'Row' },
+                    { value: 'compact', label: 'Compact' },
+                    { value: 'labeled', label: 'Labeled' },
+                    { value: 'hidden', label: 'Hidden' },
+                  ]}
+                />
+              </div>
+
+              {actionStyle !== 'hidden' && (
+                <div className="layout-pref-group">
+                  <span className="pref-label">Floating bar position</span>
+                  <p className="gr-caption">Where the floating action bar appears when a card is too small for inline buttons.</p>
+                  <Seg
+                    value={floatPosition}
+                    onChange={v => setFloatPosition(v as typeof floatPosition)}
+                    options={[
+                      { value: 'bottom', label: 'Bottom' },
+                      { value: 'top', label: 'Top' },
+                      { value: 'left', label: 'Left' },
+                      { value: 'right', label: 'Right' },
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={resetTableLayout}>
+                Reset defaults
+              </button>
+              <button className="gr-btn gr-btn--primary" onClick={() => setShowLayoutModal(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BillModal />
 

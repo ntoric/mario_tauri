@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Lock, Eye, EyeOff } from 'lucide-react';
+import { EyeOff } from 'lucide-react';
 import { api } from '../services/api';
 import notify from '../utils/toast';
+import { Modal, Btn, Field, Input, Ic, IconBtn, Alert } from './gr';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -17,28 +18,22 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       setError('All fields are required');
       return;
     }
-
     if (newPassword.length < 6) {
       setError('New password must be at least 6 characters');
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setError('New passwords do not match');
       return;
     }
-
     if (currentPassword === newPassword) {
       setError('New password must be different from current password');
       return;
@@ -48,10 +43,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     try {
       await api.changePassword(currentPassword, newPassword);
       notify.success('Password changed successfully');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      onClose();
+      handleClose();
     } catch (err: any) {
       setError(err.message || 'Failed to change password');
     } finally {
@@ -68,117 +60,78 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   };
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Change Password</h2>
-          <button className="close-btn" onClick={handleClose}>
-            <X size={20} />
-          </button>
-        </div>
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      title="Change password"
+      icon={<Ic name="lock" size={20} />}
+      footer={
+        <>
+          <Btn variant="secondary" onClick={handleClose}>Cancel</Btn>
+          <Btn
+            variant="primary"
+            isLoading={isLoading}
+            loadingText="Changing…"
+            onClick={handleSubmit}
+          >
+            Change password
+          </Btn>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="gr-stack" id="change-password-form">
+        {error && <Alert variant="danger">{error}</Alert>}
 
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            {error && (
-              <div style={{
-                padding: '0.75rem',
-                background: 'rgba(229,57,53, 0.1)',
-                color: 'var(--danger)',
-                borderRadius: 'var(--radius)',
-                marginBottom: '1rem',
-                fontSize: '0.9rem'
-              }}>
-                {error}
-              </div>
-            )}
-
-            <div className="form-group">
-              <label>Current Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={e => setCurrentPassword(e.target.value)}
-                  placeholder="Enter your current password"
-                  required
-                  style={{ paddingRight: '40px' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--gray-500)',
-                    padding: '4px'
-                  }}
-                >
-                  {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>New Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Enter new password (min 6 characters)"
-                  required
-                  minLength={6}
-                  style={{ paddingRight: '40px' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--gray-500)',
-                    padding: '4px'
-                  }}
-                >
-                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your new password"
-                required
-              />
-            </div>
+        <Field label="Current password">
+          <div className="gr-pass">
+            <Input
+              type={showCurrentPassword ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              placeholder="Enter your current password"
+              required
+            />
+            <IconBtn
+              sm
+              label={showCurrentPassword ? 'Hide password' : 'Show password'}
+              icon={showCurrentPassword ? <Ic icon={EyeOff} size={16} /> : <Ic name="eye" size={16} />}
+              onClick={() => setShowCurrentPassword(v => !v)}
+              tabIndex={-1}
+            />
           </div>
+        </Field>
 
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>
-              <Lock size={16} />
-              {isLoading ? 'Changing...' : 'Change Password'}
-            </button>
+        <Field label="New password" help="Minimum 6 characters">
+          <div className="gr-pass">
+            <Input
+              type={showNewPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              required
+              minLength={6}
+            />
+            <IconBtn
+              sm
+              label={showNewPassword ? 'Hide password' : 'Show password'}
+              icon={showNewPassword ? <Ic icon={EyeOff} size={16} /> : <Ic name="eye" size={16} />}
+              onClick={() => setShowNewPassword(v => !v)}
+              tabIndex={-1}
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </Field>
+
+        <Field label="Confirm new password">
+          <Input
+            type="password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="Confirm your new password"
+            required
+          />
+        </Field>
+      </form>
+    </Modal>
   );
 };
 

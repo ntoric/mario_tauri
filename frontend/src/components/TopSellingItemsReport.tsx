@@ -6,6 +6,7 @@ import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { saveCSVWithDialog } from '../utils/csvExport';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import Pagination from './ui/Pagination';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
@@ -174,7 +175,7 @@ const TopSellingItemsReport: React.FC = () => {
           {(['today', 'week', 'month', 'all'] as DateRange[]).map(r => (
             <button
               key={r}
-              className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
+              className={`gr-btn ${dateRange === r ? 'gr-btn--primary' : 'gr-btn--secondary'} gr-btn--sm`}
               onClick={() => { setDateRange(r); setPage(1); }}
             >
               {rangeLabel[r]}
@@ -188,12 +189,12 @@ const TopSellingItemsReport: React.FC = () => {
             placeholder="Search item or category..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            className="form-input"
+            className="gr-input"
             style={{ paddingLeft: '2.25rem', width: '100%' }}
           />
         </div>
         <select
-          className="form-input"
+          className="gr-input"
           value={pageSize}
           onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
           style={{ width: 'auto', padding: '0.35rem 0.5rem', fontSize: '0.82rem' }}
@@ -203,7 +204,7 @@ const TopSellingItemsReport: React.FC = () => {
             <option key={n} value={n}>{n} / page</option>
           ))}
         </select>
-        <button className="btn btn-outline btn-sm" onClick={handleExportCSV} disabled={exporting} title="Export CSV">
+        <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={handleExportCSV} disabled={exporting} title="Export CSV">
           <Download size={15} style={{ marginRight: '0.35rem' }} />
           {exporting ? 'Exporting...' : 'Export'}
         </button>
@@ -211,32 +212,32 @@ const TopSellingItemsReport: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
-        <div className="stat-card">
-          <div className="stat-icon primary"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well primary"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{report?.uniqueItems ?? 0}</div>
-            <div className="stat-label">Unique Items Sold</div>
+            <div className="gr-stat__value">{report?.uniqueItems ?? 0}</div>
+            <div className="gr-caption">Unique Items Sold</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon success"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well success"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{report?.totalCount ?? 0}</div>
-            <div className="stat-label">Total Quantity Sold</div>
+            <div className="gr-stat__value">{report?.totalCount ?? 0}</div>
+            <div className="gr-caption">Total Quantity Sold</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon warning"><BarChart2 size={24} /></div>
+        <div className="gr-card pos-stat">
+          <div className="gr-well warning"><BarChart2 size={24} /></div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(report?.totalRevenue ?? 0)}</div>
-            <div className="stat-label">Total Revenue</div>
+            <div className="gr-stat__value">{formatCurrency(report?.totalRevenue ?? 0)}</div>
+            <div className="gr-caption">Total Revenue</div>
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="card">
-        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="gr-card">
+        <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '1rem' }}>
             Item Sales — {rangeLabel[dateRange]}
           </h3>
@@ -244,16 +245,13 @@ const TopSellingItemsReport: React.FC = () => {
             {total} record{total !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="gr-card__body" style={{ padding: 0 }}>
           {report === null && loading ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
               <p style={{ fontSize: '0.9rem' }}>Loading report…</p>
             </div>
           ) : !loading && total === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
-              <BarChart2 size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
-              <p style={{ fontSize: '0.9rem' }}>No item sales data for this period</p>
-            </div>
+            <Empty icon={<BarChart2 />} title="No item sales data" text="No item sales data for this period." />
           ) : (
             <>
               <div style={{ overflowX: 'auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s' }}>

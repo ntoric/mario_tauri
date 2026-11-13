@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
+import 'store_logo.dart';
 
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -330,10 +331,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               decoration: ClayStyles.surface(radiusValue: 13),
               child: Padding(
                 padding: const EdgeInsets.all(7),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.contain,
-                ),
+                child: StoreLogo(auth.currentStore),
               ),
             ),
           ),

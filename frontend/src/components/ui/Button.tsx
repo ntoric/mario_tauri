@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Btn, type BtnVariant } from '../gr';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'outline' | 'ghost';
@@ -11,61 +11,36 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isFullWidth?: boolean;
 }
 
+const VARIANT_MAP: Record<NonNullable<ButtonProps['variant']>, BtnVariant> = {
+  primary: 'primary',
+  secondary: 'secondary',
+  success: 'success',
+  danger: 'danger',
+  warning: 'soft',
+  outline: 'secondary',
+  ghost: 'ghost',
+};
+
 export const Button: React.FC<ButtonProps> = ({
-  children,
   variant = 'primary',
   size = 'md',
-  isLoading = false,
+  isLoading,
   loadingText,
   leftIcon,
   rightIcon,
-  disabled,
-  isFullWidth = false,
-  className = '',
+  isFullWidth,
   ...props
-}) => {
-  const baseStyles = 'btn';
-  
-  const variantStyles = {
-    primary: 'btn-primary',
-    secondary: 'btn-secondary',
-    success: 'btn-success',
-    danger: 'btn-danger',
-    warning: 'btn-warning',
-    outline: 'btn-outline',
-    ghost: 'btn-ghost',
-  };
-
-  const sizeStyles = {
-    sm: 'btn-sm',
-    md: '',
-    lg: 'btn-lg',
-  };
-
-  const widthClass = isFullWidth ? 'btn-full' : '';
-
-  const combinedClassName = `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthClass} ${className}`.trim();
-
-  return (
-    <button
-      className={combinedClassName}
-      disabled={disabled || isLoading}
-      {...props}
-    >
-      {isLoading ? (
-        <>
-          <Loader2 size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16} className="animate-spin" />
-          {loadingText || children}
-        </>
-      ) : (
-        <>
-          {leftIcon && <span className="btn-icon-left">{leftIcon}</span>}
-          {children}
-          {rightIcon && <span className="btn-icon-right">{rightIcon}</span>}
-        </>
-      )}
-    </button>
-  );
-};
+}) => (
+  <Btn
+    variant={VARIANT_MAP[variant]}
+    size={size}
+    block={isFullWidth}
+    isLoading={isLoading}
+    loadingText={loadingText}
+    leftIcon={leftIcon}
+    rightIcon={rightIcon}
+    {...props}
+  />
+);
 
 export default Button;

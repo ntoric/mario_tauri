@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart2, TrendingUp, ShoppingBag, Package, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react';
+import { BarChart2, TrendingUp, ShoppingBag, Package, Calendar, ArrowUpRight, ArrowDownRight, ExternalLink, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { useReportPageHeader } from '../hooks/useReportPageHeader';
 import { formatCurrency } from '../utils/currency';
 import { AreaChart, DonutChart, ChartLegend, CHART_COLORS } from './ui/Charts';
+import { Empty } from './gr';
 
 type DateRange = 'today' | 'week' | 'month' | 'all' | 'custom';
 
@@ -127,7 +128,7 @@ const Reports: React.FC = () => {
         });
       });
     }
-    return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 8);
+    return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 10);
   }, [filteredBills, completedOrders]);
 
   // Top selling categories
@@ -147,7 +148,7 @@ const Reports: React.FC = () => {
     if (Object.keys(map).length === 0) {
       completedOrders.forEach(o => processItems(o.items));
     }
-    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
   }, [filteredBills, completedOrders, items]);
 
   // Daily revenue for the last 7 days (always shown as trend)
@@ -204,7 +205,7 @@ const Reports: React.FC = () => {
         {(['today', 'week', 'month', 'all', 'custom'] as DateRange[]).map(r => (
           <button
             key={r}
-            className={`btn ${dateRange === r ? 'btn-primary' : 'btn-outline'} btn-sm`}
+            className={`gr-btn ${dateRange === r ? 'gr-btn--primary' : 'gr-btn--secondary'} gr-btn--sm`}
             onClick={() => setDateRange(r)}
           >
             {rangeLabel[r]}
@@ -233,13 +234,13 @@ const Reports: React.FC = () => {
 
       {/* Summary Stats */}
       <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card">
-          <div className="stat-icon primary">
+        <div className="gr-card pos-stat">
+          <div className="gr-well primary">
             <TrendingUp size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(totalRevenue)}</div>
-            <div className="stat-label">Total Revenue</div>
+            <div className="gr-stat__value">{formatCurrency(totalRevenue)}</div>
+            <div className="gr-caption">Total Revenue</div>
             {revenueChange !== null && dateRange !== 'all' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem', fontSize: '0.78rem', color: revenueChange >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                 {revenueChange >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
@@ -248,44 +249,44 @@ const Reports: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon success">
+        <div className="gr-card pos-stat">
+          <div className="gr-well success">
             <ShoppingBag size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{totalOrders}</div>
-            <div className="stat-label">Completed Orders</div>
+            <div className="gr-stat__value">{totalOrders}</div>
+            <div className="gr-caption">Completed Orders</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon warning">
+        <div className="gr-card pos-stat">
+          <div className="gr-well warning">
             <BarChart2 size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{formatCurrency(avgOrderValue)}</div>
-            <div className="stat-label">Avg Order Value</div>
+            <div className="gr-stat__value">{formatCurrency(avgOrderValue)}</div>
+            <div className="gr-caption">Avg Order Value</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(229,57,53, 0.15)', color: 'var(--danger)' }}>
+        <div className="gr-card pos-stat">
+          <div className="gr-well" style={{ background: 'var(--danger-tint)', color: 'var(--danger)' }}>
             <Calendar size={24} />
           </div>
           <div className="stat-content">
-            <div className="stat-value">{cancelledOrders}</div>
-            <div className="stat-label">Cancelled Orders</div>
+            <div className="gr-stat__value">{cancelledOrders}</div>
+            <div className="gr-caption">Cancelled Orders</div>
           </div>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
         {/* Daily Revenue Trend */}
-        <div className="card">
-          <div className="card-header">
+        <div className="gr-card">
+          <div className="gr-card__head">
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Revenue Trend (Last 7 Days)</h3>
           </div>
-          <div className="card-body" style={{ paddingTop: '0.75rem' }}>
+          <div className="gr-card__body" style={{ paddingTop: '0.75rem' }}>
             {dailyRevenue.every(d => d.revenue === 0) ? (
-              <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.875rem' }}>No revenue data available</p>
+              <Empty compact icon={<TrendingUp />} title="No revenue data" text="Revenue for the last 7 days will appear here." />
             ) : (
               <AreaChart
                 data={dailyRevenue.map(d => ({ label: d.label, value: d.revenue }))}
@@ -297,19 +298,19 @@ const Reports: React.FC = () => {
         </div>
 
         {/* Payment Methods */}
-        <div className="card">
-          <div className="card-header">
+        <div className="gr-card">
+          <div className="gr-card__head">
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Payment Methods</h3>
           </div>
-          <div className="card-body" style={{ paddingTop: '0.75rem' }}>
+          <div className="gr-card__body" style={{ paddingTop: '0.75rem' }}>
             {Object.keys(paymentBreakdown).length === 0 ? (
-              <p style={{ color: 'var(--gray-500)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.875rem' }}>No payment data</p>
+              <Empty compact icon={<CreditCard />} title="No payment data" text="Payment method breakdown will appear here." />
             ) : (
               (() => {
                 const colorMap: Record<string, string> = {
                   cash: 'var(--success)',
-                  card: '#63b3ed',
-                  upi: '#b794f4',
+                  card: 'var(--primary-strong)',
+                  upi: 'var(--ink)',
                 };
                 const donutData = Object.entries(paymentBreakdown)
                   .sort((a, b) => b[1] - a[1])
@@ -342,7 +343,7 @@ const Reports: React.FC = () => {
                   <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--gray-500)', marginTop: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dine-in</div>
                 </div>
                 <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.5)', border: '1px solid rgba(var(--surface-rgb),0.65)', borderRadius: '12px', padding: '0.75rem', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(var(--sheen-rgb),0.8), 0 1px 4px rgba(18,24,34,0.05)' }}>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#b794f4', fontVariantNumeric: 'tabular-nums' }}>{parcelOrders}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{parcelOrders}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--gray-600)', marginTop: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
                     <Package size={11} /> Parcel
                   </div>
@@ -356,19 +357,16 @@ const Reports: React.FC = () => {
       {/* Top Selling Categories + Top Selling Items */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
         {/* Top Selling Categories */}
-        <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="gr-card" style={{ height: '420px', display: 'flex', flexDirection: 'column' }}>
+          <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Top Selling Categories</h3>
-            <button className="btn btn-outline btn-sm" onClick={() => navigate('/reports/top-categories')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+            <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={() => navigate('/reports/top-categories')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
               Detailed Report <ExternalLink size={13} />
             </button>
           </div>
-          <div className="card-body">
+          <div className="gr-card__body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {categorySales.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
-                <BarChart2 size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
-                <p style={{ fontSize: '0.9rem' }}>No category data for this period</p>
-              </div>
+              <Empty icon={<BarChart2 />} title="No category data" text="No category sales for this period." />
             ) : (
               (() => {
                 const maxRev = categorySales[0].revenue;
@@ -376,7 +374,7 @@ const Reports: React.FC = () => {
                 return categorySales.map((cat, idx) => {
                   const pct = totalCatRev > 0 ? (cat.revenue / totalCatRev) * 100 : 0;
                   const barPct = maxRev > 0 ? (cat.revenue / maxRev) * 100 : 0;
-                  const colors = ['var(--primary)', '#63b3ed', '#b794f4', 'var(--success)', '#f6ad55', '#fc8181', '#68d391', '#76e4f7'];
+                  const colors = ['var(--primary)', 'var(--primary-strong)', 'var(--ink)', 'var(--success)', 'var(--primary)', 'var(--danger)', 'var(--success)', 'var(--primary-strong)'];
                   const color = colors[idx % colors.length];
                   return (
                     <div key={idx} style={{ marginBottom: '0.9rem' }}>
@@ -400,19 +398,16 @@ const Reports: React.FC = () => {
         </div>
 
         {/* Top Selling Items */}
-        <div className="card">
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="gr-card" style={{ height: '420px', display: 'flex', flexDirection: 'column' }}>
+          <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Top Selling Items</h3>
-            <button className="btn btn-outline btn-sm" onClick={() => navigate('/reports/top-items')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+            <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={() => navigate('/reports/top-items')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
               Detailed Report <ExternalLink size={13} />
             </button>
           </div>
-          <div className="card-body">
+          <div className="gr-card__body" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             {itemSales.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-500)' }}>
-                <BarChart2 size={48} style={{ marginBottom: '1rem', opacity: 0.4 }} />
-                <p style={{ fontSize: '0.9rem' }}>No sales data for this period</p>
-              </div>
+              <Empty icon={<ShoppingBag />} title="No sales data" text="No item sales for this period." />
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>

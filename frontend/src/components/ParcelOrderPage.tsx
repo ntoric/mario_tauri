@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Search, Printer, X, FileText, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Search, Printer, X, FileText, Star, ShoppingCart, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -12,8 +12,9 @@ import GstBillSummary from './GstBillSummary';
 import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import { isTaxEnabled } from '../utils/tax';
 import { orderItemUnitPrice } from '../utils/order';
-import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
+import { sortCategories, sortItemsByCategoryOrder, matchesSearchQuery } from '../utils/category';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { OrderItem, Item } from '../types';
 
 const ParcelOrderPage: React.FC = () => {
@@ -78,7 +79,7 @@ const ParcelOrderPage: React.FC = () => {
       title: 'New Parcel Order',
       subtitle: currentStore?.name || '',
       actions: (
-        <button className="btn btn-secondary" onClick={() => navigate('/')}>
+        <button className="gr-btn gr-btn--secondary" onClick={() => navigate('/')}>
           <ArrowLeft size={16} />
           Back to Tables
         </button>
@@ -107,9 +108,8 @@ const ParcelOrderPage: React.FC = () => {
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const category = categories.find(cat => cat.id === item.categoryId);
     const categoryName = category?.name || '';
-    const matchesSearch = searchQuery === '' ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      categoryName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesSearchQuery(item.name, searchQuery) ||
+      matchesSearchQuery(categoryName, searchQuery);
     return matchesCategory && matchesSearch;
   }), categories);
 
@@ -329,11 +329,12 @@ const ParcelOrderPage: React.FC = () => {
               <button
                 key={cat.id}
                 className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
+                data-ctx-category={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
               >
                 <span>{cat.name}</span>
                 {cat.isFavourite && (
-                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', marginLeft: 'auto', flexShrink: 0 }} />
+                  <Star size={12} fill="currentColor" style={{ color: 'var(--primary)', marginLeft: 'auto', flexShrink: 0 }} />
                 )}
               </button>
             ))}
@@ -366,11 +367,12 @@ const ParcelOrderPage: React.FC = () => {
               <div
                 key={item.id}
                 className="item-card"
+                data-ctx-item={item.id}
                 data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
                 {item.isFavourite && (
-                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
+                  <Star size={12} fill="currentColor" style={{ color: 'var(--primary)', position: 'absolute', top: '4px', right: '4px' }} />
                 )}
                 <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
                 <div className="item-name">{item.name}</div>
@@ -383,7 +385,7 @@ const ParcelOrderPage: React.FC = () => {
         {/* Right Sidebar - Customer + Cart (Petpooja style) */}
         <div className="order-page-right">
           <h3>Parcel Order</h3>
-          <div className="form-group" style={{ marginBottom: '0.6rem' }}>
+          <div className="gr-field" style={{ marginBottom: '0.6rem' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Name <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
             <input
               type="text"
@@ -393,7 +395,7 @@ const ParcelOrderPage: React.FC = () => {
               style={{ padding: '0.5rem', fontSize: '0.9rem' }}
             />
           </div>
-          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+          <div className="gr-field" style={{ marginBottom: '0.75rem' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>Mobile <span style={{ color: 'var(--gray-400)' }}>(optional)</span></label>
             <input
               type="text"
@@ -409,9 +411,7 @@ const ParcelOrderPage: React.FC = () => {
           </div>
 
           {orderItems.length === 0 ? (
-            <div className="empty-order">
-              Click items to add
-            </div>
+            <Empty compact icon={<ShoppingCart />} text="Click items to add" />
           ) : (
             <div className="order-items-scrollable">
               {orderItems.map(oi => (
@@ -423,14 +423,14 @@ const ParcelOrderPage: React.FC = () => {
                   </div>
                   <div className="order-item-actions">
                     <button
-                      className="quantity-btn"
+                      className="pos-qtybtn"
                       onClick={() => updateQuantity(oi.itemId, -1)}
                     >
                       <Minus size={10} />
                     </button>
                     <span className="order-item-quantity">{oi.quantity}</span>
                     <button
-                      className="quantity-btn"
+                      className="pos-qtybtn"
                       onClick={() => updateQuantity(oi.itemId, 1)}
                     >
                       <Plus size={10} />
@@ -474,36 +474,40 @@ const ParcelOrderPage: React.FC = () => {
           <span className="bottom-bar-items">Items: {orderItems.length}</span>
           <div className="bottom-bar-total-wrap">
             <button
-              className="bottom-bar-total-btn"
+              className={`bottom-bar-total-btn ${showBreakdown ? 'open' : ''}`}
               onClick={() => setShowBreakdown(!showBreakdown)}
             >
               Total: {formatCurrency(total)}
+              <ChevronUp size={14} className="breakdown-chevron" />
             </button>
             {showBreakdown && orderItems.length > 0 && (
-              <div className="bottom-bar-breakdown">
-                <div style={{ margin: '8px 0' }}>
-                  <label style={{ fontSize: '0.8rem' }}>Order source</label>
-                  <select value={orderSource} onChange={e => setOrderSource(e.target.value)}>
-                    {(gstMeta?.orderSources || [{id:'pos',label:'Counter / POS'},{id:'swiggy',label:'Swiggy'},{id:'zomato',label:'Zomato'},{id:'other_eco',label:'Other e-commerce'}]).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                  </select>
-                  {taxEnabled && orderSource !== 'pos' && <p style={{ fontSize: '0.75rem', opacity: 0.7 }}>GST is paid by the platform (Sec 9(5)); no GST is charged on this bill</p>}
-                </div>
-                <GstBillSummary storeId={currentStoreId!} items={orderItems.map(oi => ({ itemId: oi.itemId, quantity: oi.quantity, unitPrice: orderItemUnitPrice(oi) }))} orderSource={orderSource} />
-                <div className="breakdown-row">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(calculateTotal())}</span>
-                </div>
-                {taxEnabled && (
-                  <div className="breakdown-row">
-                    <span>Tax</span>
-                    <span>{formatCurrency(calculateTax())}</span>
+              <>
+                <div className="bottom-bar-breakdown-overlay" onClick={() => setShowBreakdown(false)} />
+                <div className="bottom-bar-breakdown">
+                  <div style={{ margin: '8px 0' }}>
+                    <label style={{ fontSize: '0.8rem' }}>Order source</label>
+                    <select value={orderSource} onChange={e => setOrderSource(e.target.value)}>
+                      {(gstMeta?.orderSources || [{id:'pos',label:'Counter / POS'},{id:'swiggy',label:'Swiggy'},{id:'zomato',label:'Zomato'},{id:'other_eco',label:'Other e-commerce'}]).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    </select>
+                    {taxEnabled && orderSource !== 'pos' && <p style={{ fontSize: '0.75rem', opacity: 0.7 }}>GST is paid by the platform (Sec 9(5)); no GST is charged on this bill</p>}
                   </div>
-                )}
-                <div className="breakdown-row final">
-                  <span>Total</span>
-                  <span>{formatCurrency(total)}</span>
+                  <GstBillSummary storeId={currentStoreId!} items={orderItems.map(oi => ({ itemId: oi.itemId, quantity: oi.quantity, unitPrice: orderItemUnitPrice(oi) }))} orderSource={orderSource} />
+                  <div className="breakdown-row">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(calculateTotal())}</span>
+                  </div>
+                  {taxEnabled && (
+                    <div className="breakdown-row">
+                      <span>Tax</span>
+                      <span>{formatCurrency(calculateTax())}</span>
+                    </div>
+                  )}
+                  <div className="breakdown-row final">
+                    <span>Total</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
           <div className="bottom-bar-payment">
@@ -532,7 +536,7 @@ const ParcelOrderPage: React.FC = () => {
         </div>
         <div className="order-page-bottom-bar-actions">
           <button
-            className="btn btn-warning"
+            className="gr-btn gr-btn--soft"
             onClick={handleSaveEBill}
             disabled={orderItems.length === 0 || isSubmitting}
             title="Save as E-Bill (no print)"
@@ -541,7 +545,7 @@ const ParcelOrderPage: React.FC = () => {
             {actionType === 'e-bill' ? 'Saving...' : 'Save & E-Bill'}
           </button>
           <button
-            className="btn btn-primary"
+            className="gr-btn gr-btn--primary"
             onClick={() => handleSavePrint()}
             disabled={orderItems.length === 0 || isSubmitting}
             title="Save, Print Bill"
@@ -549,7 +553,7 @@ const ParcelOrderPage: React.FC = () => {
             <Printer size={14} />
             {actionType === 'save-print' ? 'Processing...' : 'Save & Print'}
           </button>
-          <button className="btn btn-danger" onClick={handleCancel}>
+          <button className="gr-btn gr-btn--danger" onClick={handleCancel}>
             <X size={14} />
             Cancel
           </button>

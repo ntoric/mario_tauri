@@ -87,14 +87,14 @@ const SoftwareUpdates: React.FC = () => {
   // Non-Tauri (web browser) — updates only available in the desktop app
   if (!isTauri()) {
     return (
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="gr-card">
+        <div className="gr-card__head">
+          <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Package size={18} />
             Software Updates
           </span>
         </div>
-        <div className="card-body">
+        <div className="gr-card__body">
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <Monitor size={48} style={{ color: 'var(--gray-400)', marginBottom: '1rem' }} />
             <p style={{ fontSize: '1rem', color: 'var(--gray-600)', margin: 0 }}>
@@ -149,14 +149,14 @@ const SoftwareUpdates: React.FC = () => {
 
   if (isInstalling) {
     return (
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="gr-card">
+        <div className="gr-card__head">
+          <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Package size={18} />
             Software Updates
           </span>
         </div>
-        <div className="card-body">
+        <div className="gr-card__body">
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <Loader2 size={40} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
             <h3 style={{ margin: '0 0 0.5rem' }}>{installKind === 'downgrade' ? 'Installing Previous Version' : 'Installing Newer Version'}</h3>
@@ -168,14 +168,14 @@ const SoftwareUpdates: React.FC = () => {
   }
 
   return (
-    <div className="card">
-      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    <div className="gr-card">
+      <div className="gr-card__head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Package size={18} />
           Software Updates
         </span>
         <button
-          className="btn btn-secondary"
+          className="gr-btn gr-btn--secondary"
           onClick={handleCheck}
           disabled={isChecking || isDownloading}
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -194,7 +194,7 @@ const SoftwareUpdates: React.FC = () => {
         </button>
       </div>
 
-      <div className="card-body">
+      <div className="gr-card__body">
         {/* Current version */}
         <div style={{
           display: 'flex',
@@ -286,7 +286,7 @@ const SoftwareUpdates: React.FC = () => {
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
               {!isDownloading ? (
                 <button
-                  className="btn btn-primary"
+                  className="gr-btn gr-btn--primary"
                   onClick={handleDownloadAndInstall}
                   disabled={isChecking}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -301,7 +301,7 @@ const SoftwareUpdates: React.FC = () => {
                 </span>
               )}
               <button
-                className="btn btn-secondary"
+                className="gr-btn gr-btn--secondary"
                 onClick={dismissUpdate}
                 disabled={isDownloading}
               >
@@ -372,8 +372,8 @@ const SoftwareUpdates: React.FC = () => {
               borderRadius: 'var(--radius)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <History size={20} style={{ color: '#f59e0b' }} />
-                <strong style={{ color: '#f59e0b' }}>
+                <History size={20} style={{ color: 'var(--primary)' }} />
+                <strong style={{ color: 'var(--primary)' }}>
                   Previous version {downgradeInfo.latestVersion} is available
                 </strong>
               </div>
@@ -388,7 +388,7 @@ const SoftwareUpdates: React.FC = () => {
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                 {!isDownloading ? (
                   <button
-                    className="btn btn-secondary"
+                    className="gr-btn gr-btn--secondary"
                     onClick={handleDowngrade}
                     disabled={isChecking}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}

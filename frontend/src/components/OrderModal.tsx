@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Plus, Minus, Trash2, Receipt, Search, Printer, ChevronDown } from 'lucide-react';
+import { X, Plus, Minus, Trash2, Receipt, Search, Printer, ChevronDown, ShoppingCart } from 'lucide-react';
 import { useDataStore, useUIStore, useAuthStore } from '../stores';
 import { formatCurrency } from '../utils/currency';
 import { orderItemUnitPrice } from '../utils/order';
 import { isTaxEnabled } from '../utils/tax';
-import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
+import { sortCategories, sortItemsByCategoryOrder, matchesSearchQuery } from '../utils/category';
 import { api } from '../services/api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { printerService } from '../services/printer';
 import { buildInvoicePrintJob } from '../utils/gstInvoice';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { OrderItem, Item } from '../types';
 
 const OrderModal: React.FC = () => {
@@ -103,7 +104,7 @@ const OrderModal: React.FC = () => {
     if (item.enabled === false) return false;
     if (disabledCategoryIds.has(item.categoryId)) return false;
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
-    const matchesSearch = searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesSearchQuery(item.name, searchQuery);
     return matchesCategory && matchesSearch;
   }), categories);
 
@@ -353,18 +354,18 @@ const OrderModal: React.FC = () => {
   const isOverflowActive = overflowCategories.includes(selectedCategory);
 
   return (
-    <div className="modal-overlay" onClick={closeOrderModal}>
-      <div className="modal order-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
+    <div className="gr-modal-live is-open" onClick={closeOrderModal}>
+      <div className="gr-modal order-modal" onClick={e => e.stopPropagation()}>
+        <div className="gr-modal__head">
           <h2>
             {viewOnly ? 'View Order' : existingOrder ? 'Edit Order' : 'New Order'} - Table {table.name || table.number}
           </h2>
-          <button className="close-btn" onClick={closeOrderModal}>
+          <button className="gr-iconbtn" onClick={closeOrderModal}>
             <X size={24} />
           </button>
         </div>
 
-        <div className="modal-body order-modal-body">
+        <div className="gr-modal__body order-modal-body">
           <div className="order-layout-fixed">
             <div className="order-main-fixed">
               {!viewOnly && (
@@ -493,9 +494,7 @@ const OrderModal: React.FC = () => {
               <h3>Order Items ({orderItems.length})</h3>
               
               {orderItems.length === 0 ? (
-                <div className="empty-order">
-                  {viewOnly ? 'No items in this order' : 'Click items to add'}
-                </div>
+                <Empty compact icon={<ShoppingCart />} text={viewOnly ? 'No items in this order' : 'Click items to add'} />
               ) : (
                 <>
                   <div className="order-items-scrollable">
@@ -510,14 +509,14 @@ const OrderModal: React.FC = () => {
                           {!viewOnly && (
                             <>
                               <button
-                                className="quantity-btn"
+                                className="pos-qtybtn"
                                 onClick={() => updateQuantity(oi.itemId, -1)}
                               >
                                 <Minus size={10} />
                               </button>
                               <span className="order-item-quantity">{oi.quantity}</span>
                               <button
-                                className="quantity-btn"
+                                className="pos-qtybtn"
                                 onClick={() => updateQuantity(oi.itemId, 1)}
                               >
                                 <Plus size={10} />
@@ -560,10 +559,10 @@ const OrderModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="gr-modal__foot">
           {existingOrder && !viewOnly && (
             <button
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               onClick={() => setShowBillDialog(true)}
               disabled={orderItems.length === 0}
             >
@@ -573,14 +572,14 @@ const OrderModal: React.FC = () => {
           )}
           {!viewOnly && (
             <button
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               onClick={() => handleSaveOrder()}
               disabled={orderItems.length === 0}
             >
               {existingOrder ? 'Update Order' : 'Place Order'}
             </button>
           )}
-          <button className="btn btn-secondary" onClick={closeOrderModal}>
+          <button className="gr-btn gr-btn--secondary" onClick={closeOrderModal}>
             {viewOnly ? 'Close' : 'Cancel'}
           </button>
         </div>
@@ -608,19 +607,19 @@ const OrderModal: React.FC = () => {
 
         {/* Bill Dialog */}
         {showBillDialog && (
-          <div className="modal-overlay" onClick={() => !isPrinting && setShowBillDialog(false)}>
-            <div className="modal bill-dialog" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
+          <div className="gr-modal-live is-open" onClick={() => !isPrinting && setShowBillDialog(false)}>
+            <div className="gr-modal bill-dialog" onClick={e => e.stopPropagation()}>
+              <div className="gr-modal__head">
                 <h2>Print Bill</h2>
                 <button 
-                  className="close-btn" 
+                  className="gr-iconbtn" 
                   onClick={() => !isPrinting && setShowBillDialog(false)}
                   disabled={isPrinting}
                 >
                   <X size={24} />
                 </button>
               </div>
-              <div className="modal-body">
+              <div className="gr-modal__body">
                 <div className="bill-total-display">
                   <span className="bill-total-label">Total Amount</span>
                   <span className="bill-total-value">{formatCurrency(total)}</span>
@@ -628,16 +627,16 @@ const OrderModal: React.FC = () => {
                 
                 <p className="bill-hint">Press Enter or click Print to complete</p>
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <button
-                  className="btn btn-primary btn-lg"
+                  className="gr-btn gr-btn--primary gr-btn--sm"
                   onClick={handlePrintAndComplete}
                 >
                   <Printer size={18} />
                   {isPrinting ? 'Printing...' : 'Print & Complete'}
                 </button>
                 <button 
-                  className="btn btn-secondary" 
+                  className="gr-btn gr-btn--secondary" 
                   onClick={() => setShowBillDialog(false)}
                   disabled={isPrinting}
                 >

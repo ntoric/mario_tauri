@@ -256,8 +256,8 @@ const DeveloperSettings: React.FC = () => {
   );
 
   return (
-    <div>
-      <div className="tabs">
+    <div className="dev-settings-page">
+      <div className="gr-tabs">
         <button
           className={`tab ${activeTab === 'updates' ? 'active' : ''}`}
           onClick={() => setActiveTab('updates')}
@@ -285,15 +285,15 @@ const DeveloperSettings: React.FC = () => {
         <>
           {renderErrorBanner(error)}
 
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="gr-card">
+            <div className="gr-card__head">
+              <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Github size={18} />
                 Update Repository Configuration
               </span>
             </div>
             <form onSubmit={handleSave}>
-              <div className="card-body">
+              <div className="gr-card__body">
                 <div style={{
                   padding: '1rem',
                   background: 'var(--gray-50)',
@@ -308,7 +308,7 @@ const DeveloperSettings: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>
                     <Github size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
                     GitHub Repository
@@ -338,8 +338,8 @@ const DeveloperSettings: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-                <button type="submit" className="btn btn-primary" disabled={isSaving}>
+              <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+                <button type="submit" className="gr-btn gr-btn--primary" disabled={isSaving}>
                   {isSaving ? (
                     <>
                       <Loader2 size={18} className="animate-spin" style={{ marginRight: '0.5rem' }} />
@@ -362,15 +362,15 @@ const DeveloperSettings: React.FC = () => {
         <>
           {renderErrorBanner(geminiError)}
 
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="gr-card">
+            <div className="gr-card__head">
+              <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Sparkles size={18} />
                 Gemini AI Configuration
               </span>
             </div>
             <form onSubmit={handleSaveGemini}>
-              <div className="card-body">
+              <div className="gr-card__body">
                 <div style={{
                   padding: '1rem',
                   background: 'var(--gray-50)',
@@ -388,7 +388,7 @@ const DeveloperSettings: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>API Key</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <input
@@ -402,7 +402,7 @@ const DeveloperSettings: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className="btn btn-outline"
+                      className="gr-btn gr-btn--secondary"
                       onClick={() => setShowApiKey(!showApiKey)}
                       title={showApiKey ? 'Hide' : 'Show'}
                       style={{ flexShrink: 0 }}
@@ -415,7 +415,7 @@ const DeveloperSettings: React.FC = () => {
                   </small>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Model</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <select
@@ -434,7 +434,7 @@ const DeveloperSettings: React.FC = () => {
                     </select>
                     <button
                       type="button"
-                      className="btn btn-outline"
+                      className="gr-btn gr-btn--secondary"
                       onClick={handleRefreshModels}
                       disabled={isLoadingModels}
                       title="Refresh available models from Gemini"
@@ -454,8 +454,8 @@ const DeveloperSettings: React.FC = () => {
                   </small>
                 </div>
               </div>
-              <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-                <button type="submit" className="btn btn-primary" disabled={isSavingGemini}>
+              <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+                <button type="submit" className="gr-btn gr-btn--primary" disabled={isSavingGemini}>
                   {isSavingGemini ? (
                     <>
                       <Loader2 size={18} className="animate-spin" style={{ marginRight: '0.5rem' }} />
@@ -478,15 +478,15 @@ const DeveloperSettings: React.FC = () => {
         <>
           {renderErrorBanner(cashfreeError)}
 
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="gr-card">
+            <div className="gr-card__head">
+              <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <CreditCard size={18} />
                 Cashfree Payment Configuration
               </span>
             </div>
             <form onSubmit={handleSaveCashfree}>
-              <div className="card-body">
+              <div className="gr-card__body">
                 <div style={{
                   padding: '1rem',
                   background: 'var(--gray-50)',
@@ -515,7 +515,7 @@ const DeveloperSettings: React.FC = () => {
                         : 'Disabled — the payment option is hidden on the My Plan page'}
                     </div>
                   </div>
-                  <div className="pc-toggle-action">
+                  <div className="pc-toggle-action gr-switch">
                     <input
                       type="checkbox"
                       checked={cashfreeEnabled}
@@ -524,7 +524,7 @@ const DeveloperSettings: React.FC = () => {
                   </div>
                 </label>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>App ID</label>
                   <input
                     type="text"
@@ -536,7 +536,7 @@ const DeveloperSettings: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Secret Key</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <input
@@ -550,7 +550,7 @@ const DeveloperSettings: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className="btn btn-outline"
+                      className="gr-btn gr-btn--secondary"
                       onClick={() => setShowSecretKey(!showSecretKey)}
                       title={showSecretKey ? 'Hide' : 'Show'}
                       style={{ flexShrink: 0 }}
@@ -563,7 +563,7 @@ const DeveloperSettings: React.FC = () => {
                   </small>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Environment</label>
                   <select value={cashfreeEnv} onChange={(e) => setCashfreeEnv(e.target.value)}>
                     <option value="sandbox">Sandbox (testing)</option>
@@ -571,7 +571,7 @@ const DeveloperSettings: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Return URL <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
                   <input
                     type="url"
@@ -582,7 +582,7 @@ const DeveloperSettings: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Webhook / Notify URL <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
                   <input
                     type="url"
@@ -596,8 +596,8 @@ const DeveloperSettings: React.FC = () => {
                   </small>
                 </div>
               </div>
-              <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
-                <button type="submit" className="btn btn-primary" disabled={isSavingCashfree}>
+              <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)' }}>
+                <button type="submit" className="gr-btn gr-btn--primary" disabled={isSavingCashfree}>
                   {isSavingCashfree ? (
                     <>
                       <Loader2 size={18} className="animate-spin" style={{ marginRight: '0.5rem' }} />

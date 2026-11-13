@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, Coffee, History, LogOut, Users, Building2, Settings, Key, ChevronUp, User, AlertTriangle, Download, MessageCircle, BarChart2, ShoppingBag, Tag, DollarSign, TrendingUp, Clock, Wrench, Sparkles, Keyboard, Sun, Moon, LifeBuoy, Inbox, CreditCard, Crown, Boxes } from 'lucide-react';
+import { Coffee, History, Building2, Key, LogOut, Wrench, AlertTriangle, Crown, Boxes, Keyboard, Sun, Moon, LifeBuoy, Package, Pin, PinOff, BarChart3, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuthStore, useDataStore, useUIStore } from '../stores';
+import { useAuthStore, useDataStore, useUIStore, useAppearanceStore } from '../stores';
 import StoreSelector from './StoreSelector';
 import ChangePasswordModal from './ChangePasswordModal';
+import ItemModal from './ItemModal';
+import CategoryModal from './CategoryModal';
 import UpdateBanner from './UpdateBanner';
 import { PageHeaderProvider, usePageHeader } from '../contexts/PageHeaderContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { Ic, Logo, IconBtn, Dropdown, MenuItem, MenuSep, Avatar, Seg } from './gr';
 
 // Isolated so the 1s tick only re-renders the clock, not the whole layout tree.
 const NavbarClock: React.FC = () => {
@@ -20,7 +23,7 @@ const NavbarClock: React.FC = () => {
 
   return (
     <div className="navbar-datetime">
-      <Clock size={16} style={{ color: 'var(--primary)' }} />
+      <Ic name="clock" size={16} className="tint-primary" />
       <div className="navbar-datetime-text">
         <span className="navbar-time">
           {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -33,40 +36,57 @@ const NavbarClock: React.FC = () => {
   );
 };
 
+interface RailItem {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  end?: boolean;
+  show?: boolean;
+}
+
+const RailLink: React.FC<RailItem & { activeOverride?: boolean }> = ({ to, icon, label, end, activeOverride }) => (
+  <NavLink
+    to={to}
+    end={end}
+    className={({ isActive }) => `gr-sidebar__item ${(activeOverride ?? isActive) ? 'is-active' : ''}`}
+    title={label}
+    aria-label={label}
+  >
+    {icon}
+    <span className="gr-sidebar__label">{label}</span>
+  </NavLink>
+);
+
 const LayoutContent: React.FC = () => {
   const { user, logout, canSwitchStores, currentStoreId, ensureStoreSelected } = useAuthStore();
   const { stores } = useDataStore();
   const oskEnabled = useUIStore((state) => state.onScreenKeyboardEnabled);
+  const statsVisible = useUIStore((state) => state.statsVisible);
+  const toggleStatsVisible = useUIStore((state) => state.toggleStatsVisible);
   const toggleOsk = useUIStore((state) => state.toggleOnScreenKeyboard);
   const setColorMode = useUIStore((state) => state.setColorMode);
   const { isDark } = useTheme();
   const { headerContent } = usePageHeader();
   const navigate = useNavigate();
   const location = useLocation();
-  const inventoryTab = new URLSearchParams(location.search).get('tab') || 'stock';
   const isInventoryPath = location.pathname === '/inventory';
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const sidebarStyle = useAppearanceStore((s) => s.sidebarStyle);
+  const sidebarLocked = useAppearanceStore((s) => s.sidebarLocked);
+  const setSidebarLocked = useAppearanceStore((s) => s.setSidebarLocked);
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const sidebarExpanded =
+    sidebarLocked || sidebarStyle === 'expanded' || (sidebarStyle === 'hover' && sidebarHover);
 
-  // Ensure store is selected on mount (for business_admin and staff)
+  const toggleSidebar = () => {
+    setSidebarLocked(!sidebarLocked);
+  };
+
   useEffect(() => {
     ensureStoreSelected();
   }, [ensureStoreSelected]);
 
   const currentStore = stores.find(s => s.id === currentStoreId);
-
-  // Close user menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -79,408 +99,169 @@ const LayoutContent: React.FC = () => {
     toast.success(next ? 'On-screen keyboard enabled' : 'On-screen keyboard disabled', { duration: 1500 });
   };
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
-
   const showStoreSelector = canSwitchStores();
 
   const isSuperAdmin = user?.role === 'superadmin';
-  const isBusinessOwner = user?.role === 'business_owner';
   const isBusinessAdmin = user?.role === 'business_admin';
-  const isStaff = user?.role === 'staff';
-  const canManageStore = isSuperAdmin || isBusinessOwner || isBusinessAdmin;
-  // My Plan is a superadmin-toggled per-store page.
+  const canManageStore = isSuperAdmin || user?.role === 'business_owner' || isBusinessAdmin;
   const showMyPlan = isSuperAdmin || !!currentStore?.myPlanEnabled;
 
+  const icon = (el: React.ReactNode) => el;
+
+  const mainItems: RailItem[] = [
+    { to: '/', icon: <Ic name="grid" />, label: 'Tables', end: true },
+    { to: '/items', icon: icon(<Ic icon={Coffee} />), label: 'Items & Menu' },
+    { to: '/history', icon: icon(<Ic icon={History} />), label: 'Order History' },
+    { to: '/reports', icon: <Ic name="chart" />, label: 'Reports', end: true },
+  ];
+
+  const moneyItems: RailItem[] = [
+    { to: '/expenses', icon: <Ic name="wallet" />, label: 'Expenses' },
+    { to: '/inventory', icon: icon(<Ic icon={Boxes} />), label: 'Raw Materials' },
+  ];
+
+  const adminItems: RailItem[] = isSuperAdmin ? [
+    { to: '/stores', icon: icon(<Ic icon={Building2} />), label: 'Manage Stores' },
+    { to: '/subscriptions', icon: <Ic name="credit" />, label: 'Subscriptions' },
+    { to: '/menu-upload', icon: <Ic name="sparkle" />, label: 'AI Menu Upload' },
+    { to: '/update-management', icon: <Ic name="download" />, label: 'Update Management' },
+    { to: '/support-tickets', icon: <Ic name="inbox" />, label: 'Support Tickets' },
+    { to: '/support-settings', icon: <Ic name="chat" />, label: 'Support Settings' },
+    { to: '/developer-settings', icon: icon(<Ic icon={Wrench} />), label: 'Developer Settings' },
+    { to: '/system-reset', icon: icon(<Ic icon={AlertTriangle} />), label: 'System Reset' },
+  ] : [];
+
+  const settingsItems: RailItem[] = [
+    { to: '/users', icon: <Ic name="users" />, label: 'Users' },
+    { to: '/appearance', icon: icon(<Ic icon={Palette} />), label: 'Appearance' },
+    ...(showMyPlan ? [{ to: '/my-plan', icon: icon(<Ic icon={Crown} />), label: 'My Plan' } as RailItem] : []),
+    { to: '/business-settings', icon: <Ic name="settings" />, label: 'Business Settings' },
+    { to: '/business-settings?tab=support', icon: icon(<Ic icon={LifeBuoy} />), label: 'Support' },
+  ];
+
   return (
-    <div className="layout">
+    <div className={`gr gr-shell${statsVisible ? '' : ' stats-hidden'}`}>
       <aside
-        className={`sidebar ${sidebarExpanded ? 'expanded' : 'collapsed'}`}
-        onMouseEnter={() => setSidebarExpanded(true)}
-        onMouseLeave={() => setSidebarExpanded(false)}
+        className={`gr-sidebar${sidebarExpanded ? ' gr-sidebar--wide' : ''}`}
+        onMouseEnter={() => setSidebarHover(true)}
+        onMouseLeave={() => setSidebarHover(false)}
       >
-        <div className="sidebar-header">
-          <div className="sidebar-brand" style={{ cursor: 'default' }}>
-            <div className="sidebar-brand-icon" style={{
-              background: 'white',
-              overflow: 'hidden',
-              padding: '4px',
-            }}>
-              <img
-                src={currentStore?.logoUrl || '/logo.png'}
-                alt={currentStore?.name || 'Store logo'}
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            </div>
-            {sidebarExpanded && (
-              <span className="sidebar-brand-text">
-                {currentStore?.name || 'Cafe Manager'}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <nav className="sidebar-nav">
-          <div className="nav-section">
-            {sidebarExpanded && <div className="nav-section-title">Main Menu</div>}
-            <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end title="Tables">
-              <span className="nav-icon"><LayoutGrid size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Tables</span>}
-            </NavLink>
-            <NavLink to="/items" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Items & Menu">
-              <span className="nav-icon"><Coffee size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Items & Menu</span>}
-            </NavLink>
-            <NavLink to="/history" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Order History">
-              <span className="nav-icon"><History size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Order History</span>}
-            </NavLink>
-            <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Reports" end>
-              <span className="nav-icon"><BarChart2 size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Reports</span>}
-            </NavLink>
-          </div>
-
-          <div className="nav-section">
-            {sidebarExpanded && <div className="nav-section-title">Expenses</div>}
-            <NavLink to="/expenses" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Expenses">
-              <span className="nav-icon"><DollarSign size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Expenses</span>}
-            </NavLink>
-            <NavLink to="/inventory" className={`nav-item ${isInventoryPath ? 'active' : ''}`} title="Raw Materials">
-              <span className="nav-icon"><Boxes size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Raw Materials</span>}
-            </NavLink>
-            {sidebarExpanded && isInventoryPath && (
-              <div className="nav-submenu">
-                <NavLink to="/inventory?tab=purchases" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'purchases' ? 'active' : ''}`} title="Purchases">
-                  <span className="nav-label">Purchases</span>
-                </NavLink>
-                <NavLink to="/inventory?tab=transactions" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'transactions' ? 'active' : ''}`} title="Transactions">
-                  <span className="nav-label">Transactions</span>
-                </NavLink>
-                <NavLink to="/inventory?tab=consumption" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'consumption' ? 'active' : ''}`} title="Consumption">
-                  <span className="nav-label">Consumption</span>
-                </NavLink>
-                <NavLink to="/inventory?tab=stock" className={({ isActive }) => `nav-item nav-subitem ${isActive && inventoryTab === 'stock' ? 'active' : ''}`} title="Stock">
-                  <span className="nav-label">Stock</span>
-                </NavLink>
-              </div>
-            )}
-          </div>
-
-          {isSuperAdmin && (
-            <div className="nav-section">
-              {sidebarExpanded && <div className="nav-section-title">Administration</div>}
-              <NavLink to="/stores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Manage Stores">
-                <span className="nav-icon"><Building2 size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Manage Stores</span>}
-              </NavLink>
-              <NavLink to="/subscriptions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Subscriptions">
-                <span className="nav-icon"><CreditCard size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Subscriptions</span>}
-              </NavLink>
-              <NavLink to="/menu-upload" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="AI Menu Upload">
-                <span className="nav-icon"><Sparkles size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">AI Menu Upload</span>}
-              </NavLink>
-              <NavLink to="/update-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Update Management">
-                <span className="nav-icon"><Download size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Update Management</span>}
-              </NavLink>
-              <NavLink to="/support-tickets" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Tickets">
-                <span className="nav-icon"><Inbox size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Support Tickets</span>}
-              </NavLink>
-              <NavLink to="/support-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support Settings">
-                <span className="nav-icon"><MessageCircle size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Support Settings</span>}
-              </NavLink>
-              <NavLink to="/developer-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Developer Settings">
-                <span className="nav-icon"><Wrench size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">Developer Settings</span>}
-              </NavLink>
-              <NavLink to="/system-reset" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="System Reset">
-                <span className="nav-icon"><AlertTriangle size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">System Reset</span>}
-              </NavLink>
-            </div>
+        <span className="gr-sidebar__logo">
+          {currentStore?.logoUrl ? (
+            <img
+              src={currentStore.logoUrl}
+              alt={currentStore.name ? `${currentStore.name} logo` : 'Store logo'}
+              style={{
+                maxWidth: '100%',
+                maxHeight: sidebarExpanded ? 56 : 48,
+                objectFit: 'contain',
+                background: '#ffffff',
+                borderRadius: 10,
+                padding: 5,
+              }}
+            />
+          ) : (
+            <Logo kind={sidebarExpanded ? "wordmark-white" : "symbol-white"} width="100%" />
           )}
+        </span>
 
-          <div className="nav-section">
-            {sidebarExpanded && <div className="nav-section-title">Settings</div>}
-            <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Users">
-              <span className="nav-icon"><Users size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Users</span>}
-            </NavLink>
-            {showMyPlan && (
-              <NavLink to="/my-plan" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="My Plan">
-                <span className="nav-icon"><Crown size={18} /></span>
-                {sidebarExpanded && <span className="nav-label">My Plan</span>}
-              </NavLink>
-            )}
-            <NavLink to="/business-settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Business Settings">
-              <span className="nav-icon"><Settings size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Business Settings</span>}
-            </NavLink>
-            <NavLink to="/business-settings?tab=support" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title="Support">
-              <span className="nav-icon"><LifeBuoy size={18} /></span>
-              {sidebarExpanded && <span className="nav-label">Support</span>}
-            </NavLink>
-          </div>
-
+        <nav className="gr-sidebar__nav">
+          {mainItems.map((it) => <RailLink key={it.to} {...it} />)}
+          <span className="gr-sidebar__sep" />
+          {moneyItems.map((it) => (
+            <RailLink key={it.to} {...it} activeOverride={it.to === '/inventory' ? isInventoryPath : undefined} />
+          ))}
+          {adminItems.length > 0 && <span className="gr-sidebar__sep" />}
+          {adminItems.map((it) => <RailLink key={it.to} {...it} />)}
+          <span className="gr-sidebar__sep" />
+          {settingsItems.map((it) => <RailLink key={it.to} {...it} />)}
         </nav>
 
-        <div className="sidebar-footer">
-          <div ref={userMenuRef} style={{ position: 'relative' }}>
-            {sidebarExpanded ? (
-              <>
-                <button 
-                  className="user-card"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  style={{ 
-                    width: '100%', 
-                    border: 'none', 
-                    cursor: 'pointer',
-                    background: showUserMenu ? 'rgba(255,255,255,0.1)' : undefined
-                  }}
-                >
-                  <div className="user-avatar">
-                    {user ? getInitials(user.name) : 'U'}
-                  </div>
-                  <div className="user-info" style={{ flex: 1, textAlign: 'left' }}>
-                    <div className="user-name">{user?.name}</div>
-                    <div className="user-role">{user?.role?.replace('_', ' ')}</div>
-                  </div>
-                  <ChevronUp 
-                    size={16} 
-                    style={{ 
-                      transform: showUserMenu ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s',
-                      color: 'var(--gray-400)'
-                    }} 
-                  />
-                </button>
+        <button
+          className="gr-sidebar__item gr-sidebar__toggle"
+          onClick={toggleSidebar}
+          title={sidebarLocked ? 'Unpin sidebar' : 'Pin sidebar open'}
+          aria-label={sidebarLocked ? 'Unpin sidebar' : 'Pin sidebar open'}
+          aria-pressed={sidebarLocked}
+        >
+          <Ic icon={sidebarLocked ? PinOff : Pin} />
+          <span className="gr-sidebar__label">{sidebarLocked ? 'Unpin' : 'Pin open'}</span>
+        </button>
 
-                {showUserMenu && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    left: 0,
-                    right: 0,
-                    marginBottom: '0.5rem',
-                    background: 'rgba(12, 16, 23, 0.88)',
-                    backdropFilter: 'blur(24px) saturate(160%)',
-                    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 'var(--radius-lg)',
-                    overflow: 'hidden',
-                    boxShadow: '0 -12px 36px rgba(8,12,18,0.4), inset 0 1px 0 rgba(255,255,255,0.08)'
-                  }}>
-                    <button
-                      onClick={() => {
-                        setShowChangePassword(true);
-                        setShowUserMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--light)',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <Key size={16} />
-                      Change Password
-                    </button>
-                    <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 0.75rem' }} />
-                    <button
-                      onClick={() => {
-                        handleLogout();
-                        setShowUserMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--danger)',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(229,57,53, 0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <LogOut size={16} />
-                      Sign Out
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <button 
-                  className="sidebar-user-btn"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  title={user?.name}
-                  style={{ 
-                    position: 'relative',
-                    background: showUserMenu ? 'rgba(255,255,255,0.1)' : undefined
-                  }}
-                >
-                  <User size={18} />
-                </button>
-
-                {showUserMenu && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    left: '100%',
-                    marginBottom: '0.5rem',
-                    marginLeft: '0.5rem',
-                    background: 'rgba(12, 16, 23, 0.88)',
-                    backdropFilter: 'blur(24px) saturate(160%)',
-                    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 'var(--radius-lg)',
-                    overflow: 'hidden',
-                    boxShadow: '0 -12px 36px rgba(8,12,18,0.4), inset 0 1px 0 rgba(255,255,255,0.08)',
-                    minWidth: '180px',
-                    zIndex: 1000
-                  }}>
-                    <div style={{
-                      padding: '0.75rem 1rem',
-                      borderBottom: '1px solid rgba(255,255,255,0.1)',
-                      color: 'var(--gray-400)',
-                      fontSize: '0.8rem'
-                    }}>
-                      {user?.name}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setShowChangePassword(true);
-                        setShowUserMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--light)',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <Key size={16} />
-                      Change Password
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleLogout();
-                        setShowUserMenu(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--danger)',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(229,57,53, 0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <LogOut size={16} />
-                      Sign Out
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+        <Dropdown
+          right={false}
+          className="gr-dropdown--up"
+          trigger={
+            <button className="gr-sidebar__item" title={user?.name || 'Account'} aria-label="Account">
+              <Avatar sm>{user ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}</Avatar>
+              <span className="gr-sidebar__label">{user?.name || 'Account'}</span>
+            </button>
+          }
+        >
+          <div className="pos-menu-user">
+            <div className="user-name">{user?.name}</div>
+            <div className="user-role">{user?.role?.replace('_', ' ')}</div>
           </div>
-        </div>
+          <MenuSep />
+          <MenuItem icon={<Ic icon={Palette} size={16} />} onClick={() => navigate('/appearance')}>
+            Appearance
+          </MenuItem>
+          <MenuItem icon={<Ic name="lock" size={16} />} onClick={() => setShowChangePassword(true)}>
+            Change password
+          </MenuItem>
+          <MenuItem danger icon={<Ic name="logout" size={16} />} onClick={handleLogout}>
+            Sign out
+          </MenuItem>
+        </Dropdown>
       </aside>
 
-      <main className="main-content">
+      <main className="gr-shell__main">
         <UpdateBanner />
-        <header className="top-navbar">
-          <div className="navbar-left">
-            <div className="navbar-page-info">
-              <h1 className="navbar-page-title">{headerContent.title}</h1>
-              {headerContent.subtitle && (
-                <p className="navbar-page-subtitle">{headerContent.subtitle}</p>
-              )}
+        <header className="gr-topnav">
+          <div className="gr-topnav__page">
+            <h1 className="gr-h2">{headerContent.title}</h1>
+            {headerContent.subtitle && <p className="gr-caption">{headerContent.subtitle}</p>}
+          </div>
+          <div className="gr-spacer" />
+          {showStoreSelector ? <StoreSelector /> : <NavbarClock />}
+          <Seg
+            plain={false}
+            value={isDark ? 'dark' : 'light'}
+            onChange={(v) => setColorMode(v as 'light' | 'dark')}
+            options={[
+              { value: 'light', icon: <Ic name="sun" size={16} />, title: 'Light mode' },
+              { value: 'dark', icon: <Ic name="moon" size={16} />, title: 'Dark mode' },
+            ]}
+          />
+          <IconBtn
+            className="stats-toggle"
+            label={statsVisible ? 'Hide stats widgets' : 'Show stats widgets'}
+            variant={statsVisible ? 'filled' : 'outline'}
+            icon={<Ic icon={BarChart3} />}
+            onClick={toggleStatsVisible}
+          />
+          <IconBtn
+            label={oskEnabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
+            variant={oskEnabled ? 'filled' : 'outline'}
+            icon={<Ic icon={Keyboard} />}
+            onClick={handleToggleOsk}
+          />
+          {headerContent.actions && (
+            <div className="gr-row" style={{ gap: 8 }}>
+              {headerContent.actions}
             </div>
-          </div>
-          
-          <div className="navbar-center">
-            {showStoreSelector ? (
-              <StoreSelector />
-            ) : (
-              <NavbarClock />
-            )}
-          </div>
-          
-          <div className="navbar-right">
-            <button
-              type="button"
-              className="btn btn-outline btn-icon"
-              onClick={() => setColorMode(isDark ? 'light' : 'dark')}
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label="Toggle dark mode"
-            >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline btn-icon navbar-osk-toggle ${oskEnabled ? 'active' : ''}`}
-              onClick={handleToggleOsk}
-              title={oskEnabled ? 'Disable on-screen keyboard' : 'Enable on-screen keyboard'}
-              aria-label="Toggle on-screen keyboard"
-            >
-              <Keyboard size={18} />
-            </button>
-            {headerContent.actions && (
-              <div className="navbar-actions">
-                {headerContent.actions}
-              </div>
-            )}
-          </div>
+          )}
         </header>
-        
-        <div className="page-content">
-          <Outlet />
-        </div>
-      </main>
 
-      <ChangePasswordModal 
-        isOpen={showChangePassword} 
-        onClose={() => setShowChangePassword(false)} 
-      />
+        <Outlet />
+
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => setShowChangePassword(false)}
+        />
+        <ItemModal />
+        <CategoryModal />
+      </main>
     </div>
   );
 };

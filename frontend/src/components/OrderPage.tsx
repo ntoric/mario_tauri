@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, HelpCircle, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, Receipt, Search, Printer, X, FileText, ChefHat, Save, HelpCircle, Star, ShoppingCart, ChevronUp } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
@@ -14,8 +14,9 @@ import GstBillSummary from './GstBillSummary';
 import type { Bill } from '../types';
 import { isTaxEnabled, computeCartTotals } from '../utils/tax';
 import { orderItemUnitPrice } from '../utils/order';
-import { sortCategories, sortItemsByCategoryOrder } from '../utils/category';
+import { sortCategories, sortItemsByCategoryOrder, matchesSearchQuery } from '../utils/category';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import type { OrderItem, Item } from '../types';
 
 const OrderPage: React.FC = () => {
@@ -40,6 +41,8 @@ const OrderPage: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [categorySearch, setCategorySearch] = useState<string>('');
+  const [categorySearchOpen, setCategorySearchOpen] = useState<boolean>(false);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('upi');
@@ -94,10 +97,10 @@ const OrderPage: React.FC = () => {
       subtitle: currentStore?.name || '',
       actions: (
         <>
-          <button className="btn btn-secondary" onClick={() => setShowShortcutsHelp(true)} title="Keyboard shortcuts (?)">
+          <button className="gr-btn gr-btn--secondary" onClick={() => setShowShortcutsHelp(true)} title="Keyboard shortcuts (?)">
             <HelpCircle size={16} />
           </button>
-          <button className="btn btn-secondary" onClick={() => navigate('/')}>
+          <button className="gr-btn gr-btn--secondary" onClick={() => navigate('/')}>
             <ArrowLeft size={16} />
             Back to Tables
           </button>
@@ -128,12 +131,15 @@ const OrderPage: React.FC = () => {
 
   if (!table) {
     return (
-      <div className="order-page-empty">
-        <p>Table not found</p>
-        <button className="btn btn-secondary" onClick={() => navigate('/')}>
-          Back to Tables
-        </button>
-      </div>
+      <Empty
+        icon={<Search />}
+        title="Table not found"
+        action={
+          <button className="gr-btn gr-btn--secondary" onClick={() => navigate('/')}>
+            Back to Tables
+          </button>
+        }
+      />
     );
   }
 
@@ -148,9 +154,8 @@ const OrderPage: React.FC = () => {
     const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
     const category = categories.find(cat => cat.id === item.categoryId);
     const categoryName = category?.name || '';
-    const matchesSearch = searchQuery === '' ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      categoryName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesSearchQuery(item.name, searchQuery) ||
+      matchesSearchQuery(categoryName, searchQuery);
     return matchesCategory && matchesSearch;
   }), categories);
 
@@ -691,7 +696,41 @@ const OrderPage: React.FC = () => {
       <div className="order-page-layout">
         {/* Left Sidebar - Categories (Petpooja style) */}
         <div className="order-page-left">
-          <h3>Categories</h3>
+          <div className="order-categories-head">
+            <h3>Categories</h3>
+            <button
+              className="cat-search-toggle"
+              onClick={() => {
+                if (categorySearchOpen) setCategorySearch('');
+                setCategorySearchOpen(!categorySearchOpen);
+              }}
+              aria-label={categorySearchOpen ? 'Close category search' : 'Search categories'}
+              title="Search categories"
+            >
+              {categorySearchOpen ? <X size={14} /> : <Search size={14} />}
+            </button>
+          </div>
+          {categorySearchOpen && (
+            <div className="order-search-box category-search-box">
+              <Search size={14} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                className="order-search-input"
+                autoFocus
+              />
+              {categorySearch && (
+                <button
+                  className="clear-search-btn"
+                  onClick={() => setCategorySearch('')}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          )}
           <div className="order-categories-vertical">
             <button
               className={`category-btn-vertical ${selectedCategory === 'all' ? 'active' : ''}`}
@@ -699,15 +738,19 @@ const OrderPage: React.FC = () => {
             >
               All Items
             </button>
-            {sortCategories(categories.filter(c => c.enabled !== false)).map(cat => (
+            {sortCategories(categories.filter(c =>
+              c.enabled !== false &&
+              matchesSearchQuery(c.name, categorySearch)
+            )).map(cat => (
               <button
                 key={cat.id}
                 className={`category-btn-vertical ${selectedCategory === cat.id ? 'active' : ''}`}
+                data-ctx-category={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
               >
                 <span>{cat.name}</span>
                 {cat.isFavourite && (
-                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', marginLeft: 'auto', flexShrink: 0 }} />
+                  <Star size={12} fill="currentColor" style={{ color: 'var(--primary)', marginLeft: 'auto', flexShrink: 0 }} />
                 )}
               </button>
             ))}
@@ -741,11 +784,12 @@ const OrderPage: React.FC = () => {
               <div
                 key={item.id}
                 className={`item-card ${idx === kbFocusedItemIndex ? 'kb-focused' : ''}`}
+                data-ctx-item={item.id}
                 data-tooltip={item.name}
                 onClick={() => addItemToOrder(item)}
               >
                 {item.isFavourite && (
-                  <Star size={12} fill="currentColor" style={{ color: '#f5a623', position: 'absolute', top: '4px', right: '4px' }} />
+                  <Star size={12} fill="currentColor" style={{ color: 'var(--primary)', position: 'absolute', top: '4px', right: '4px' }} />
                 )}
                 <div className="item-category">{categories.find(c => c.id === item.categoryId)?.name || ''}</div>
                 <div className="item-name">{item.name}</div>
@@ -765,9 +809,7 @@ const OrderPage: React.FC = () => {
           </div>
 
           {orderItems.length === 0 ? (
-            <div className="empty-order">
-              Click items to add
-            </div>
+            <Empty compact icon={<ShoppingCart />} text="Click items to add" />
           ) : (
             <div className="order-items-scrollable">
               {orderItems.map(oi => (
@@ -781,14 +823,14 @@ const OrderPage: React.FC = () => {
                     {!viewOnly && (
                       <>
                         <button
-                          className="quantity-btn"
+                          className="pos-qtybtn"
                           onClick={() => updateQuantity(oi.itemId, -1)}
                         >
                           <Minus size={10} />
                         </button>
                         <span className="order-item-quantity">{oi.quantity}</span>
                         <button
-                          className="quantity-btn"
+                          className="pos-qtybtn"
                           onClick={() => updateQuantity(oi.itemId, 1)}
                         >
                           <Plus size={10} />
@@ -839,28 +881,32 @@ const OrderPage: React.FC = () => {
           <span className="bottom-bar-items">Items: {orderItems.length}</span>
           <div className="bottom-bar-total-wrap">
             <button
-              className="bottom-bar-total-btn"
+              className={`bottom-bar-total-btn ${showBreakdown ? 'open' : ''}`}
               onClick={() => setShowBreakdown(!showBreakdown)}
             >
               Total: {formatCurrency(total)}
+              <ChevronUp size={14} className="breakdown-chevron" />
             </button>
             {showBreakdown && orderItems.length > 0 && (
-              <div className="bottom-bar-breakdown">
-                <div className="breakdown-row">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(calculateTotal())}</span>
-                </div>
-                {taxEnabled && (
+              <>
+                <div className="bottom-bar-breakdown-overlay" onClick={() => setShowBreakdown(false)} />
+                <div className="bottom-bar-breakdown">
                   <div className="breakdown-row">
-                    <span>Tax</span>
-                    <span>{formatCurrency(calculateTax())}</span>
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(calculateTotal())}</span>
                   </div>
-                )}
-                <div className="breakdown-row final">
-                  <span>Total</span>
-                  <span>{formatCurrency(total)}</span>
+                  {taxEnabled && (
+                    <div className="breakdown-row">
+                      <span>Tax</span>
+                      <span>{formatCurrency(calculateTax())}</span>
+                    </div>
+                  )}
+                  <div className="breakdown-row final">
+                    <span>Total</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
           <div className="bottom-bar-payment">
@@ -891,7 +937,7 @@ const OrderPage: React.FC = () => {
           {!viewOnly && (
             <>
               <button
-                className="btn btn-secondary"
+                className="gr-btn gr-btn--secondary"
                 onClick={handleSave}
                 disabled={orderItems.length === 0 || isSubmitting}
                 title="Save order to table and go back (Ctrl+S)"
@@ -900,7 +946,7 @@ const OrderPage: React.FC = () => {
                 {actionType === 'save' ? 'Saving...' : 'Save'}
               </button>
               <button
-                className="btn btn-warning"
+                className="gr-btn gr-btn--soft"
                 onClick={handleSaveEBill}
                 disabled={orderItems.length === 0 || isSubmitting}
                 title="Save as E-Bill (no table hold) (Ctrl+E)"
@@ -909,7 +955,7 @@ const OrderPage: React.FC = () => {
                 {actionType === 'e-bill' ? 'Saving...' : 'Save & E-Bill'}
               </button>
               <button
-                className="btn btn-primary"
+                className="gr-btn gr-btn--primary"
                 onClick={handleSavePrint}
                 disabled={orderItems.length === 0 || isSubmitting || isPrinting}
                 title="Save, Print Bill & Release Table (Ctrl+P)"
@@ -919,7 +965,7 @@ const OrderPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                className="btn btn-success"
+                className="gr-btn gr-btn--success"
                 onClick={(e) => {
                   e.preventDefault();
                   console.log('[KOT BUTTON] KOT button clicked');
@@ -933,7 +979,7 @@ const OrderPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                className="btn btn-success"
+                className="gr-btn gr-btn--success"
                 onClick={(e) => {
                   e.preventDefault();
                   console.log('[KOT BUTTON] KOT & Print button clicked');
@@ -947,7 +993,7 @@ const OrderPage: React.FC = () => {
               </button>
             </>
           )}
-          <button className="btn btn-danger" onClick={handleCancel} title="Cancel / back (Esc)">
+          <button className="gr-btn gr-btn--danger" onClick={handleCancel} title="Cancel / back (Esc)">
             <X size={14} />
             Cancel
           </button>

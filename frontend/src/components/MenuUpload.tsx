@@ -8,6 +8,7 @@ import { usePageHeader } from '../contexts/PageHeaderContext';
 import { api } from '../services/api';
 import { cache, cacheKeys } from '../utils/cache';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 
 const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40];
 import type { Store, Category, Item } from '../types';
@@ -437,7 +438,7 @@ const MenuUpload: React.FC = () => {
     }
     if (status === 'price-change') {
       return (
-        <span style={badgeStyle('var(--warning, #f59e0b)')}>
+        <span style={badgeStyle('var(--warning, var(--primary))')}>
           PRICE {currentPrice !== undefined ? `₹${currentPrice}` : ''} → ₹{''}
         </span>
       );
@@ -465,14 +466,14 @@ const MenuUpload: React.FC = () => {
       )}
 
       {/* Step 1: Store + file selection */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-header">
-          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="gr-card" style={{ marginBottom: '1.5rem' }}>
+        <div className="gr-card__head">
+          <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Upload size={18} /> 1. Select Store & Upload Menu
           </span>
         </div>
-        <div className="card-body">
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+        <div className="gr-card__body">
+          <div className="gr-field" style={{ marginBottom: '1.5rem' }}>
             <label>Target Store</label>
             <select
               value={selectedStoreId}
@@ -489,7 +490,7 @@ const MenuUpload: React.FC = () => {
             </small>
           </div>
 
-          <div className="form-group">
+          <div className="gr-field">
             <label>Menu Image(s) or PDF(s)</label>
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -557,7 +558,7 @@ const MenuUpload: React.FC = () => {
 
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
             <button
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               onClick={handleParse}
               disabled={isParsing || files.length === 0 || !selectedStoreId}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -569,7 +570,7 @@ const MenuUpload: React.FC = () => {
               )}
             </button>
             {(files.length > 0 || parsedMenu) && (
-              <button className="btn btn-outline" onClick={resetAll} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button className="gr-btn gr-btn--secondary" onClick={resetAll} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <RefreshCw size={18} /> Reset
               </button>
             )}
@@ -579,23 +580,23 @@ const MenuUpload: React.FC = () => {
 
       {/* Step 2: Parsed menu results */}
       {parsedMenu && (
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
-            <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="gr-card" style={{ marginBottom: '1.5rem' }}>
+          <div className="gr-card__head" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+            <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileText size={18} /> 2. Parsed Menu
               {usedModel && <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)', fontWeight: 'normal' }}>({usedModel})</span>}
             </span>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', border: '1px solid var(--gray-300)', borderRadius: 'var(--radius)', overflow: 'hidden' }} title="Toggle inline vs side-by-side (Meld-style) diff view">
                 <button
-                  className={`btn ${viewMode === 'inline' ? 'btn-primary' : 'btn-outline'}`}
+                  className={`gr-btn ${viewMode === 'inline' ? 'gr-btn--primary' : 'gr-btn--secondary'}`}
                   onClick={() => setViewMode('inline')}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem', borderRadius: 0, border: 'none' }}
                 >
                   <List size={14} /> Inline
                 </button>
                 <button
-                  className={`btn ${viewMode === 'split' ? 'btn-primary' : 'btn-outline'}`}
+                  className={`gr-btn ${viewMode === 'split' ? 'gr-btn--primary' : 'gr-btn--secondary'}`}
                   onClick={() => setViewMode('split')}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem', borderRadius: 0, border: 'none' }}
                 >
@@ -603,7 +604,7 @@ const MenuUpload: React.FC = () => {
                 </button>
               </div>
               <button
-                className={`btn btn-outline ${showOnlyChanges ? 'btn-primary' : ''}`}
+                className={`gr-btn ${showOnlyChanges ? 'gr-btn--primary' : 'gr-btn--secondary'}`}
                 onClick={() => setShowOnlyChanges(!showOnlyChanges)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
                 title="Show only categories and items that differ from the current store menu"
@@ -611,7 +612,7 @@ const MenuUpload: React.FC = () => {
                 <Search size={16} /> Show only changes
               </button>
               <button
-                className={`btn btn-outline ${showRaw ? 'btn-primary' : ''}`}
+                className={`gr-btn ${showRaw ? 'gr-btn--primary' : 'gr-btn--secondary'}`}
                 onClick={() => setShowRaw(!showRaw)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
               >
@@ -620,14 +621,14 @@ const MenuUpload: React.FC = () => {
             </div>
           </div>
 
-          <div className="card-body">
+          <div className="gr-card__body">
             {stats && (
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem', fontSize: '0.85rem' }}>
                 <span style={statChipStyle('var(--gray-100)', 'var(--gray-700)')}><strong>{stats.cats}</strong> categories</span>
                 <span style={statChipStyle('var(--gray-100)', 'var(--gray-700)')}><strong>{stats.items}</strong> items</span>
                 <span style={statChipStyle('rgba(43,165,74,0.15)', 'var(--success)')}><strong>{stats.newCats}</strong> new categories</span>
                 <span style={statChipStyle('rgba(43,165,74,0.15)', 'var(--success)')}><strong>{stats.newItems}</strong> new items</span>
-                <span style={statChipStyle('rgba(245,158,11,0.15)', 'var(--warning, #f59e0b)')}><strong>{stats.priceChanges}</strong> price changes</span>
+                <span style={statChipStyle('rgba(245,158,11,0.15)', 'var(--warning, var(--primary))')}><strong>{stats.priceChanges}</strong> price changes</span>
               </div>
             )}
 
@@ -649,9 +650,11 @@ const MenuUpload: React.FC = () => {
             )}
 
             {parsedMenu.categories.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--gray-500)' }}>
-                No categories were parsed. Try a clearer image or check the raw response.
-              </div>
+              <Empty
+                icon={<FileText />}
+                title="No categories parsed"
+                text="Try a clearer image or check the raw response."
+              />
             ) : (
               <div>
                 {parsedMenu.categories.map((cat, catIdx) => {
@@ -694,14 +697,14 @@ const MenuUpload: React.FC = () => {
                           style={{ flex: 1, minWidth: '180px', fontWeight: 600, background: 'transparent', border: '1px solid transparent', borderRadius: '4px', padding: '0.25rem 0.5rem' }}
                         />
                         <button
-                          className="btn btn-outline"
+                          className="gr-btn gr-btn--secondary"
                           onClick={() => handleAddItem(catIdx)}
                           style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                         >
                           <Plus size={14} /> Item
                         </button>
                         <button
-                          className="btn btn-outline"
+                          className="gr-btn gr-btn--secondary"
                           onClick={() => handleRemoveCategory(catIdx)}
                           style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', color: 'var(--danger)' }}
                         >
@@ -817,7 +820,7 @@ const MenuUpload: React.FC = () => {
                                     </>)}
                                     <td style={tdStyle}>
                                       <button
-                                        className="btn btn-outline"
+                                        className="gr-btn gr-btn--secondary"
                                         onClick={() => handleRemoveItem(catIdx, actualIdx)}
                                         style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--danger)' }}
                                       >
@@ -838,7 +841,7 @@ const MenuUpload: React.FC = () => {
             )}
           </div>
 
-          <div className="card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)', flexWrap: 'wrap', gap: '1rem' }}>
+          <div className="gr-card__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderTop: '1px solid var(--gray-200)', flexWrap: 'wrap', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Import mode</span>
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -849,7 +852,7 @@ const MenuUpload: React.FC = () => {
                 ] as { key: ImportMode; label: string; hint: string }[]).map(opt => (
                   <button
                     key={opt.key}
-                    className={`btn ${importMode === opt.key ? 'btn-primary' : 'btn-outline'}`}
+                    className={`gr-btn ${importMode === opt.key ? 'gr-btn--primary' : 'gr-btn--secondary'}`}
                     onClick={() => setImportMode(opt.key)}
                     title={opt.hint}
                     style={{ fontSize: '0.8rem', padding: '0.35rem 0.7rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
@@ -865,7 +868,7 @@ const MenuUpload: React.FC = () => {
               </small>
             </div>
             <button
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               onClick={handleImport}
               disabled={isImporting || parsedMenu.categories.length === 0}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -882,16 +885,16 @@ const MenuUpload: React.FC = () => {
 
       {/* Current store menu reference */}
       {selectedStoreId && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="gr-card">
+          <div className="gr-card__head">
+            <span className="gr-h3" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Eye size={18} /> Current Menu of Selected Store
               <span style={{ fontSize: '0.8rem', color: 'var(--gray-500)', fontWeight: 'normal' }}>
                 ({currentCategories.length} categories, {currentItems.length} items)
               </span>
             </span>
             <button
-              className="btn btn-outline"
+              className="gr-btn gr-btn--secondary"
               onClick={() => loadCurrentMenu(selectedStoreId)}
               disabled={isLoadingCurrent}
               style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -899,9 +902,9 @@ const MenuUpload: React.FC = () => {
               {isLoadingCurrent ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Refresh
             </button>
           </div>
-          <div className="card-body">
+          <div className="gr-card__body">
             {currentCategories.length === 0 ? (
-              <div style={{ color: 'var(--gray-500)', padding: '1rem 0' }}>This store has no categories yet.</div>
+              <Empty compact icon={<List />} text="This store has no categories yet." />
             ) : (
               currentCategories.map(cat => {
                 const catItems = currentItems.filter(i => i.categoryId === cat.id);
@@ -1061,7 +1064,7 @@ const SplitDiffView: React.FC<SplitDiffViewProps> = ({
                       <span style={{ fontWeight: 500 }}>{row.current.name}</span>
                       <span style={{ color: 'var(--gray-500)' }}>₹{row.current.price}</span>
                       {row.parsed?._status === 'price-change' && (
-                        <span style={{ fontSize: '0.7rem', color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>CHANGED</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--warning, var(--primary))', fontWeight: 600 }}>CHANGED</span>
                       )}
                       {row.parsed?._status === 'match' && (
                         <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>unchanged</span>
@@ -1102,7 +1105,7 @@ const SplitDiffView: React.FC<SplitDiffViewProps> = ({
                         {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                       </select>}
                       <button
-                        className="btn btn-outline"
+                        className="gr-btn gr-btn--secondary"
                         onClick={() => onRemoveItem(catIdx, row.parsedActualIdx!)}
                         style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--danger)' }}
                       >
@@ -1119,7 +1122,7 @@ const SplitDiffView: React.FC<SplitDiffViewProps> = ({
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={2} style={{ ...cellBase, color: 'var(--gray-400)' }}>No items.</td></tr>
+            <tr><td colSpan={2} style={{ ...cellBase, padding: 0 }}><Empty compact icon={<FileText />} text="No items." /></td></tr>
           )}
         </tbody>
       </table>

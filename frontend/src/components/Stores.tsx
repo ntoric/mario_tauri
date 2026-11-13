@@ -4,6 +4,7 @@ import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { Button } from '../components/ui/Button';
 import notify from '../utils/toast';
+import { Empty } from './gr';
 import { isTaxEnabled } from '../utils/tax';
 
 const Stores: React.FC = () => {
@@ -117,7 +118,7 @@ const Stores: React.FC = () => {
       title: 'Manage Stores',
       subtitle: 'Create and manage your cafe branches',
       actions: (
-        <button className="btn btn-primary" onClick={() => openModal()}>
+        <button className="gr-btn gr-btn--primary" onClick={() => openModal()}>
           <Plus size={18} />
           Add Store
         </button>
@@ -129,8 +130,8 @@ const Stores: React.FC = () => {
     <div>
       <div className="stores-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem' }}>
         {stores.map((store: any) => (
-          <div key={store.id} className="card" style={{ position: 'relative' }}>
-            <div className="card-header">
+          <div key={store.id} className="gr-card" style={{ position: 'relative' }}>
+            <div className="gr-card__head">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{
                   width: '48px',
@@ -152,7 +153,7 @@ const Stores: React.FC = () => {
               <div className="action-btns">
                 {canToggleStatus && (
                   <button
-                    className="action-btn"
+                    className="gr-iconbtn gr-iconbtn--sm"
                     onClick={() => handleToggleStatus(store)}
                     disabled={loadingStoreId === store.id}
                     style={{
@@ -170,7 +171,7 @@ const Stores: React.FC = () => {
                   </button>
                 )}
                 <button 
-                  className="action-btn edit" 
+                  className="gr-iconbtn gr-iconbtn--sm edit" 
                   onClick={() => openModal(store)}
                   disabled={loadingStoreId === store.id}
                   style={{
@@ -182,7 +183,7 @@ const Stores: React.FC = () => {
                 </button>
                 {canDelete && (
                   <button 
-                    className="action-btn delete" 
+                    className="gr-iconbtn gr-iconbtn--sm delete" 
                     onClick={() => handleDelete(store.id)}
                     disabled={loadingStoreId === store.id}
                     style={{
@@ -199,7 +200,7 @@ const Stores: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="card-body">
+            <div className="gr-card__body">
               <div style={{ display: 'grid', gap: '0.75rem' }}>
                 {store.location && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -257,27 +258,27 @@ const Stores: React.FC = () => {
       </div>
 
       {stores.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--gray-500)' }}>
-          <Building2 size={64} style={{ marginBottom: '1.5rem', opacity: 0.5 }} />
-          <p style={{ fontSize: '1.125rem' }}>No stores found</p>
-          <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Create your first store to get started</p>
-        </div>
+        <Empty
+          icon={<Building2 />}
+          title="No stores found"
+          text="Create your first store to get started"
+        />
       )}
 
       {/* Store Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open" onClick={() => setShowModal(false)}>
+          <div className="gr-modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div className="gr-modal__head">
               <h2>{editingStore ? 'Edit Store' : 'Add New Store'}</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowModal(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="modal-body">
-                <div className="form-row">
-                  <div className="form-group">
+              <div className="gr-modal__body">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Store Name *</label>
                     <input
                       type="text"
@@ -287,7 +288,7 @@ const Stores: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Branch</label>
                     <input
                       type="text"
@@ -298,7 +299,7 @@ const Stores: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>Location</label>
                   <textarea
                     value={form.location}
@@ -308,8 +309,8 @@ const Stores: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
+                <div className="gr-grid gr-form2">
+                  <div className="gr-field">
                     <label>Phone</label>
                     <input
                       type="text"
@@ -318,7 +319,7 @@ const Stores: React.FC = () => {
                       placeholder="Contact number"
                     />
                   </div>
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Secondary Phone</label>
                     <input
                       type="text"
@@ -330,7 +331,7 @@ const Stores: React.FC = () => {
                 </div>
 
                 {(!editingStore || isTaxEnabled(editingStore)) && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>GSTIN</label>
                     <input
                       type="text"
@@ -341,7 +342,7 @@ const Stores: React.FC = () => {
                   </div>
                 )}
 
-                <div className="form-group">
+                <div className="gr-field">
                   <label>FSSAI Number</label>
                   <input
                     type="text"
@@ -352,7 +353,7 @@ const Stores: React.FC = () => {
                 </div>
 
                 {user?.role === 'superadmin' && (
-                  <div className="form-group">
+                  <div className="gr-field">
                     <label>Hide sales history after (days)</label>
                     <input
                       type="number"
@@ -370,8 +371,8 @@ const Stores: React.FC = () => {
                 )}
 
                 {user?.role === 'superadmin' && (
-                  <div className="form-group">
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <div className="gr-field">
+                    <label className="gr-switch">
                       <input
                         type="checkbox"
                         checked={form.myPlanEnabled}
@@ -386,7 +387,7 @@ const Stores: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="modal-footer">
+              <div className="gr-modal__foot">
                 <Button
                   type="button"
                   variant="secondary"

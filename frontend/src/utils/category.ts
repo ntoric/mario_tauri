@@ -15,6 +15,14 @@ export function sortCategories(categories: Category[]): Category[] {
   });
 }
 
+// Whitespace-insensitive, case-insensitive substring match used by item and
+// category search: both sides are compared with all whitespace removed, so
+// "kit kat" matches "kitkat" and "applejuice" matches "Apple juice".
+export function matchesSearchQuery(target: string, query: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  return normalize(target).includes(normalize(query));
+}
+
 // Orders items for the order page: favourite items first, then grouped by
 // their category's display order, then by name within a category.
 export function sortItemsByCategoryOrder(items: Item[], categories: Category[]): Item[] {

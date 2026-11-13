@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useAuthStore, useDataStore, useUIStore } from '../stores';
 import notify from '../utils/toast';
+import { Modal, Ic } from './gr';
 
 const StoreSwitcher: React.FC = () => {
   const { user, currentStoreId, setCurrentStore, canSwitchStores } = useAuthStore();
@@ -23,77 +24,37 @@ const StoreSwitcher: React.FC = () => {
   };
 
   return (
-    <div className="modal-overlay" onClick={closeStoreSwitcher}>
-      <div className="modal" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Switch Store</h2>
-          <button className="close-btn" onClick={closeStoreSwitcher}>
-            <X size={20} />
-          </button>
-        </div>
-        <div className="modal-body">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {stores.map((store) => (
-              <button
-                key={store.id}
-                onClick={() => handleSwitchStore(store.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
-                  border: '1px solid var(--gray-200)',
-                  borderRadius: 'var(--radius)',
-                  background: store.id === currentStoreId ? 'rgba(245,130,32, 0.1)' : 'var(--surface)',
-                  borderColor: store.id === currentStoreId ? 'var(--primary)' : undefined,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: 'var(--radius)',
-                  background: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  padding: '4px',
-                }}>
-                  <img
-                    src={store.logoUrl || '/logo.png'}
-                    alt={store.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: 'var(--dark)' }}>{store.name}</div>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--gray-600)' }}>{store.branch}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: '0.25rem' }}>
-                    {store.location}
-                  </div>
-                </div>
-                {store.id === currentStoreId && (
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    background: 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                  }}>
-                    <Check size={16} />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+    <Modal open onClose={closeStoreSwitcher} title="Switch store" size="md">
+      <div className="gr-stack">
+        {stores.map((store) => {
+          const active = store.id === currentStoreId;
+          return (
+            <button
+              key={store.id}
+              onClick={() => handleSwitchStore(store.id)}
+              className={`store-option${active ? ' is-active' : ''}`}
+              style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-md)', padding: '14px 16px', background: 'var(--surface)' }}
+            >
+              <div className="store-option-icon" style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', padding: 4 }}>
+                <img
+                  src={store.logoUrl || '/logo.png'}
+                  alt={store.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }}
+                />
+              </div>
+              <div className="store-option-info">
+                <div className="store-option-name">{store.name}</div>
+                {store.branch && <div className="store-option-branch">{store.branch}</div>}
+                {store.location && <div className="store-option-location">{store.location}</div>}
+              </div>
+              {active && (
+                <span className="store-option-check"><Ic icon={Check} size={18} /></span>
+              )}
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </Modal>
   );
 };
 

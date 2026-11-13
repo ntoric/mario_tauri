@@ -16,6 +16,7 @@ import 'categories_items_screen.dart';
 import 'parcel_order_screen.dart';
 import 'support_screen.dart';
 import '../widgets/animated_gradient_background.dart';
+import '../widgets/store_logo.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -215,8 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             decoration: ClayStyles.surface(radiusValue: 14),
                             child: Padding(
                               padding: const EdgeInsets.all(6),
-                              child: Image.asset('assets/images/logo.png',
-                                  fit: BoxFit.contain),
+                              child: StoreLogo(auth.currentStore),
                             ),
                           ),
                           if (isDesktop) ...[

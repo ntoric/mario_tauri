@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Download, X, AlertCircle } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { api } from '../services/api';
 import { updaterService } from '../services/updater';
+import { Ic } from './gr';
 
 interface AppUpdate {
   id: string;
@@ -86,142 +87,31 @@ const UpdateBanner: React.FC = () => {
   }
 
   return (
-    <div className="update-banner">
-      <div className="update-banner-content">
-        <div className="update-banner-icon">
-          <AlertCircle size={20} />
-        </div>
-        <div className="update-banner-text">
-          <span className="update-banner-title">
-            New Version Available: {update.version}
-          </span>
-          {update.releaseNotes && (
-            <span className="update-banner-notes">
-              {update.releaseNotes}
-            </span>
-          )}
-        </div>
-        <button
-          className="update-banner-download"
-          onClick={handleDownload}
-        >
-          <Download size={16} />
-          Download Update
-        </button>
-        <button
-          className="update-banner-dismiss"
-          onClick={handleDismiss}
-          aria-label="Dismiss"
-        >
-          <X size={16} />
-        </button>
+    <div className="gr-banner gr-banner--brand">
+      <span className="update-banner-icon">
+        <Download size={18} strokeWidth={1.8} />
+      </span>
+      <div className="gr-banner__text">
+        <b>New version available: {update.version}</b>
+        {update.releaseNotes && (
+          <div className="update-banner-notes">{update.releaseNotes}</div>
+        )}
       </div>
-      <style>{`
-        .update-banner {
-          background: #fff3e0;
-          border-bottom: 2px solid #f58220;
-          color: #1a1a1a;
-          padding: 0.75rem 1rem;
-          position: sticky;
-          top: 0;
-          z-index: 1000;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .update-banner-content {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .update-banner-icon {
-          flex-shrink: 0;
-          width: 36px;
-          height: 36px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #f58220;
-          border-radius: 8px;
-          color: white;
-        }
-
-        .update-banner-text {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-
-        .update-banner-title {
-          font-weight: 600;
-          font-size: 0.95rem;
-          color: #1a1a1a;
-        }
-
-        .update-banner-notes {
-          font-size: 0.8rem;
-          color: #555;
-        }
-
-        .update-banner-download {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: #f58220;
-          color: white;
-          border: none;
-          border-radius: 6px;
-          font-weight: 600;
-          font-size: 0.9rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .update-banner-download:hover {
-          background: #e0731a;
-          transform: translateY(-1px);
-        }
-
-        .update-banner-dismiss {
-          flex-shrink: 0;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(0, 0, 0, 0.05);
-          border: none;
-          border-radius: 6px;
-          color: #555;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .update-banner-dismiss:hover {
-          background: rgba(0, 0, 0, 0.1);
-          color: #1a1a1a;
-        }
-
-        @media (max-width: 768px) {
-          .update-banner-content {
-            flex-wrap: wrap;
-            gap: 0.75rem;
-          }
-
-          .update-banner-text {
-            flex-basis: 100%;
-            order: -1;
-          }
-
-          .update-banner-download {
-            flex: 1;
-          }
-        }
-      `}</style>
+      <button
+        className="gr-btn gr-btn--sm gr-btn--white"
+        onClick={handleDownload}
+      >
+        <Ic name="download" size={16} />
+        Download update
+      </button>
+      <button
+        className="gr-iconbtn gr-iconbtn--sm"
+        onClick={handleDismiss}
+        aria-label="Dismiss"
+        style={{ color: '#fff' }}
+      >
+        <Ic name="x" size={16} />
+      </button>
     </div>
   );
 };

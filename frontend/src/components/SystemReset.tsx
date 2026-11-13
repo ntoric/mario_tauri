@@ -167,7 +167,7 @@ const SystemReset: React.FC = () => {
       description: 'Remove all users except superadmin',
       icon: <Users size={24} />,
       count: stats.users,
-      color: '#ef4444',
+      color: 'var(--danger)',
     },
     {
       id: 'stores',
@@ -175,7 +175,7 @@ const SystemReset: React.FC = () => {
       description: 'Delete all stores and related data',
       icon: <Store size={24} />,
       count: stats.stores,
-      color: '#f97316',
+      color: 'var(--primary)',
     },
     {
       id: 'categories',
@@ -183,7 +183,7 @@ const SystemReset: React.FC = () => {
       description: 'Remove all menu categories',
       icon: <Tag size={24} />,
       count: stats.categories,
-      color: '#f59e0b',
+      color: 'var(--primary)',
     },
     {
       id: 'items',
@@ -191,7 +191,7 @@ const SystemReset: React.FC = () => {
       description: 'Delete all menu items',
       icon: <Coffee size={24} />,
       count: stats.items,
-      color: '#eab308',
+      color: 'var(--primary)',
     },
     {
       id: 'tables',
@@ -199,7 +199,7 @@ const SystemReset: React.FC = () => {
       description: 'Remove all table configurations',
       icon: <Grid3X3 size={24} />,
       count: stats.tables,
-      color: '#8b5cf6',
+      color: 'var(--primary)',
     },
     {
       id: 'orders',
@@ -207,7 +207,7 @@ const SystemReset: React.FC = () => {
       description: 'Delete all order history',
       icon: <ShoppingCart size={24} />,
       count: stats.orders,
-      color: '#06b6d4',
+      color: 'var(--primary)',
     },
     {
       id: 'bills',
@@ -215,7 +215,7 @@ const SystemReset: React.FC = () => {
       description: 'Remove all billing records',
       icon: <Receipt size={24} />,
       count: stats.bills,
-      color: '#10b981',
+      color: 'var(--primary)',
     },
   ] : [];
 
@@ -267,8 +267,8 @@ const SystemReset: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
+      <div className="pos-loader">
+        <div className="gr-spin"></div>
       </div>
     );
   }
@@ -276,7 +276,7 @@ const SystemReset: React.FC = () => {
   if (user?.role !== 'superadmin') {
     return (
       <div className="error-container">
-        <AlertTriangle size={48} color="#ef4444" />
+        <AlertTriangle size={48} color="var(--danger)" />
         <h2>Access Denied</h2>
         <p>Only superadmin can access system reset functionality.</p>
       </div>
@@ -287,7 +287,7 @@ const SystemReset: React.FC = () => {
     <div className="system-reset-container">
       <div className="reset-intro">
         <div className="reset-warning">
-          <AlertTriangle size={32} color="#ef4444" />
+          <AlertTriangle size={32} color="var(--danger)" />
           <div>
             <h3>Warning: Destructive Action</h3>
             <p>
@@ -309,22 +309,22 @@ const SystemReset: React.FC = () => {
         </div>
         
         <form onSubmit={handleSaveConfig} className="cleanup-config-form">
-          <div className="form-row">
-            <div className="form-group toggle-group">
+          <div className="gr-grid gr-form2">
+            <div className="gr-field toggle-group">
               <label className="toggle-label">
                 <span>Enable Periodic Cleanup</span>
                 <span className="toggle-sub">Turn on/off automatic database purge</span>
               </label>
-              <button
-                type="button"
-                className={`toggle-switch ${cleanupEnabled ? 'active' : ''}`}
-                onClick={() => setCleanupEnabled(!cleanupEnabled)}
-              >
-                <span className="toggle-slider"></span>
-              </button>
+              <label className="gr-switch" style={{ margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={cleanupEnabled}
+                  onChange={(e) => setCleanupEnabled(e.target.checked)}
+                />
+              </label>
             </div>
 
-            <div className="form-group input-group">
+            <div className="gr-field input-group">
               <label htmlFor="cleanupInterval">
                 <span>Cleanup Period (Minutes)</span>
                 <span className="toggle-sub">Interval between automatic purges</span>
@@ -364,7 +364,7 @@ const SystemReset: React.FC = () => {
           <div className="form-actions">
             <button
               type="submit"
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               disabled={isSavingConfig}
             >
               {isSavingConfig ? (
@@ -409,8 +409,8 @@ const SystemReset: React.FC = () => {
         </div>
 
         <form onSubmit={handleSaveAppUpdate} className="cleanup-config-form">
-          <div className="form-row">
-            <div className="form-group toggle-group">
+          <div className="gr-grid gr-form2">
+            <div className="gr-field toggle-group">
               <label className="toggle-label">
                 <span>Enable Update Notification</span>
                 <span className="toggle-sub">
@@ -419,18 +419,18 @@ const SystemReset: React.FC = () => {
                     : 'Show download banner in desktop app'}
                 </span>
               </label>
-              <button
-                type="button"
-                className={`toggle-switch ${appUpdates[activePlatform]?.enabled ? 'active' : ''}`}
-                onClick={() => updateAppUpdateField('enabled', !appUpdates[activePlatform]?.enabled)}
-              >
-                <span className="toggle-slider"></span>
-              </button>
+              <label className="gr-switch" style={{ margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={!!appUpdates[activePlatform]?.enabled}
+                  onChange={(e) => updateAppUpdateField('enabled', e.target.checked)}
+                />
+              </label>
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group input-group">
+          <div className="gr-grid gr-form2">
+            <div className="gr-field input-group">
               <label htmlFor="version">
                 <span>Version</span>
                 <span className="toggle-sub">Latest version number (e.g., 1.2.0)</span>
@@ -446,7 +446,7 @@ const SystemReset: React.FC = () => {
               />
             </div>
 
-            <div className="form-group input-group">
+            <div className="gr-field input-group">
               <label htmlFor="downloadUrl">
                 <span>Download URL</span>
                 <span className="toggle-sub">Link to download the update</span>
@@ -463,7 +463,7 @@ const SystemReset: React.FC = () => {
             </div>
           </div>
 
-          <div className="form-group">
+          <div className="gr-field">
             <label htmlFor="releaseNotes">
               <span>Release Notes (Optional)</span>
               <span className="toggle-sub">Describe what's new in this version</span>
@@ -481,7 +481,7 @@ const SystemReset: React.FC = () => {
           <div className="form-actions">
             <button
               type="submit"
-              className="btn btn-primary"
+              className="gr-btn gr-btn--primary"
               disabled={isSavingAppUpdate}
             >
               {isSavingAppUpdate ? (
@@ -506,7 +506,7 @@ const SystemReset: React.FC = () => {
 
       <div className="reset-options-header">
         <h3>Select Data to Reset</h3>
-        <button className="btn btn-outline btn-sm" onClick={selectAll}>
+        <button className="gr-btn gr-btn--secondary gr-btn--sm" onClick={selectAll}>
           {selectedOptions.size === resetOptions.length ? 'Deselect All' : 'Select All'}
         </button>
       </div>
@@ -548,7 +548,7 @@ const SystemReset: React.FC = () => {
           )}
         </div>
         <button
-          className="btn btn-danger btn-lg"
+          className="gr-btn gr-btn--danger gr-btn--sm"
           disabled={selectedOptions.size === 0 || isResetting}
           onClick={() => setShowConfirm(true)}
         >
@@ -567,17 +567,17 @@ const SystemReset: React.FC = () => {
       </div>
 
       {showConfirm && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: '480px' }}>
-            <div className="modal-header">
+        <div className="gr-modal-live is-open">
+          <div className="gr-modal" style={{ maxWidth: '480px' }}>
+            <div className="gr-modal__head">
               <h3>Confirm System Reset</h3>
-              <button className="close-btn" onClick={() => setShowConfirm(false)}>
+              <button className="gr-iconbtn" onClick={() => setShowConfirm(false)}>
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body">
+            <div className="gr-modal__body">
               <div className="confirm-warning">
-                <AlertTriangle size={48} color="#ef4444" />
+                <AlertTriangle size={48} color="var(--danger)" />
                 <p>
                   You are about to permanently delete data from the following categories:
                 </p>
@@ -596,12 +596,12 @@ const SystemReset: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowConfirm(false)}>
+            <div className="gr-modal__foot">
+              <button className="gr-btn gr-btn--secondary" onClick={() => setShowConfirm(false)}>
                 Cancel
               </button>
               <button 
-                className="btn btn-danger" 
+                className="gr-btn gr-btn--danger" 
                 onClick={handleReset}
                 disabled={isResetting}
               >
@@ -612,405 +612,7 @@ const SystemReset: React.FC = () => {
         </div>
       )}
 
-      <style>{`
-        .system-reset-container {
-          padding: 1.5rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
 
-        .reset-intro {
-          margin-bottom: 2rem;
-        }
-
-        .reset-warning {
-          display: flex;
-          gap: 1rem;
-          padding: 1.25rem;
-          background: rgba(239, 68, 68, 0.1);
-          border: 1px solid rgba(239, 68, 68, 0.3);
-          border-radius: var(--radius);
-        }
-
-        .reset-warning h3 {
-          color: #ef4444;
-          margin: 0 0 0.5rem 0;
-          font-size: 1.1rem;
-        }
-
-        .reset-warning p {
-          margin: 0;
-          color: #cbd5e1;
-          font-size: 0.9rem;
-        }
-
-        .reset-options-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-        }
-
-        .reset-options-header h3 {
-          margin: 0;
-          font-size: 1.1rem;
-          color: #f1f5f9;
-        }
-
-        .reset-options-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-
-        .reset-option-card {
-          display: flex;
-          align-items: flex-start;
-          gap: 1rem;
-          padding: 1.25rem;
-          background: var(--darker);
-          border: 2px solid rgba(255, 255, 255, 0.05);
-          border-radius: var(--radius);
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .reset-option-card:hover {
-          border-color: rgba(255, 255, 255, 0.1);
-          background: var(--dark);
-        }
-
-        .reset-option-card.selected {
-          border-color: var(--option-color);
-          background: rgba(255, 255, 255, 0.03);
-        }
-
-        .reset-option-icon {
-          flex-shrink: 0;
-          width: 48px;
-          height: 48px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: var(--radius);
-        }
-
-        .reset-option-content {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .reset-option-content h4 {
-          margin: 0 0 0.25rem 0;
-          font-size: 1rem;
-          color: #f1f5f9;
-        }
-
-        .reset-option-content p {
-          margin: 0 0 0.5rem 0;
-          font-size: 0.8rem;
-          color: #94a3b8;
-        }
-
-        .reset-option-count {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-          font-size: 0.75rem;
-          color: #cbd5e1;
-          padding: 0.25rem 0.5rem;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 4px;
-        }
-
-        .reset-option-check {
-          width: 24px;
-          height: 24px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--option-color);
-        }
-
-        .reset-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1.25rem;
-          background: var(--darker);
-          border-radius: var(--radius);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .reset-summary {
-          color: #cbd5e1;
-        }
-
-        .reset-summary strong {
-          color: #f1f5f9;
-        }
-
-        .confirm-warning {
-          text-align: center;
-          padding: 1rem;
-        }
-
-        .confirm-warning p {
-          margin: 1rem 0;
-          color: #cbd5e1;
-        }
-
-        .confirm-list {
-          text-align: left;
-          background: rgba(239, 68, 68, 0.05);
-          padding: 1rem 1.5rem;
-          border-radius: var(--radius);
-          margin: 1rem 0;
-          border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .confirm-list li {
-          margin: 0.5rem 0;
-          color: #cbd5e1;
-        }
-
-        .confirm-note {
-          font-size: 0.9rem;
-          color: #ef4444 !important;
-        }
-
-        .error-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 4rem 2rem;
-          text-align: center;
-        }
-
-        .error-container h2 {
-          margin: 1rem 0 0.5rem 0;
-          color: #f1f5f9;
-        }
-
-        .error-container p {
-          color: #94a3b8;
-        }
-
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        /* Periodic Cleanup Config Premium Styles */
-        .cleanup-config-card {
-          background: #ffffff;
-          backdrop-filter: blur(12px);
-          border: 1px solid #e5e7eb;
-          border-radius: var(--radius);
-          padding: 1.5rem;
-          margin-bottom: 2rem;
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
-        }
-
-        .cleanup-config-header {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          margin-bottom: 1.5rem;
-          border-bottom: 1px solid #e5e7eb;
-          padding-bottom: 1rem;
-        }
-
-        .config-icon {
-          color: var(--primary);
-        }
-
-        .cleanup-config-header h3 {
-          margin: 0;
-          font-size: 1.2rem;
-          color: #1a1a1a;
-        }
-
-        .cleanup-config-header p {
-          margin: 0.25rem 0 0 0;
-          font-size: 0.85rem;
-          color: #4a4a4a;
-        }
-
-        .cleanup-config-form {
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-        }
-
-        .form-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 2rem;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          flex: 1;
-          min-width: 250px;
-        }
-
-        .toggle-group {
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .toggle-label {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .toggle-label span:first-child {
-          font-weight: 500;
-          font-size: 0.95rem;
-          color: #1a1a1a;
-        }
-
-        .toggle-sub {
-          font-size: 0.75rem;
-          color: #4a4a4a;
-        }
-
-        .toggle-switch {
-          width: 50px;
-          height: 26px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 13px;
-          position: relative;
-          border: none;
-          cursor: pointer;
-          transition: background-color 0.3s;
-          padding: 0;
-        }
-
-        .toggle-switch.active {
-          background: #10b981;
-        }
-
-        .toggle-slider {
-          width: 20px;
-          height: 20px;
-          background: var(--light);
-          border-radius: 50%;
-          position: absolute;
-          top: 3px;
-          left: 3px;
-          transition: transform 0.3s;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .toggle-switch.active .toggle-slider {
-          transform: translateX(24px);
-        }
-
-        .input-group label {
-          font-weight: 500;
-          font-size: 0.95rem;
-          color: #1a1a1a;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .form-control {
-          background: #ffffff;
-          border: 1px solid #d1d5db;
-          color: #1a1a1a;
-          padding: 0.6rem 0.8rem;
-          border-radius: 6px;
-          font-size: 0.95rem;
-          transition: border-color 0.2s, background 0.2s;
-        }
-
-        .form-control:focus {
-          outline: none;
-          border-color: var(--primary);
-          background: #ffffff;
-        }
-
-        .form-control::placeholder {
-          color: #9ca3af;
-        }
-
-        .cleanup-status-info {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.85rem;
-          color: #4a4a4a;
-          background: #f3f4f6;
-          padding: 0.6rem 0.8rem;
-          border-radius: 6px;
-          border: 1px solid #e5e7eb;
-          align-self: flex-start;
-        }
-
-        .cleanup-status-info strong {
-          color: #1a1a1a;
-        }
-
-        .form-actions {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 0.5rem;
-        }
-
-        /* Platform Selector Styles */
-        .platform-selector {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 1.5rem;
-          background: #f3f4f6;
-          padding: 0.25rem;
-          border-radius: 8px;
-          width: fit-content;
-          border: 1px solid #e5e7eb;
-        }
-
-        .platform-tab {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: transparent;
-          border: none;
-          color: #4a4a4a;
-          font-size: 0.9rem;
-          font-weight: 500;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .platform-tab:hover {
-          color: #1a1a1a;
-          background: rgba(0, 0, 0, 0.05);
-        }
-
-        .platform-tab.active {
-          background: var(--primary);
-          color: #ffffff;
-        }
-
-        .form-group textarea.form-control {
-          resize: vertical;
-          min-height: 80px;
-        }
-      `}</style>
     </div>
   );
 };
