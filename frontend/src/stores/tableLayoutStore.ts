@@ -8,6 +8,7 @@ export type TableFloatPosition = 'top' | 'bottom' | 'left' | 'right';
 
 export interface TableLayoutPrefs {
   // Fixed grid columns in layout view; 0 means auto-fill (default).
+  // Fixed values are clamped to 6–15.
   gridColumns: number;
   cardSize: TableCardSize;
   // Card content toggles.
@@ -54,7 +55,7 @@ function loadPrefs(): TableLayoutPrefs {
       // Clamp/sanitize persisted values so a stale or hand-edited entry
       // can't break the layout.
       merged.gridColumns = Number.isFinite(merged.gridColumns)
-        ? Math.min(Math.max(Math.round(merged.gridColumns), 0), 15)
+        ? (merged.gridColumns <= 0 ? 0 : Math.min(Math.max(Math.round(merged.gridColumns), 6), 15))
         : 0;
       if (!CARD_SIZES.includes(merged.cardSize)) merged.cardSize = 'default';
       if (!ACTION_STYLES.includes(merged.actionStyle)) merged.actionStyle = 'row';

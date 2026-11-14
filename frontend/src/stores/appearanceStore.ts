@@ -64,11 +64,11 @@ type AppearancePrefs = Omit<AppearanceState,
   | 'setStripedRows' | 'setReduceMotion'>;
 
 const defaults: AppearancePrefs = {
-  accent: 'crimson',
+  accent: 'tangerine',
   customAccent: '#1a64d1',
   textSize: 'default',
-  cornerStyle: 'default',
-  density: 'comfortable',
+  cornerStyle: 'sharp',
+  density: 'compact',
   sidebarPosition: 'left',
   sidebarStyle: 'hover',
   sidebarLocked: false,

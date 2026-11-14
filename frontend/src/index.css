@@ -262,14 +262,14 @@ svg.gr-i-lu { display: block; }
 .view-btn:hover { border-color: var(--primary); color: var(--primary); }
 .view-btn.active { background: linear-gradient(135deg, var(--grad-mid), var(--grad-end)); color: #fff; border-color: transparent; }
 .view-toggle { display: inline-flex; gap: 4px; }
-.table-layout-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow-sm); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; min-height: 108px; animation: pos-tile-in .4s var(--ease-out) both; }
+.table-layout-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow-sm); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; aspect-ratio: 1 / 1; animation: pos-tile-in .4s var(--ease-out) both; }
 .table-layout-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .table-layout-card.occupied { border-color: var(--primary); background: linear-gradient(160deg, var(--tint), var(--surface) 75%); }
 .table-layout-card.kb-focused { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint); }
 .table-layout-card.kb-focused td { background: transparent; }
 @keyframes pos-tile-in { from { opacity: 0; transform: translateY(10px); } }
 .table-card-head { display: flex; align-items: center; justify-content: center; min-height: 24px; }
-.table-card-body { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; text-align: center; }
+.table-card-body { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; text-align: center; }
 .table-card-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .table-card-sub.amount { color: var(--primary); font-weight: 700; font-size: 14px; }
 .table-status-chip.available { background: var(--success-tint); color: var(--success); }
@@ -291,14 +291,14 @@ svg.gr-i-lu { display: block; }
 
 /* card size variants */
 .tables-layout-grid.cards-compact { gap: 10px; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
-.tables-layout-grid.cards-compact .table-layout-card { padding: 10px 12px; min-height: 84px; gap: 4px; }
+.tables-layout-grid.cards-compact .table-layout-card { padding: 10px 12px; gap: 4px; }
 .tables-layout-grid.cards-compact .table-card-head { min-height: 20px; }
 .tables-layout-grid.cards-compact .table-card-timer { top: 10px; }
 .tables-layout-grid.cards-compact .table-layout-number { font-size: 18px; }
 .tables-layout-grid.cards-compact .table-card-sub { font-size: 11px; }
 .tables-layout-grid.cards-compact .table-bill-btn, .tables-layout-grid.cards-compact .table-change-btn, .tables-layout-grid.cards-compact .table-combine-btn, .tables-layout-grid.cards-compact .table-preview-btn { height: 26px; }
 .tables-layout-grid.cards-large { gap: 18px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-.tables-layout-grid.cards-large .table-layout-card { padding: 18px 20px; min-height: 136px; gap: 8px; }
+.tables-layout-grid.cards-large .table-layout-card { padding: 18px 20px; gap: 8px; }
 .tables-layout-grid.cards-large .table-card-head { min-height: 28px; }
 .tables-layout-grid.cards-large .table-layout-number { font-size: 26px; }
 .tables-layout-grid.cards-large .table-card-sub { font-size: 13px; }
@@ -321,7 +321,7 @@ svg.gr-i-lu { display: block; }
 /* auto-dense cards: applied when the measured card width is too small for
    the regular chrome — content is compacted and chips shrink to fit */
 .tables-layout-grid.cards-dense { gap: 8px; }
-.tables-layout-grid.cards-dense .table-layout-card { padding: 8px 10px; min-height: 62px; gap: 2px; }
+.tables-layout-grid.cards-dense .table-layout-card { padding: 8px 10px; gap: 2px; }
 .tables-layout-grid.cards-dense .table-card-head { min-height: 0; }
 .tables-layout-grid.cards-dense .table-card-timer { top: 8px; padding: 1px 6px; font-size: 9px; gap: 3px; }
 .tables-layout-grid.cards-dense .table-card-timer svg { width: 9px; height: 9px; }
@@ -392,7 +392,7 @@ svg.gr-i-lu { display: block; }
 .category-tag-sm { height: 28px; padding: 0 12px; font-size: 12px; }
 
 .items-grid-scrollable, .order-items-scrollable { flex: 1; overflow-y: auto; min-height: 0; padding-right: 4px; }
-.items-grid-scrollable { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; }
+.items-grid-scrollable { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; align-content: start; }
 .order-item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 .item-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm); cursor: pointer; text-align: left; transition: transform .15s, box-shadow .15s; position: relative; }
 .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
@@ -436,6 +436,7 @@ svg.gr-i-lu { display: block; }
 .order-page-bottom-bar { position: sticky; bottom: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 12px 16px; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); z-index: 10; }
 .order-page-bottom-bar-info { flex: 1 1 360px; min-width: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .order-page-bottom-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.order-page-bottom-bar-actions .gr-btn { padding: 0 10px; gap: 6px; font-size: 13px; }
 .order-page-bottom-bar .payment-method-pills { flex-wrap: nowrap; gap: 6px; }
 .order-page-bottom-bar .payment-pill { padding: 6px 14px; font-size: 12.5px; border-width: 1px; }
 .order-page-bottom-bar .payment-label-inline { font-size: 12.5px; }

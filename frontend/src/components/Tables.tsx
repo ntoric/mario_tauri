@@ -1961,17 +1961,20 @@ const Tables: React.FC = () => {
             <div className="gr-modal__body layout-prefs">
               <div className="layout-pref-group">
                 <span className="pref-label">Tables per row</span>
-                <p className="gr-caption">Fixed number of table cards per row (up to 15), or auto-fit to the available width. When cards get too small, action buttons move to a floating bar on click.</p>
+                <p className="gr-caption">Fixed number of table cards per row (6–15), or auto-fit to the available width. When cards get too small, action buttons move to a floating bar on click.</p>
                 <div className="layout-cols-control">
                   <input
                     type="range"
                     className="gr-range"
-                    min={0}
+                    min={5}
                     max={15}
                     step={1}
-                    value={gridColumns}
-                    style={{ '--v': `${(gridColumns / 15) * 100}%` } as React.CSSProperties}
-                    onChange={e => setGridColumns(parseInt(e.target.value, 10))}
+                    value={gridColumns === 0 ? 5 : gridColumns}
+                    style={{ '--v': `${(((gridColumns === 0 ? 5 : gridColumns) - 5) / 10) * 100}%` } as React.CSSProperties}
+                    onChange={e => {
+                      const v = parseInt(e.target.value, 10);
+                      setGridColumns(v <= 5 ? 0 : v);
+                    }}
                   />
                   <span className="layout-cols-value">{gridColumns === 0 ? 'Auto' : `${gridColumns} / row`}</span>
                 </div>
