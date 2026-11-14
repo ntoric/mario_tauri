@@ -433,12 +433,15 @@ svg.gr-i-lu { display: block; }
 .remove-item-btn:hover { color: var(--danger); }
 .order-modal { max-width: 1040px; width: calc(100vw - 48px); }
 .order-modal-body { padding: 0; }
-.order-page-bottom-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); z-index: 10; }
-.order-page-bottom-bar-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
-.order-page-bottom-bar-actions { display: flex; gap: 8px; }
-.bottom-bar-items { font-size: 13px; color: var(--muted); }
+.order-page-bottom-bar { position: sticky; bottom: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 12px 16px; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); z-index: 10; }
+.order-page-bottom-bar-info { flex: 1 1 360px; min-width: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.order-page-bottom-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.order-page-bottom-bar .payment-method-pills { flex-wrap: nowrap; gap: 6px; }
+.order-page-bottom-bar .payment-pill { padding: 6px 14px; font-size: 12.5px; border-width: 1px; }
+.order-page-bottom-bar .payment-label-inline { font-size: 12.5px; }
 .bottom-bar-total-wrap { position: relative; display: flex; flex-direction: column; line-height: 1.2; }
-.bottom-bar-total-btn { display: inline-flex; align-items: center; gap: 6px; font: 700 16px var(--font-sans); color: var(--heading); cursor: pointer; }
+.bottom-bar-total-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; font: 700 14px var(--font-sans); color: var(--heading); cursor: pointer; }
+.bottom-bar-total-btn:hover { background: var(--tint); color: var(--primary-strong); }
 .bottom-bar-total-btn .breakdown-chevron { transition: transform .15s; }
 .bottom-bar-total-btn.open .breakdown-chevron { transform: rotate(180deg); }
 .bottom-bar-breakdown-overlay { position: fixed; inset: 0; z-index: 45; }

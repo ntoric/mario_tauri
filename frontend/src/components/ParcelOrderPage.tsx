@@ -471,7 +471,6 @@ const ParcelOrderPage: React.FC = () => {
       {/* Bottom Action Bar */}
       <div className="order-page-bottom-bar">
         <div className="order-page-bottom-bar-info">
-          <span className="bottom-bar-items">Items: {orderItems.length}</span>
           <div className="bottom-bar-total-wrap">
             <button
               className={`bottom-bar-total-btn ${showBreakdown ? 'open' : ''}`}

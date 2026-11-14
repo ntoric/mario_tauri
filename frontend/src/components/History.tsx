@@ -701,47 +701,50 @@ const History: React.FC = () => {
               </button>
             </div>
             <div className="gr-modal__body">
-              <div className="order-sidebar">
-                {viewingOrder.status === 'merged' && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    padding: '0.6rem 0.75rem', marginBottom: '0.75rem',
-                    background: 'rgba(33,150,243,0.08)', border: '1px solid rgba(33,150,243,0.2)',
-                    borderRadius: '8px', color: 'var(--info)', fontSize: '0.82rem', fontWeight: 600,
-                  }}>
-                    <Combine size={15} />
-                    {(() => {
-                      const mergedInto = getMergedIntoOrder(viewingOrder);
-                      return mergedInto
-                        ? `Merged into Table ${mergedInto.tableName || mergedInto.tableNumber} — items are included in that bill`
-                        : 'This order was merged into another bill';
-                    })()}
-                  </div>
-                )}
+              {viewingOrder.status === 'merged' && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.6rem 0.75rem', marginBottom: '0.75rem',
+                  background: 'rgba(33,150,243,0.08)', border: '1px solid rgba(33,150,243,0.2)',
+                  borderRadius: '8px', color: 'var(--info)', fontSize: '0.82rem', fontWeight: 600,
+                }}>
+                  <Combine size={15} />
+                  {(() => {
+                    const mergedInto = getMergedIntoOrder(viewingOrder);
+                    return mergedInto
+                      ? `Merged into Table ${mergedInto.tableName || mergedInto.tableNumber} — items are included in that bill`
+                      : 'This order was merged into another bill';
+                  })()}
+                </div>
+              )}
+              <div className="bill-items">
                 {viewingOrder.items.map((oi, idx) => (
-                  <div key={idx} className="order-item">
-                    <div className="order-item-info">
-                      <div className="order-item-name">{oi.item.name}</div>
-                      <div className="order-item-price">{formatCurrency(orderItemUnitPrice(oi))} each</div>
+                  <div key={idx} className="bill-item">
+                    <div className="bill-item-details">
+                      <div className="bill-item-name">{oi.item.name}</div>
+                      <div className="bill-item-qty">
+                        {oi.quantity} x {formatCurrency(orderItemUnitPrice(oi))}
+                        {oi.notes ? ` — ${oi.notes}` : ''}
+                      </div>
                     </div>
-                    <span className="order-item-quantity">x{oi.quantity}</span>
+                    <div className="bill-item-price">{formatCurrency(oi.quantity * orderItemUnitPrice(oi))}</div>
                   </div>
                 ))}
-                <div className="order-total">
-                  <div className="total-row">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(viewingOrder.totalAmount)}</span>
+              </div>
+              <div className="bill-totals">
+                <div className="bill-total-row">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(viewingOrder.totalAmount)}</span>
+                </div>
+                {taxEnabled && (
+                  <div className="bill-total-row">
+                    <span>Tax</span>
+                    <span>{formatCurrency(viewingOrder.taxAmount || 0)}</span>
                   </div>
-                  {taxEnabled && (
-                    <div className="total-row">
-                      <span>Tax</span>
-                      <span>{formatCurrency(viewingOrder.taxAmount || 0)}</span>
-                    </div>
-                  )}
-                  <div className="total-row final">
-                    <span>Total</span>
-                    <span>{formatCurrency((viewingOrder.totalAmount || 0) + (viewingOrder.taxAmount || 0))}</span>
-                  </div>
+                )}
+                <div className="bill-total-row grand-total">
+                  <span>Total</span>
+                  <span>{formatCurrency((viewingOrder.totalAmount || 0) + (viewingOrder.taxAmount || 0))}</span>
                 </div>
               </div>
             </div>
