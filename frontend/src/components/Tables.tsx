@@ -160,9 +160,9 @@ const Tables: React.FC = () => {
   // User-customizable layout prefs (persisted per device)
   const [showLayoutModal, setShowLayoutModal] = useState(false);
   const {
-    gridColumns, cardSize, showStatus, showTimer, showInfo, actionStyle, floatPosition,
+    gridColumns, cardSize, showStatus, showTimer, showInfo, actionStyle, actionButtons, floatPosition,
     setGridColumns, setCardSize, setShowStatus, setShowTimer, setShowInfo,
-    setActionStyle, setFloatPosition, resetTableLayout,
+    setActionStyle, setActionButton, setFloatPosition, resetTableLayout,
   } = useTableLayoutStore();
 
   // Floating action bar: when cards are too narrow for inline buttons,
@@ -410,11 +410,12 @@ const Tables: React.FC = () => {
   };
 
   const handleCardHover = (e: React.MouseEvent, table: Table) => {
-    if (actionStyle === 'hidden' || actionsFit) return;
+    if (actionStyle === 'hidden' || actionsFit || visibleActionCount === 0) return;
     if (!getActiveOrderByTable(table.id)) return;
     cancelFloatBarHide();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const barW = actionStyle === 'labeled' ? 340 : 200;
+    // +1 for the ever-present Open button.
+    const barW = (visibleActionCount + 1) * (actionStyle === 'labeled' ? 68 : 40);
     const barH = 46;
     const gap = 8;
     // Honor the configured direction; flip to the opposite side when there
@@ -855,10 +856,15 @@ const Tables: React.FC = () => {
     ? (layoutWidth - (effectiveCols - 1) * gridGap) / effectiveCols
     : minCard;
   const denseCards = cardPx < 115;
+  // Number of quick actions enabled on occupied cards — drives whether the
+  // buttons are rendered at all and how much width they need.
+  const visibleActionCount = (['bill', 'move', 'merge', 'view'] as const)
+    .filter(k => actionButtons[k]).length;
   const actionsFit =
+    visibleActionCount === 0 ? false :
     actionStyle === 'labeled' ? cardPx >= 90 :
-    actionStyle === 'compact' ? cardPx >= 175 :
-    cardPx >= 150;
+    // Each hidden button frees ~36px (30px button + 6px gap).
+    cardPx >= (actionStyle === 'compact' ? 175 : 150) - (4 - visibleActionCount) * 36;
 
   // Reset the section pill filter if its section no longer has any tables.
   useEffect(() => {
@@ -1159,40 +1165,48 @@ const Tables: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      {activeOrder && actionStyle !== 'hidden' && actionsFit && (
+                      {activeOrder && actionStyle !== 'hidden' && visibleActionCount > 0 && actionsFit && (
                         <div className={`table-card-actions${actionStyle !== 'row' ? ` actions-${actionStyle}` : ''}`}>
-                          <button
-                            className="table-bill-btn new-design"
-                            onClick={(e) => handleBillClick(e, table)}
-                            data-tooltip="Print Bill"
-                          >
-                            <Printer size={15} />
-                            {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
-                          </button>
-                          <button
-                            className="table-change-btn"
-                            onClick={(e) => handleChangeTableClick(e, table)}
-                            data-tooltip="Change Table"
-                          >
-                            <ArrowRightLeft size={14} />
-                            {actionStyle === 'labeled' && <span className="action-label">Move</span>}
-                          </button>
-                          <button
-                            className="table-combine-btn"
-                            onClick={(e) => handleCombineClick(e, table)}
-                            data-tooltip="Merge Bill"
-                          >
-                            <Combine size={14} />
-                            {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
-                          </button>
-                          <button
-                            className="table-preview-btn"
-                            onClick={(e) => handlePreviewClick(e, table)}
-                            data-tooltip="Preview Order"
-                          >
-                            <Eye size={14} />
-                            {actionStyle === 'labeled' && <span className="action-label">View</span>}
-                          </button>
+                          {actionButtons.bill && (
+                            <button
+                              className="table-bill-btn new-design"
+                              onClick={(e) => handleBillClick(e, table)}
+                              data-tooltip="Print Bill"
+                            >
+                              <Printer size={15} />
+                              {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
+                            </button>
+                          )}
+                          {actionButtons.move && (
+                            <button
+                              className="table-change-btn"
+                              onClick={(e) => handleChangeTableClick(e, table)}
+                              data-tooltip="Change Table"
+                            >
+                              <ArrowRightLeft size={14} />
+                              {actionStyle === 'labeled' && <span className="action-label">Move</span>}
+                            </button>
+                          )}
+                          {actionButtons.merge && (
+                            <button
+                              className="table-combine-btn"
+                              onClick={(e) => handleCombineClick(e, table)}
+                              data-tooltip="Merge Bill"
+                            >
+                              <Combine size={14} />
+                              {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
+                            </button>
+                          )}
+                          {actionButtons.view && (
+                            <button
+                              className="table-preview-btn"
+                              onClick={(e) => handlePreviewClick(e, table)}
+                              data-tooltip="Preview Order"
+                            >
+                              <Eye size={14} />
+                              {actionStyle === 'labeled' && <span className="action-label">View</span>}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1265,44 +1279,52 @@ const Tables: React.FC = () => {
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="action-btns">
-                            {activeOrder && actionStyle !== 'hidden' && (
+                            {activeOrder && actionStyle !== 'hidden' && visibleActionCount > 0 && (
                               <>
-                                <button
-                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
-                                  style={{ background: 'rgba(245,130,32, 0.1)', color: 'var(--primary)' }}
-                                  onClick={(e) => handleBillClick(e as any, table)}
-                                  title="Print Bill"
-                                >
-                                  <Printer size={14} />
-                                  {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
-                                </button>
-                                <button
-                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
-                                  style={{ background: 'rgba(33,150,243, 0.1)', color: 'var(--info)' }}
-                                  onClick={(e) => handleChangeTableClick(e as any, table)}
-                                  title="Change Table"
-                                >
-                                  <ArrowRightLeft size={14} />
-                                  {actionStyle === 'labeled' && <span className="action-label">Move</span>}
-                                </button>
-                                <button
-                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
-                                  style={{ background: 'rgba(245,166,35, 0.1)', color: 'var(--warning)' }}
-                                  onClick={(e) => handleCombineClick(e as any, table)}
-                                  title="Merge Bill"
-                                >
-                                  <Combine size={14} />
-                                  {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
-                                </button>
-                                <button
-                                  className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
-                                  style={{ background: 'rgba(45,55,72, 0.1)', color: 'var(--secondary)' }}
-                                  onClick={(e) => handlePreviewClick(e as any, table)}
-                                  title="Preview Order"
-                                >
-                                  <Eye size={14} />
-                                  {actionStyle === 'labeled' && <span className="action-label">View</span>}
-                                </button>
+                                {actionButtons.bill && (
+                                  <button
+                                    className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
+                                    style={{ background: 'rgba(245,130,32, 0.1)', color: 'var(--primary)' }}
+                                    onClick={(e) => handleBillClick(e as any, table)}
+                                    title="Print Bill"
+                                  >
+                                    <Printer size={14} />
+                                    {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
+                                  </button>
+                                )}
+                                {actionButtons.move && (
+                                  <button
+                                    className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
+                                    style={{ background: 'rgba(33,150,243, 0.1)', color: 'var(--info)' }}
+                                    onClick={(e) => handleChangeTableClick(e as any, table)}
+                                    title="Change Table"
+                                  >
+                                    <ArrowRightLeft size={14} />
+                                    {actionStyle === 'labeled' && <span className="action-label">Move</span>}
+                                  </button>
+                                )}
+                                {actionButtons.merge && (
+                                  <button
+                                    className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
+                                    style={{ background: 'rgba(245,166,35, 0.1)', color: 'var(--warning)' }}
+                                    onClick={(e) => handleCombineClick(e as any, table)}
+                                    title="Merge Bill"
+                                  >
+                                    <Combine size={14} />
+                                    {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
+                                  </button>
+                                )}
+                                {actionButtons.view && (
+                                  <button
+                                    className={`gr-iconbtn gr-iconbtn--sm${actionStyle === 'labeled' ? ' with-label' : ''}`}
+                                    style={{ background: 'rgba(45,55,72, 0.1)', color: 'var(--secondary)' }}
+                                    onClick={(e) => handlePreviewClick(e as any, table)}
+                                    title="Preview Order"
+                                  >
+                                    <Eye size={14} />
+                                    {actionStyle === 'labeled' && <span className="action-label">View</span>}
+                                  </button>
+                                )}
                               </>
                             )}
                             {isAdmin && deleteMode && (
@@ -1896,7 +1918,7 @@ const Tables: React.FC = () => {
       {floatBar && (() => {
         const t = tables.find(x => x.id === floatBar.tableId);
         const order = t ? getActiveOrderByTable(t.id) : null;
-        if (!t || !order) return null;
+        if (!t || !order || visibleActionCount === 0) return null;
         return (
           <div
             className={`table-float-actions dir-${floatBar.dir}${actionStyle === 'labeled' ? ' with-labels' : ''}`}
@@ -1904,38 +1926,46 @@ const Tables: React.FC = () => {
             onMouseEnter={cancelFloatBarHide}
             onMouseLeave={scheduleFloatBarHide}
           >
-            <button
-              className="table-bill-btn new-design"
-              title="Print Bill"
-              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleBillClick(e, t); }}
-            >
-              <Printer size={15} />
-              {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
-            </button>
-            <button
-              className="table-change-btn"
-              title="Change Table"
-              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleChangeTableClick(e, t); }}
-            >
-              <ArrowRightLeft size={14} />
-              {actionStyle === 'labeled' && <span className="action-label">Move</span>}
-            </button>
-            <button
-              className="table-combine-btn"
-              title="Merge Bill"
-              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleCombineClick(e, t); }}
-            >
-              <Combine size={14} />
-              {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
-            </button>
-            <button
-              className="table-preview-btn"
-              title="Preview Order"
-              onClick={(e) => { e.stopPropagation(); setFloatBar(null); handlePreviewClick(e, t); }}
-            >
-              <Eye size={14} />
-              {actionStyle === 'labeled' && <span className="action-label">View</span>}
-            </button>
+            {actionButtons.bill && (
+              <button
+                className="table-bill-btn new-design"
+                title="Print Bill"
+                onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleBillClick(e, t); }}
+              >
+                <Printer size={15} />
+                {actionStyle === 'labeled' && <span className="action-label">Bill</span>}
+              </button>
+            )}
+            {actionButtons.move && (
+              <button
+                className="table-change-btn"
+                title="Change Table"
+                onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleChangeTableClick(e, t); }}
+              >
+                <ArrowRightLeft size={14} />
+                {actionStyle === 'labeled' && <span className="action-label">Move</span>}
+              </button>
+            )}
+            {actionButtons.merge && (
+              <button
+                className="table-combine-btn"
+                title="Merge Bill"
+                onClick={(e) => { e.stopPropagation(); setFloatBar(null); handleCombineClick(e, t); }}
+              >
+                <Combine size={14} />
+                {actionStyle === 'labeled' && <span className="action-label">Merge</span>}
+              </button>
+            )}
+            {actionButtons.view && (
+              <button
+                className="table-preview-btn"
+                title="Preview Order"
+                onClick={(e) => { e.stopPropagation(); setFloatBar(null); handlePreviewClick(e, t); }}
+              >
+                <Eye size={14} />
+                {actionStyle === 'labeled' && <span className="action-label">View</span>}
+              </button>
+            )}
             <button
               className="table-open-btn"
               title="Open Order"
@@ -2049,6 +2079,33 @@ const Tables: React.FC = () => {
               </div>
 
               {actionStyle !== 'hidden' && (
+                <div className="layout-pref-group">
+                  <span className="pref-label">Buttons to show</span>
+                  <p className="gr-caption">Pick which quick actions appear on occupied tables. Hidden actions remain available from the right-click menu.</p>
+                  <div className="pref-toggles">
+                    {([
+                      { key: 'bill', label: 'Print bill', hint: 'Open the bill dialog for printing.' },
+                      { key: 'move', label: 'Change table', hint: 'Move the order to another table.' },
+                      { key: 'merge', label: 'Merge bill', hint: 'Combine with another table\u2019s order.' },
+                      { key: 'view', label: 'Preview order', hint: 'Peek at the order without opening it.' },
+                    ] as const).map(a => (
+                      <label key={a.key} className="gr-switch pref-toggle">
+                        <input
+                          type="checkbox"
+                          checked={actionButtons[a.key]}
+                          onChange={e => setActionButton(a.key, e.target.checked)}
+                        />
+                        <span className="pref-toggle__text">
+                          <strong>{a.label}</strong>
+                          <small>{a.hint}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {actionStyle !== 'hidden' && visibleActionCount > 0 && (
                 <div className="layout-pref-group">
                   <span className="pref-label">Floating bar position</span>
                   <p className="gr-caption">Where the floating action bar appears when a card is too small for inline buttons.</p>
