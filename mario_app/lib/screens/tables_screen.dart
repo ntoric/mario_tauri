@@ -420,7 +420,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     children: [
                       Expanded(
                         child: _actionCard(
-                          bg: const Color(0xFFEAF2FF),
+                          bg: AppColors.tint,
                           accent: AppColors.info,
                           icon: Icons.edit,
                           title: 'Edit Order',
@@ -443,7 +443,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _actionCard(
-                          bg: const Color(0xFFFFF4DB),
+                          bg: AppColors.surface2,
                           accent: AppColors.warning,
                           icon: Icons.swap_horiz,
                           title: 'Move to Another Table',
@@ -458,7 +458,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _actionCard(
-                          bg: const Color(0xFFFFEAEA),
+                          bg: AppColors.dangerTint,
                           accent: AppColors.danger,
                           icon: Icons.delete_outline,
                           title: 'Cancel Order',
@@ -993,7 +993,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     context.watch<AuthProvider>();
-    context.watch<ThemeProvider>();
+    final themeProvider = context.watch<ThemeProvider>();
     final data = context.watch<DataProvider>();
     final tables = data.tables;
 
@@ -1088,7 +1088,13 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                                             in groupedTables[g].tables)
                                           SizedBox(
                                             width: cardWidth,
-                                            height: 182,
+                                            // Square cards when the action
+                                            // row is hidden; taller when the
+                                            // buttons need room at the bottom.
+                                            height: themeProvider
+                                                    .showTableActions
+                                                ? 182
+                                                : cardWidth,
                                             child: _buildTableCard(
                                                 table, data, cardIndex++),
                                           ),
@@ -1287,6 +1293,7 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
     final status = _statusFor(table, data);
     final isOccupied = status == _TableStatusFilter.occupied;
     final isReserved = status == _TableStatusFilter.reserved;
+    final showTableActions = context.watch<ThemeProvider>().showTableActions;
 
     final Color accent;
     final String statusLabel;
@@ -1328,11 +1335,12 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
               );
             },
             onLongPress: () => _showTableOptions(table, order, data),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(3),
             child: Container(
               height: double.infinity,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(3),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -1403,15 +1411,6 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${table.seats} ${table.seats == 1 ? 'seat' : 'seats'}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.gray500,
-                    ),
-                  ),
                   const SizedBox(height: 10),
                   if (!isOccupied) ...[
                     const Spacer(),
@@ -1453,62 +1452,66 @@ class _TablesScreenState extends State<TablesScreen> with RouteAware {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const Spacer(),
-                    const SizedBox(height: 10),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: accent.withOpacity(0.18),
+                    if (showTableActions) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: accent.withOpacity(0.18),
+                            ),
+                          ),
+                        ),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            children: [
+                              _cardAction(
+                                icon: Icons.receipt_long_outlined,
+                                color: AppColors.dark,
+                                onTap: () {
+                                  final remoteBilling = context
+                                          .read<AuthProvider>()
+                                          .currentStore
+                                          ?.remoteBillingEnabled ==
+                                      true;
+                                  if (remoteBilling) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            BillScreen(order: order),
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Remote billing is not enabled for this store'),
+                                        backgroundColor: AppColors.warning,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                              _cardAction(
+                                icon: Icons.swap_horiz_rounded,
+                                color: AppColors.dark,
+                                onTap: () => showMoveTableDialog(
+                                    context, order, data.tables, data),
+                              ),
+                              _cardAction(
+                                icon: Icons.close_rounded,
+                                color: AppColors.danger,
+                                onTap: () =>
+                                    cancelOrderFlow(context, order, data),
+                                isLast: true,
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          children: [
-                            _cardAction(
-                              icon: Icons.receipt_long_outlined,
-                              color: AppColors.dark,
-                              onTap: () {
-                                final remoteBilling = context
-                                        .read<AuthProvider>()
-                                        .currentStore
-                                        ?.remoteBillingEnabled ==
-                                    true;
-                                if (remoteBilling) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => BillScreen(order: order),
-                                    ),
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Remote billing is not enabled for this store'),
-                                      backgroundColor: AppColors.warning,
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                            _cardAction(
-                              icon: Icons.swap_horiz_rounded,
-                              color: AppColors.dark,
-                              onTap: () => showMoveTableDialog(
-                                  context, order, data.tables, data),
-                            ),
-                            _cardAction(
-                              icon: Icons.close_rounded,
-                              color: AppColors.danger,
-                              onTap: () =>
-                                  cancelOrderFlow(context, order, data),
-                              isLast: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    ] else
+                      const SizedBox(height: 12),
                   ],
                 ],
               ),

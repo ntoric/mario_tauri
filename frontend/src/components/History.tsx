@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine, FileText, Minus, Plus, SlidersHorizontal } from 'lucide-react';
+import { Eye, Calendar, Search, Receipt, Package, X, Printer, CalendarDays, Ban, Combine, FileText, Download, Minus, Plus, SlidersHorizontal } from 'lucide-react';
 import { useDataStore, useAuthStore } from '../stores';
 import { usePageHeader } from '../contexts/PageHeaderContext';
 import { formatCurrency } from '../utils/currency';
@@ -8,6 +8,7 @@ import { isTaxEnabled } from '../utils/tax';
 import { api } from '../services/api';
 import { printerService } from '../services/printer';
 import { buildInvoicePrintJob, buildCreditNotePrintJob } from '../utils/gstInvoice';
+import { downloadBillHtml } from '../utils/billDownload';
 import notify from '../utils/toast';
 import { Empty } from './gr';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -30,6 +31,7 @@ const History: React.FC = () => {
   const toolbarSearchRef = useRef<HTMLInputElement>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isPrinting, setIsPrinting] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
@@ -58,6 +60,91 @@ const History: React.FC = () => {
     return useDataStore.getState().bills.find(b => b.orderId === orderId);
   };
 
+  // Builds the invoice job for an order: the issued GST bill verbatim when one
+  // exists, otherwise a plain receipt from the order's items. Shared by
+  // printing and downloading so both produce the same document.
+  const buildBillJob = async (order: Order) => {
+    let associatedBill = await findBillForOrder(order.id);
+    if (associatedBill?.fy && !associatedBill.lines?.length) {
+      associatedBill = await api.getBill(associatedBill.id);
+    }
+    if (associatedBill?.fy && associatedBill.lines?.length) {
+      return buildInvoicePrintJob(associatedBill, currentStore!, order.items)!;
+    }
+    const invoiceNo = associatedBill?.invoiceNo || '';
+
+    const printItems = order.items.map(oi => {
+      const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
+      const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
+      return {
+        name: oi.item.name,
+        hsn: oi.item.description || '',
+        qty: oi.quantity,
+        unit: 'PCS',
+        rate: orderItemUnitPrice(oi),
+        tax_percent: taxPercent,
+        amount: itemTotal,
+      };
+    });
+
+    const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
+    const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
+    const cgst = actualTax / 2;
+    const sgst = actualTax / 2;
+    const subtotal = associatedBill?.subtotal || taxable;
+    const taxTotal = associatedBill?.taxTotal ?? actualTax;
+    const total = associatedBill?.total || (subtotal + taxTotal);
+    const paymentMethod = associatedBill?.paymentMethod || order.paymentMethod || 'cash';
+
+    return {
+      type: 'invoice' as const,
+      printer: {
+        type: 'usb',
+        name: currentStore?.printerName || 'Thermal Printer',
+        vendor_id: currentStore?.printerVendorId || '0x0fe6',
+        product_id: currentStore?.printerProductId || '0x811e',
+        paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
+      },
+      invoice: {
+        store: {
+          name: currentStore?.name || 'Cafe',
+          branch: currentStore?.branch || '',
+          location: currentStore?.location || '',
+          // No GST bill exists for this order, so the receipt must not
+          // carry the GSTIN (it would look like a tax invoice).
+          ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
+          ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
+          ...(currentStore?.secondaryPhone ? { phone_secondary: currentStore.secondaryPhone } : {}),
+          address: currentStore?.location || '',
+        },
+        customer: {
+          name: associatedBill?.customerName || order.customerName || 'Walk-in Customer',
+          mobile: associatedBill?.customerMobile || order.customerMobile || '',
+        },
+        invoice_no: invoiceNo,
+        bill_no: invoiceNo,
+        date: new Date(order.createdAt).toLocaleString('en-IN'),
+        items: printItems,
+        summary: {
+          sub_total: subtotal,
+          discount: associatedBill?.discount || 0,
+          taxable: subtotal,
+          cgst: cgst,
+          sgst: sgst,
+          grand_total: total,
+        },
+        payment: {
+          cash: paymentMethod === 'cash' ? total : 0,
+          card: paymentMethod === 'card' ? total : 0,
+          upi: paymentMethod === 'upi' ? total : 0,
+          balance: 0,
+        },
+        payment_mode: paymentMethod,
+        footer: ['Thank You Visit Again'],
+      },
+    };
+  };
+
   const handlePrintBill = async (order: Order) => {
     if (!currentStore?.printerName) {
       notify.warning('No printer configured. Set one up in Settings.');
@@ -66,92 +153,28 @@ const History: React.FC = () => {
 
     setIsPrinting(order.id);
     try {
-      let associatedBill = await findBillForOrder(order.id);
-      if (associatedBill?.fy && !associatedBill.lines?.length) {
-        associatedBill = await api.getBill(associatedBill.id);
-      }
-      if (associatedBill?.fy && associatedBill.lines?.length) {
-        await printerService.printInvoice(buildInvoicePrintJob(associatedBill, currentStore!, order.items)!);
-        notify.success('Bill reprinted');
-        return;
-      }
-      const invoiceNo = associatedBill?.invoiceNo || '';
-      
-      const printItems = order.items.map(oi => {
-        const itemTotal = orderItemUnitPrice(oi) * oi.quantity;
-        const taxPercent = taxEnabled ? (oi.item.taxPercent || 0) : 0;
-        return {
-          name: oi.item.name,
-          hsn: oi.item.description || '',
-          qty: oi.quantity,
-          unit: 'PCS',
-          rate: orderItemUnitPrice(oi),
-          tax_percent: taxPercent,
-          amount: itemTotal,
-        };
-      });
-
-      const taxable = printItems.reduce((sum, item) => sum + item.amount, 0);
-      const actualTax = printItems.reduce((sum, item) => sum + (item.amount * item.tax_percent / 100), 0);
-      const cgst = actualTax / 2;
-      const sgst = actualTax / 2;
-      const subtotal = associatedBill?.subtotal || taxable;
-      const taxTotal = associatedBill?.taxTotal ?? actualTax;
-      const total = associatedBill?.total || (subtotal + taxTotal);
-      const paymentMethod = associatedBill?.paymentMethod || order.paymentMethod || 'cash';
-
-      await printerService.printInvoice({
-        type: 'invoice',
-        printer: {
-          type: 'usb',
-          name: currentStore?.printerName || 'Thermal Printer',
-          vendor_id: currentStore?.printerVendorId || '0x0fe6',
-          product_id: currentStore?.printerProductId || '0x811e',
-          paper_width: (currentStore?.invoiceSize as '2inch' | '3inch') || '3inch',
-        },
-        invoice: {
-          store: {
-            name: currentStore?.name || 'Cafe',
-            branch: currentStore?.branch || '',
-            location: currentStore?.location || '',
-            // No GST bill exists for this order, so the receipt must not
-            // carry the GSTIN (it would look like a tax invoice).
-            ...(currentStore?.fssaiNo ? { fssai_lic_no: currentStore.fssaiNo } : {}),
-            ...(currentStore?.phone ? { phone: currentStore.phone } : {}),
-            ...(currentStore?.secondaryPhone ? { phone_secondary: currentStore.secondaryPhone } : {}),
-            address: currentStore?.location || '',
-          },
-          customer: {
-            name: associatedBill?.customerName || order.customerName || 'Walk-in Customer',
-            mobile: associatedBill?.customerMobile || order.customerMobile || '',
-          },
-          invoice_no: invoiceNo,
-          bill_no: invoiceNo,
-          date: new Date(order.createdAt).toLocaleString('en-IN'),
-          items: printItems,
-          summary: {
-            sub_total: subtotal,
-            discount: associatedBill?.discount || 0,
-            taxable: subtotal,
-            cgst: cgst,
-            sgst: sgst,
-            grand_total: total,
-          },
-          payment: {
-            cash: paymentMethod === 'cash' ? total : 0,
-            card: paymentMethod === 'card' ? total : 0,
-            upi: paymentMethod === 'upi' ? total : 0,
-            balance: 0,
-          },
-          payment_mode: paymentMethod,
-          footer: ['Thank You Visit Again'],
-        },
-      });
+      const job = await buildBillJob(order);
+      await printerService.printInvoice(job);
+      notify.success('Bill reprinted');
     } catch (error) {
       console.error('Failed to print bill:', error);
       notify.error('Failed to print bill. Check your connection and printer settings.');
     } finally {
       setIsPrinting(null);
+    }
+  };
+
+  const handleDownloadBill = async (order: Order) => {
+    setIsDownloading(order.id);
+    try {
+      const job = await buildBillJob(order);
+      downloadBillHtml(job.invoice, `#${order.id.slice(-6).toUpperCase()}`);
+      notify.success('Bill downloaded');
+    } catch (error) {
+      console.error('Failed to download bill:', error);
+      notify.error('Failed to download bill. Please try again.');
+    } finally {
+      setIsDownloading(null);
     }
   };
 
@@ -651,6 +674,14 @@ const History: React.FC = () => {
                           >
                             <Printer size={14} />
                           </button>
+                          <button
+                            className="gr-iconbtn gr-iconbtn--sm"
+                            onClick={() => handleDownloadBill(order)}
+                            disabled={isDownloading === order.id}
+                            title="Download Bill"
+                          >
+                            <Download size={14} />
+                          </button>
                         </>
                       )}
                       {order.status === 'completed' && (
@@ -766,6 +797,14 @@ const History: React.FC = () => {
                     >
                       <Printer size={16} />
                       {isPrinting === viewingOrder.id ? 'Printing...' : 'Print Bill'}
+                    </button>
+                    <button
+                      className="gr-btn gr-btn--secondary"
+                      onClick={() => handleDownloadBill(viewingOrder)}
+                      disabled={isDownloading === viewingOrder.id}
+                    >
+                      <Download size={16} />
+                      {isDownloading === viewingOrder.id ? 'Downloading...' : 'Download Bill'}
                     </button>
                   </>
                 )}
@@ -1017,6 +1056,14 @@ const History: React.FC = () => {
                 >
                   <Printer size={16} />
                   {isPrinting === viewingBill.id ? 'Printing...' : 'Print Bill'}
+                </button>
+                <button
+                  className="gr-btn gr-btn--secondary"
+                  onClick={() => handleDownloadBill(viewingBill)}
+                  disabled={isDownloading === viewingBill.id}
+                >
+                  <Download size={16} />
+                  {isDownloading === viewingBill.id ? 'Downloading...' : 'Download Bill'}
                 </button>
                 {taxEnabled && viewingGstBill && viewingGstBill.status !== 'cancelled' && user?.role !== 'staff' && (
                   <button

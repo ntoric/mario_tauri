@@ -13,6 +13,7 @@ import {
 } from '../stores';
 import { useUIStore } from '../stores';
 import { useTheme } from '../contexts/ThemeContext';
+import TableActionPrefs from './TableActionPrefs';
 
 const PrefCard: React.FC<{
   selected: boolean;
@@ -306,6 +307,13 @@ const Appearance: React.FC = () => {
             </span>
           </label>
         </div>
+      </section>
+
+      {/* ----------------------------- Table cards ---------------------------- */}
+      <section className="gr-card appearance-card">
+        <h3 className="appearance-card__title">Table cards</h3>
+        <p className="gr-caption">Quick actions on occupied tables. Off by default — every action is always in the right-click or touch-and-hold menu on a table.</p>
+        <TableActionPrefs />
       </section>
     </div>
   );

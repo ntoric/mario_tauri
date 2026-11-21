@@ -213,7 +213,6 @@ svg.gr-i-lu { display: block; }
 .table-card-timer { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); }
 .table-card .table-card-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
 .table-card.is-available { border-color: var(--line); }
-.table-card.is-occupied { border-color: var(--primary); background: linear-gradient(160deg, var(--tint), var(--surface) 70%); }
 .table-card.is-occupied .table-layout-number { color: var(--primary); }
 .table-card.is-billed { border-color: var(--ink); }
 .table-card.is-billed .table-layout-number { color: var(--ink); }
@@ -264,7 +263,6 @@ svg.gr-i-lu { display: block; }
 .view-toggle { display: inline-flex; gap: 4px; }
 .table-layout-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow-sm); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; aspect-ratio: 1 / 1; animation: pos-tile-in .4s var(--ease-out) both; }
 .table-layout-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.table-layout-card.occupied { border-color: var(--primary); background: linear-gradient(160deg, var(--tint), var(--surface) 75%); }
 .table-layout-card.kb-focused { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint); }
 .table-layout-card.kb-focused td { background: transparent; }
 @keyframes pos-tile-in { from { opacity: 0; transform: translateY(10px); } }
@@ -333,6 +331,9 @@ svg.gr-i-lu { display: block; }
 /* floating action bar: shown near a clicked occupied table when the card is
    too narrow to hold the inline action buttons */
 .table-layout-card.actions-open { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint); }
+/* touch-and-hold opens the table context menu; keep iOS from showing its
+   link callout or text-selection magnifier during the hold */
+[data-ctx-table] { -webkit-touch-callout: none; user-select: none; }
 .table-float-actions { position: fixed; z-index: 70; display: flex; align-items: center; gap: 6px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); animation: table-float-in .15s var(--ease-out); }
 @keyframes table-float-in { from { opacity: 0; transform: translateY(4px); } }
 .table-float-actions.dir-left, .table-float-actions.dir-right { animation-name: table-float-in-x; }

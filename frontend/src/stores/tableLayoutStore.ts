@@ -49,7 +49,7 @@ export const TABLE_LAYOUT_DEFAULTS: TableLayoutPrefs = {
   showStatus: true,
   showTimer: true,
   showInfo: true,
-  actionStyle: 'row',
+  actionStyle: 'hidden',
   actionButtons: { bill: true, move: true, merge: true, view: true },
   floatPosition: 'bottom',
 };
@@ -87,7 +87,7 @@ function sanitize(parsed: Partial<TableLayoutPrefs> | undefined): TableLayoutPre
     ? (merged.gridColumns <= 0 ? 0 : Math.min(Math.max(Math.round(merged.gridColumns), 6), 15))
     : 0;
   if (!CARD_SIZES.includes(merged.cardSize)) merged.cardSize = 'default';
-  if (!ACTION_STYLES.includes(merged.actionStyle)) merged.actionStyle = 'row';
+  if (!ACTION_STYLES.includes(merged.actionStyle)) merged.actionStyle = 'hidden';
   if (!FLOAT_POSITIONS.includes(merged.floatPosition)) merged.floatPosition = 'bottom';
   // The shallow merge above can replace actionButtons with a partial or
   // malformed object; rebuild it key-by-key with safe defaults.

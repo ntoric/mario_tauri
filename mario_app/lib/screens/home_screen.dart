@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -10,7 +9,6 @@ import '../utils/constants.dart';
 import 'tables_screen.dart';
 import 'orders_screen.dart';
 import 'history_screen.dart';
-import 'settings_screen.dart';
 import 'statistics_screen.dart';
 import 'categories_items_screen.dart';
 import 'parcel_order_screen.dart';
@@ -131,7 +129,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     final auth = context.watch<AuthProvider>();
-    final user = auth.user;
     final canViewStats = auth.canViewStats;
 
     final screens = [
@@ -145,7 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _currentIndex = 2);
         },
       ),
-      const SettingsScreen(),
     ];
 
     final navItems = [
@@ -174,10 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.shopping_bag_outlined,
           activeIcon: Icons.shopping_bag,
           label: 'Parcel'),
-      _NavItem(
-          icon: Icons.settings_outlined,
-          activeIcon: Icons.settings,
-          label: 'Settings'),
     ];
 
     final isTablet = ResponsiveHelper.isTablet(context);
@@ -189,59 +181,63 @@ class _HomeScreenState extends State<HomeScreen> {
         body: AnimatedGradientBackground(
           child: Row(
             children: [
+              // Brand-gradient rail (gr-sidebar)
               Container(
-                width: isDesktop ? 240 : 80,
+                width: isDesktop ? 240 : 84,
                 margin: const EdgeInsets.fromLTRB(16, 20, 12, 20),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: ClayStyles.surface(
-                  radiusValue: 32,
-                  border: Border.all(
-                      color: Colors.white
-                          .withOpacity(AppColors.isDark ? 0.08 : 0.55)),
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  gradient: AppColors.railGradient,
+                  borderRadius: ClayStyles.radius(40),
                 ),
                 child: Column(
                   children: [
-                    const SizedBox(height: 24),
                     Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: isDesktop ? 20 : 16),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: isDesktop ? 20 : 18),
                       child: Row(
                         mainAxisAlignment: isDesktop
                             ? MainAxisAlignment.start
                             : MainAxisAlignment.center,
                         children: [
                           Container(
-                            width: 40,
-                            height: 40,
-                            decoration: ClayStyles.surface(radiusValue: 14),
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: ClayStyles.radius(14),
+                            ),
                             child: Padding(
-                              padding: const EdgeInsets.all(6),
+                              padding: const EdgeInsets.all(7),
                               child: StoreLogo(auth.currentStore),
                             ),
                           ),
                           if (isDesktop) ...[
                             const SizedBox(width: 12),
-                            Text(
+                            const Text(
                               'Mario POS',
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
                               ),
                             ),
                           ],
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     Expanded(
                       child: ListView.builder(
                         padding: EdgeInsets.symmetric(
-                            horizontal: isDesktop ? 12 : 16),
+                            horizontal: isDesktop ? 16 : 18),
                         itemCount: navItems.length,
                         itemBuilder: (context, index) {
                           final item = navItems[index];
                           final isSelected = index == _currentIndex;
+                          final itemColor = isSelected
+                              ? AppColors.gradMid
+                              : Colors.white.withOpacity(0.78);
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Material(
@@ -249,17 +245,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: InkWell(
                                 onTap: () =>
                                     setState(() => _currentIndex = index),
-                                borderRadius: ClayStyles.radius(20),
+                                borderRadius: ClayStyles.radius(14),
                                 child: Container(
                                   padding: EdgeInsets.symmetric(
-                                    horizontal: isDesktop ? 16 : 0,
-                                    vertical: isDesktop ? 12 : 14,
+                                    horizontal: isDesktop ? 14 : 0,
+                                    vertical: isDesktop ? 12 : 12,
                                   ),
                                   decoration: isSelected
-                                      ? ClayStyles.accent(
-                                          accent: AppColors.primary,
-                                          radiusValue: 20,
-                                          opacity: 0.14,
+                                      ? BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              ClayStyles.radius(14),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x403E000C),
+                                              blurRadius: 22,
+                                              offset: Offset(0, 10),
+                                            ),
+                                          ],
                                         )
                                       : null,
                                   child: isDesktop
@@ -269,22 +272,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                               isSelected
                                                   ? item.activeIcon
                                                   : item.icon,
-                                              color: isSelected
-                                                  ? AppColors.primary
-                                                  : AppColors.gray500,
+                                              color: itemColor,
                                               size: 24,
                                             ),
                                             const SizedBox(width: 12),
                                             Text(
                                               item.label,
                                               style: TextStyle(
-                                                fontSize: 15,
+                                                fontSize: 14,
                                                 fontWeight: isSelected
                                                     ? FontWeight.w700
                                                     : FontWeight.w500,
-                                                color: isSelected
-                                                    ? AppColors.primary
-                                                    : AppColors.gray600,
+                                                color: itemColor,
                                               ),
                                             ),
                                           ],
@@ -293,10 +292,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           isSelected
                                               ? item.activeIcon
                                               : item.icon,
-                                          color: isSelected
-                                              ? AppColors.primary
-                                              : AppColors.gray500,
-                                          size: 26,
+                                          color: itemColor,
+                                          size: 24,
                                         ),
                                 ),
                               ),
@@ -332,70 +329,65 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
         decoration: BoxDecoration(
-          borderRadius: ClayStyles.radius(30),
-          boxShadow: ClayStyles.raisedShadow(),
+          gradient: AppColors.brandGradient,
+          borderRadius: ClayStyles.radius(28),
+          boxShadow: ClayStyles.shadowMd,
         ),
         child: ClipRRect(
-          borderRadius: ClayStyles.radius(30),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.gray100
-                    .withOpacity(AppColors.isDark ? 0.45 : 0.55),
-                borderRadius: ClayStyles.radius(30),
-                border: Border.all(
-                    color: Colors.white
-                        .withOpacity(AppColors.isDark ? 0.12 : 0.55)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: List.generate(navItems.length, (index) {
-                  final item = navItems[index];
-                  final isSelected = index == _currentIndex;
-                  return GestureDetector(
-                    onTap: () => setState(() => _currentIndex = index),
-                    behavior: HitTestBehavior.opaque,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: isSelected
-                          ? ClayStyles.accent(
-                              accent: AppColors.primary,
-                              radiusValue: 22,
-                              opacity: 0.16,
-                            )
-                          : null,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isSelected ? item.activeIcon : item.icon,
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.gray500,
-                            size: 24,
+          borderRadius: ClayStyles.radius(28),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(navItems.length, (index) {
+                final item = navItems[index];
+                final isSelected = index == _currentIndex;
+                final itemColor = isSelected
+                    ? AppColors.gradMid
+                    : Colors.white.withOpacity(0.82);
+                return GestureDetector(
+                  onTap: () => setState(() => _currentIndex = index),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: isSelected
+                        ? BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: ClayStyles.radius(20),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x403E000C),
+                                blurRadius: 22,
+                                offset: Offset(0, 10),
+                              ),
+                            ],
+                          )
+                        : null,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSelected ? item.activeIcon : item.icon,
+                          color: itemColor,
+                          size: 24,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: itemColor,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : AppColors.gray500,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  );
-                }),
-              ),
+                  ),
+                );
+              }),
             ),
           ),
         ),

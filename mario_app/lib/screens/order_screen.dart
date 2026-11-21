@@ -456,11 +456,11 @@ class _OrderScreenState extends State<OrderScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
           child: Row(
             children: [
-              // Cart icon + total — tapping opens the cart summary panel.
+              // Cart icon + total — tapping toggles the cart summary panel.
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _showSummary = true),
+                  onTap: () => setState(() => _showSummary = !_showSummary),
                   child: Row(
                     children: [
                       Stack(

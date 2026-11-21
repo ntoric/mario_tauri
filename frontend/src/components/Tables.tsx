@@ -15,6 +15,7 @@ import BillModal from './BillModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import OrderTimer from './OrderTimer';
 import { Empty, Seg } from './gr';
+import TableActionPrefs from './TableActionPrefs';
 import ShortcutsHelp, { ShortcutGroup } from './ShortcutsHelp';
 import { useKeyboardShortcuts, ShortcutBinding } from '../hooks/useKeyboardShortcut';
 import notify from '../utils/toast';
@@ -162,7 +163,7 @@ const Tables: React.FC = () => {
   const {
     gridColumns, cardSize, showStatus, showTimer, showInfo, actionStyle, actionButtons, floatPosition,
     setGridColumns, setCardSize, setShowStatus, setShowTimer, setShowInfo,
-    setActionStyle, setActionButton, setFloatPosition, resetTableLayout,
+    resetTableLayout,
   } = useTableLayoutStore();
 
   // Floating action bar: when cards are too narrow for inline buttons,
@@ -2063,64 +2064,7 @@ const Tables: React.FC = () => {
                 </div>
               </div>
 
-              <div className="layout-pref-group">
-                <span className="pref-label">Action buttons</span>
-                <p className="gr-caption">How the bill, move, merge and preview buttons appear on occupied tables.</p>
-                <Seg
-                  value={actionStyle}
-                  onChange={v => setActionStyle(v as typeof actionStyle)}
-                  options={[
-                    { value: 'row', label: 'Row' },
-                    { value: 'compact', label: 'Compact' },
-                    { value: 'labeled', label: 'Labeled' },
-                    { value: 'hidden', label: 'Hidden' },
-                  ]}
-                />
-              </div>
-
-              {actionStyle !== 'hidden' && (
-                <div className="layout-pref-group">
-                  <span className="pref-label">Buttons to show</span>
-                  <p className="gr-caption">Pick which quick actions appear on occupied tables. Hidden actions remain available from the right-click menu.</p>
-                  <div className="pref-toggles">
-                    {([
-                      { key: 'bill', label: 'Print bill', hint: 'Open the bill dialog for printing.' },
-                      { key: 'move', label: 'Change table', hint: 'Move the order to another table.' },
-                      { key: 'merge', label: 'Merge bill', hint: 'Combine with another table\u2019s order.' },
-                      { key: 'view', label: 'Preview order', hint: 'Peek at the order without opening it.' },
-                    ] as const).map(a => (
-                      <label key={a.key} className="gr-switch pref-toggle">
-                        <input
-                          type="checkbox"
-                          checked={actionButtons[a.key]}
-                          onChange={e => setActionButton(a.key, e.target.checked)}
-                        />
-                        <span className="pref-toggle__text">
-                          <strong>{a.label}</strong>
-                          <small>{a.hint}</small>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {actionStyle !== 'hidden' && visibleActionCount > 0 && (
-                <div className="layout-pref-group">
-                  <span className="pref-label">Floating bar position</span>
-                  <p className="gr-caption">Where the floating action bar appears when a card is too small for inline buttons.</p>
-                  <Seg
-                    value={floatPosition}
-                    onChange={v => setFloatPosition(v as typeof floatPosition)}
-                    options={[
-                      { value: 'bottom', label: 'Bottom' },
-                      { value: 'top', label: 'Top' },
-                      { value: 'left', label: 'Left' },
-                      { value: 'right', label: 'Right' },
-                    ]}
-                  />
-                </div>
-              )}
+              <TableActionPrefs />
             </div>
             <div className="gr-modal__foot">
               <button className="gr-btn gr-btn--secondary" onClick={resetTableLayout}>

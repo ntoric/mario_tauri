@@ -28,12 +28,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  // Rotating card tints like the mock: orange, green, blue, purple.
+  // Rotating card accents, all within the brand palette.
   static final List<Color> _cardAccents = [
     AppColors.primary,
     AppColors.success,
-    AppColors.info,
-    Color(0xFF8E5BE0),
+    AppColors.secondary,
+    AppColors.gradStart,
   ];
 
   @override
@@ -478,9 +478,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.isDark
-                                  ? AppColors.primary.withOpacity(0.18)
-                                  : const Color(0xFFFFEDE6),
+                              color: AppColors.tint,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: OrderTimer(
@@ -636,8 +634,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 child: _actionButton(
                   label: 'Edit Order',
                   icon: Icons.edit_outlined,
-                  background: const Color(0xFFE3F0FF),
-                  foreground: const Color(0xFF2F7FE0),
+                  background: AppColors.tint,
+                  foreground: AppColors.primary,
                   onTap: () => _editOrder(order, data),
                 ),
               ),
@@ -646,8 +644,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 child: _actionButton(
                   label: 'Move Table',
                   icon: Icons.swap_horiz,
-                  background: const Color(0xFFFFF1D6),
-                  foreground: const Color(0xFFB97A0A),
+                  background: AppColors.surface2,
+                  foreground: AppColors.warning,
                   onTap: () => _showMoveTableDialog(order, data),
                 ),
               ),
@@ -657,7 +655,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               child: _actionButton(
                 label: 'Cancel Order',
                 icon: Icons.delete_outline,
-                background: const Color(0xFFFDE8E8),
+                background: AppColors.dangerTint,
                 foreground: AppColors.danger,
                 onTap: () => _confirmCancelOrder(order, data),
               ),
@@ -857,9 +855,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Widget _moveTableTile(TableModel table, Order order, DataProvider data) {
     return Material(
-      color: AppColors.isDark
-          ? AppColors.success.withOpacity(0.16)
-          : const Color(0xFFE7F7EC),
+      color: AppColors.successTint,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),

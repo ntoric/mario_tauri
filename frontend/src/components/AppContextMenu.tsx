@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, ArrowRightLeft, Combine, Edit2, Eye, FolderOpen, History, Loader2, LogOut, Palette, Plus, Printer, RefreshCw, Settings, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useUpdater } from '../hooks/useUpdater';
@@ -54,37 +54,113 @@ const AppContextMenu: React.FC = () => {
     });
   }, []);
 
-  // Show the custom menu on any right-click, in the browser and in Tauri.
+  const openMenu = useCallback((x: number, y: number, target: HTMLElement | null) => {
+    // Occupied table cards carry data-ctx-table=<id>; a right-click or
+    // touch-and-hold on one surfaces per-table actions in the menu.
+    const tableEl = target?.closest?.('[data-ctx-table]');
+    setContextTableId(tableEl?.getAttribute('data-ctx-table') ?? null);
+    // Order-page item cards carry data-ctx-item=<id>; a right-click on one
+    // surfaces the Edit Item action for privileged roles.
+    const itemEl = target?.closest?.('[data-ctx-item]');
+    setContextItemId(itemEl?.getAttribute('data-ctx-item') ?? null);
+    // Order-page category buttons carry data-ctx-category=<id>; same idea
+    // for the Edit Category action.
+    const catEl = target?.closest?.('[data-ctx-category]');
+    setContextCategoryId(catEl?.getAttribute('data-ctx-category') ?? null);
+    setMenuPos({
+      x: Math.min(x, window.innerWidth - MENU_WIDTH - 8),
+      y: Math.min(y, window.innerHeight - MENU_HEIGHT_ESTIMATE - 8),
+    });
+    // One check per app session — repeated right-clicks must not spam the
+    // release-list endpoint. Tauri-only.
+    if (isTauri() && !hasCheckedDowngrade.current) {
+      hasCheckedDowngrade.current = true;
+      checkForDowngrade();
+    }
+  }, [checkForDowngrade]);
+
+  // Show the custom menu on any right-click, in the browser and in Tauri,
+  // and on touch-and-hold for touch devices.
   useEffect(() => {
+    const LONG_PRESS_MS = 550;
+    const MOVE_TOLERANCE_PX = 10;
+    let lpTimer: number | null = null;
+    let lpX = 0;
+    let lpY = 0;
+    let lpTarget: HTMLElement | null = null;
+
+    const clearLongPress = () => {
+      if (lpTimer !== null) {
+        window.clearTimeout(lpTimer);
+        lpTimer = null;
+      }
+      lpTarget = null;
+    };
+
+    // After the menu opens from a held finger, the browser still dispatches
+    // the tap's touchend/click — swallow it so a table card doesn't navigate.
+    const swallowTap = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const disarmTapSwallow = () => {
+      window.removeEventListener('touchend', swallowTap, true);
+      window.removeEventListener('click', swallowTap, true);
+    };
+    const armTapSwallow = () => {
+      window.addEventListener('touchend', swallowTap, true);
+      window.addEventListener('click', swallowTap, true);
+      window.setTimeout(disarmTapSwallow, 700);
+    };
+
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      // Occupied table cards carry data-ctx-table=<id>; a right-click on one
-      // surfaces per-table actions in the menu.
-      const tableEl = (e.target as HTMLElement | null)?.closest?.('[data-ctx-table]');
-      setContextTableId(tableEl?.getAttribute('data-ctx-table') ?? null);
-      // Order-page item cards carry data-ctx-item=<id>; a right-click on one
-      // surfaces the Edit Item action for privileged roles.
-      const itemEl = (e.target as HTMLElement | null)?.closest?.('[data-ctx-item]');
-      setContextItemId(itemEl?.getAttribute('data-ctx-item') ?? null);
-      // Order-page category buttons carry data-ctx-category=<id>; same idea
-      // for the Edit Category action.
-      const catEl = (e.target as HTMLElement | null)?.closest?.('[data-ctx-category]');
-      setContextCategoryId(catEl?.getAttribute('data-ctx-category') ?? null);
-      setMenuPos({
-        x: Math.min(e.clientX, window.innerWidth - MENU_WIDTH - 8),
-        y: Math.min(e.clientY, window.innerHeight - MENU_HEIGHT_ESTIMATE - 8),
-      });
-      // One check per app session — repeated right-clicks must not spam the
-      // release-list endpoint. Tauri-only.
-      if (isTauri() && !hasCheckedDowngrade.current) {
-        hasCheckedDowngrade.current = true;
-        checkForDowngrade();
+      clearLongPress();
+      openMenu(e.clientX, e.clientY, e.target as HTMLElement | null);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        clearLongPress();
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      // Never hijack long-presses inside editable fields (text selection).
+      if (el?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      const t = e.touches[0];
+      lpX = t.clientX;
+      lpY = t.clientY;
+      lpTarget = el;
+      lpTimer = window.setTimeout(() => {
+        lpTimer = null;
+        armTapSwallow();
+        openMenu(lpX, lpY, lpTarget);
+      }, LONG_PRESS_MS);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (lpTimer === null) return;
+      const t = e.touches[0];
+      if (!t || Math.hypot(t.clientX - lpX, t.clientY - lpY) > MOVE_TOLERANCE_PX) {
+        clearLongPress();
       }
     };
 
     window.addEventListener('contextmenu', onContextMenu);
-    return () => window.removeEventListener('contextmenu', onContextMenu);
-  }, [checkForDowngrade]);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', clearLongPress, { passive: true });
+    window.addEventListener('touchcancel', clearLongPress, { passive: true });
+    return () => {
+      clearLongPress();
+      disarmTapSwallow();
+      window.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', clearLongPress);
+      window.removeEventListener('touchcancel', clearLongPress);
+    };
+  }, [openMenu]);
 
   // The Tables page broadcasts its delete-mode state so this menu can label
   // the toggle correctly ("Delete Tables" vs "Done").

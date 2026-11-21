@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/data_provider.dart';
 import '../providers/theme_provider.dart';
+import '../screens/settings_screen.dart';
 import '../utils/constants.dart';
 import 'store_logo.dart';
 
@@ -13,6 +14,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
   final bool showStoreName;
   final bool automaticallyImplyLeading;
+  final bool showSettingsAction;
 
   const AppHeader({
     super.key,
@@ -21,6 +23,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.showStoreName = true,
     this.automaticallyImplyLeading = true,
+    this.showSettingsAction = true,
   });
 
   static void showStoreSwitcher(BuildContext context) {
@@ -43,7 +46,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-            decoration: ClayStyles.surface(radiusValue: 32),
+            decoration: ClayStyles.surface(radiusValue: 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -194,8 +197,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.dark,
                   letterSpacing: -0.3,
                 ),
@@ -214,8 +217,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         : Text(
             title,
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
               color: AppColors.dark,
               letterSpacing: -0.3,
             ),
@@ -224,7 +227,8 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     final stores = auth.user?.stores ?? [];
 
     final allActions = <Widget>[
-      if (stores.isNotEmpty)
+      // Store switching is a superadmin-only convenience at the top right.
+      if (stores.isNotEmpty && auth.user?.isSuperAdmin == true)
         PopupMenuButton<Store>(
           icon: _HeaderIconShell(
             icon: Icons.storefront,
@@ -316,6 +320,20 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           },
         ),
       ...?actions,
+      if (showSettingsAction)
+        IconButton(
+          tooltip: 'Settings',
+          icon: _HeaderIconShell(
+            icon: Icons.settings_outlined,
+            color: AppColors.primary,
+          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            );
+          },
+        ),
     ];
 
     return AppBar(
@@ -328,7 +346,10 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           child: SizedBox.square(
             dimension: 40,
             child: Container(
-              decoration: ClayStyles.surface(radiusValue: 13),
+              decoration: ClayStyles.surface(
+                radiusValue: 12,
+                boxShadow: ClayStyles.shadowXs,
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(7),
                 child: StoreLogo(auth.currentStore),
@@ -367,16 +388,9 @@ class _HeaderIconShell extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: ClayStyles.surface(
-        radiusValue: 16,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.gray100,
-            accentColor ?? AppColors.gray100,
-          ],
-        ),
+      decoration: BoxDecoration(
+        color: accentColor ?? AppColors.tint,
+        borderRadius: ClayStyles.radius(14),
       ),
       child: Icon(icon, color: color, size: 22),
     );

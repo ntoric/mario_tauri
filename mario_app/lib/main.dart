@@ -52,7 +52,14 @@ class MarioApp extends StatelessWidget {
               if (isDark != AppColors.isDark) {
                 AppColors.setDarkMode(isDark);
               }
-              return child ?? const SizedBox.shrink();
+              // User-configurable text scale (Settings → Appearance).
+              final mediaQuery = MediaQuery.of(context);
+              return MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: TextScaler.linear(themeProvider.fontScale),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
             },
             home: const AppInitializer(),
           );

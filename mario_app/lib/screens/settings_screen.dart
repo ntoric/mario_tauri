@@ -8,6 +8,7 @@ import '../providers/data_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/app_header.dart';
+import '../widgets/powered_by_gooseroot.dart';
 import 'login_screen.dart';
 import 'app_update_screen.dart';
 
@@ -208,6 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Colors.transparent,
       appBar: const AppHeader(
         title: 'Settings',
+        showSettingsAction: false,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -215,13 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Profile card
           Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: AppColors.isDark
-                    ? const [AppColors.cardDarkLight, AppColors.cardDark]
-                    : const [Color(0xFFFFDDB8), Color(0xFFFFF3E8)],
-              ),
+              gradient: AppColors.brandGradient,
               borderRadius: BorderRadius.circular(20),
             ),
             clipBehavior: Clip.hardEdge,
@@ -234,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: 170,
                     height: 170,
                     decoration: BoxDecoration(
-                      color: AppColors.gray100.withOpacity(0.28),
+                      color: Colors.white.withOpacity(0.14),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -246,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: 150,
                     height: 150,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.10),
+                      color: Colors.white.withOpacity(0.10),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -258,18 +254,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Container(
                         width: 66,
                         height: 66,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [AppColors.primary, AppColors.primaryDark],
-                          ),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.person,
                           size: 34,
-                          color: Colors.white,
+                          color: AppColors.gradMid,
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -281,17 +273,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               user?.name ?? 'Unknown',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
+                                color: Colors.white,
                               ),
                             ),
                             Text(
                               user?.username ?? '',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.gray600,
+                                color: Colors.white.withOpacity(0.8),
                               ),
                             ),
                             const SizedBox(height: 7),
@@ -299,26 +291,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 9, vertical: 4),
                               decoration: BoxDecoration(
-                                color: AppColors.gray100.withOpacity(0.75),
+                                color: Colors.white.withOpacity(0.22),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.workspace_premium,
                                     size: 12,
-                                    color: AppColors.primaryDark,
+                                    color: Colors.white,
                                   ),
                                   const SizedBox(width: 5),
                                   Text(
                                     (user?.role ?? 'unknown')
                                         .toUpperCase()
                                         .replaceAll('_', ' '),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w800,
-                                      color: AppColors.primaryDark,
+                                      color: Colors.white,
                                       letterSpacing: 0.4,
                                     ),
                                   ),
@@ -333,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.gray600,
+                                  color: Colors.white.withOpacity(0.8),
                                 ),
                               ),
                             ],
@@ -655,6 +647,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (themeProvider.availableThemes.length > 1) ...[
+                    Row(
+                      children: [
+                        _iconBox(
+                          Icons.palette_outlined,
+                          AppColors.primary,
+                          AppColors.primarySoft.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Color Theme',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dark,
+                                ),
+                              ),
+                              Text(
+                                'Choose the app theme. Saved for ${user?.name ?? 'this user'} on this device.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.gray500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const spacing = 8.0;
+                        final cardWidth =
+                            (constraints.maxWidth - spacing * 2) / 3;
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children:
+                              themeProvider.availableThemes.map((option) {
+                            return SizedBox(
+                              width: cardWidth,
+                              child: _buildThemeCard(
+                                option: option,
+                                isSelected:
+                                    themeProvider.currentThemeId == option.id,
+                                onTap: () => themeProvider.setTheme(option.id),
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Divider(height: 1, color: AppColors.gray200),
+                    const SizedBox(height: 14),
+                  ],
                   Row(
                     children: [
                       _iconBox(
@@ -668,7 +721,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Color Theme',
+                              'Accent color',
                               style: TextStyle(
                                 fontSize: 14.5,
                                 fontWeight: FontWeight.w700,
@@ -676,7 +729,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                             Text(
-                              'Choose the app theme. Saved for ${user?.name ?? 'this user'} on this device.',
+                              'Recolor buttons, the nav bar and highlights. Gooseroot red is the default.',
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: AppColors.gray500,
@@ -688,28 +741,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      const spacing = 8.0;
-                      final cardWidth =
-                          (constraints.maxWidth - spacing * 2) / 3;
-                      return Wrap(
-                        spacing: spacing,
-                        runSpacing: spacing,
-                        children: themeProvider.availableThemes.map((option) {
-                          return SizedBox(
-                            width: cardWidth,
-                            child: _buildThemeCard(
-                              option: option,
-                              isSelected:
-                                  themeProvider.currentThemeId == option.id,
-                              onTap: () => themeProvider.setTheme(option.id),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _buildAccentSwatch(
+                        tooltip: 'Gooseroot (default)',
+                        gradient: AppColors.brandGradient,
+                        isSelected: !themeProvider.hasCustomAccent,
+                        onTap: () => themeProvider.setAccentColor(null),
+                      ),
+                      for (final color in AppAccentOptions.presets)
+                        _buildAccentSwatch(
+                          tooltip:
+                              '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}',
+                          color: color,
+                          isSelected: themeProvider.accentColor == color,
+                          onTap: () => themeProvider.setAccentColor(color),
+                        ),
+                    ],
                   ),
+                  const SizedBox(height: 16),
+                  Divider(height: 1, color: AppColors.gray200),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _iconBox(
+                        Icons.format_size_outlined,
+                        AppColors.primary,
+                        AppColors.primarySoft.withOpacity(0.7),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Text size',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              'Scales all text across the app.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _buildModeCard(
+                        label: 'Small',
+                        icon: Icons.text_decrease_outlined,
+                        isSelected: themeProvider.fontScale == 0.9,
+                        onTap: () => themeProvider.setFontScale(0.9),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildModeCard(
+                        label: 'Default',
+                        icon: Icons.text_fields_outlined,
+                        isSelected: themeProvider.fontScale == 1.0,
+                        onTap: () => themeProvider.setFontScale(1.0),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildModeCard(
+                        label: 'Large',
+                        icon: Icons.text_increase_outlined,
+                        isSelected: themeProvider.fontScale == 1.15,
+                        onTap: () => themeProvider.setFontScale(1.15),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildModeCard(
+                        label: 'XL',
+                        icon: Icons.format_size_outlined,
+                        isSelected: themeProvider.fontScale == 1.3,
+                        onTap: () => themeProvider.setFontScale(1.3),
+                      ),
+                    ],
+                  ),
+                  if (themeProvider.hasCustomAccent ||
+                      themeProvider.fontScale != 1.0) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => themeProvider.resetAppearance(),
+                        icon: const Icon(Icons.restart_alt, size: 16),
+                        label: const Text('Reset to brand defaults'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Divider(height: 1, color: AppColors.gray200),
                   const SizedBox(height: 14),
@@ -772,6 +912,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  Divider(height: 1, color: AppColors.gray200),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _iconBox(
+                        Icons.touch_app_outlined,
+                        AppColors.primary,
+                        AppColors.primarySoft.withOpacity(0.7),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Table card actions',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            Text(
+                              'Show bill, move and cancel buttons on occupied tables. They\u2019re always in the press-and-hold menu.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: themeProvider.showTableActions,
+                        onChanged: themeProvider.setShowTableActions,
+                        activeTrackColor: AppColors.primary,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -797,7 +978,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _iconBox(
                     Icons.chat_bubble_rounded,
                     Colors.white,
-                    const Color(0xFF25D366),
+                    AppColors.success,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -911,6 +1092,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 24),
+          const Center(child: PoweredByGooseroot()),
         ],
       ),
     );
@@ -1111,6 +1294,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccentSwatch({
+    required String tooltip,
+    required bool isSelected,
+    required VoidCallback onTap,
+    Color? color,
+    Gradient? gradient,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: color,
+            gradient: gradient,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.lineStrong,
+              width: isSelected ? 2.4 : 1,
+            ),
+            boxShadow: isSelected ? ClayStyles.shadowRed : null,
+          ),
+          child: isSelected
+              ? const Icon(Icons.check, color: Colors.white, size: 20)
+              : null,
         ),
       ),
     );
