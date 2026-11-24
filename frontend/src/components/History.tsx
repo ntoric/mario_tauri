@@ -168,7 +168,7 @@ const History: React.FC = () => {
     setIsDownloading(order.id);
     try {
       const job = await buildBillJob(order);
-      downloadBillHtml(job.invoice, `#${order.id.slice(-6).toUpperCase()}`);
+      downloadBillHtml(job.invoice, `#${order.id.slice(-6).toUpperCase()}`, taxEnabled);
       notify.success('Bill downloaded');
     } catch (error) {
       console.error('Failed to download bill:', error);

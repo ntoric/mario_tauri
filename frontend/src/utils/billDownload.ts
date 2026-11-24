@@ -59,7 +59,8 @@ const sumRow = (label: string, value: string, cls = '') =>
 
 // Self-contained bill HTML with a print button (hidden when printed) so it
 // can be saved as a PDF from any browser.
-export const buildBillHtml = (inv: BillInvoiceData, orderRef?: string): string => {
+// The tax summary is shown only when GST is enabled for the store.
+export const buildBillHtml = (inv: BillInvoiceData, orderRef?: string, taxEnabled = false): string => {
   const s = inv.store;
   const title = inv.document_title || 'INVOICE';
   const billNo = inv.invoice_no || inv.bill_no || '';
@@ -87,7 +88,7 @@ export const buildBillHtml = (inv: BillInvoiceData, orderRef?: string): string =
       <td class="r">${money(it.amount)}</td>
     </tr>`).join('');
 
-  const taxSummary = inv.tax_summary?.length ? `
+  const taxSummary = taxEnabled && inv.tax_summary?.length ? `
     <h3>Tax Summary</h3>
     <table class="items small">
       <thead><tr><th>Rate</th><th class="r">Taxable</th><th class="r">CGST</th><th class="r">${esc(stateLabel)}</th><th class="r">IGST</th></tr></thead>
@@ -204,8 +205,8 @@ export const buildBillHtml = (inv: BillInvoiceData, orderRef?: string): string =
 
 // Downloads the bill as a self-contained HTML file (same blob+anchor
 // approach as CSV exports and payment receipts).
-export const downloadBillHtml = (inv: BillInvoiceData, orderRef?: string): void => {
-  const html = buildBillHtml(inv, orderRef);
+export const downloadBillHtml = (inv: BillInvoiceData, orderRef?: string, taxEnabled = false): void => {
+  const html = buildBillHtml(inv, orderRef, taxEnabled);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
